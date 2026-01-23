@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "mymodtest",
+  "version": "${version}",
+  "name": "MyModTest",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/mymodtest/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "mod.test.mymodtest.client.MymodtestDataGenerator"
+    ],
+    "client": [
+      "mod.test.mymodtest.client.MymodtestClient"
+    ],
+    "main": [
+      "mod.test.mymodtest.Mymodtest"
+    ]
+  },
+  "mixins": [
+    "mymodtest.mixins.json",
+    {
+      "config": "mymodtest.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
