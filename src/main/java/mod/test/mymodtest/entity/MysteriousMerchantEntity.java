@@ -1,5 +1,8 @@
 package mod.test.mymodtest.entity;
 
+import mod.test.mymodtest.entity.ai.DrinkPotionGoal;
+import mod.test.mymodtest.entity.ai.EnhancedFleeGoal;
+import mod.test.mymodtest.entity.ai.SeekLightGoal;
 import mod.test.mymodtest.entity.data.PlayerTradeData;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
@@ -25,12 +28,50 @@ import java.util.UUID;
 
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
+    // ========== Phase 3: AI 调试开关 ==========
+    /** 设置为 true 以启用 AI 行为调试日志 */
+    public static final boolean DEBUG_AI = true;
+
+    // ========== Phase 3: AI 行为常量 ==========
+    /** 基础移动速度 */
+    public static final double BASE_MOVEMENT_SPEED = 0.5;
+
     // Phase 2.3: 玩家交易数据
     private final Map<UUID, PlayerTradeData> playerDataMap = new HashMap<>();
     private boolean hasEverTraded = false;
 
     public MysteriousMerchantEntity(EntityType<? extends WanderingTraderEntity> type, World world) {
         super(type, world);
+    }
+
+    // ========== Phase 3: 注册自定义 AI Goals ==========
+    @Override
+    protected void initGoals() {
+        super.initGoals();
+
+        // 优先级说明：数字越小优先级越高
+        // 原版 WanderingTrader 的 goals:
+        // - 0: SwimGoal
+        // - 1: EscapeDangerGoal (panic)
+        // - 1: LookAtCustomerGoal
+        // - 2: WanderTowardTargetGoal
+        // - 4: MoveTowardsRestrictionGoal
+        // - 8: WanderAroundFarGoal
+        // - 9: StopAndLookAtEntityGoal
+        // - 10: LookAtEntityGoal
+
+        // Phase 3.1: 强化逃跑 - 优先级 1（与 panic 同级，但会更积极）
+        this.goalSelector.add(1, new EnhancedFleeGoal(this, BASE_MOVEMENT_SPEED));
+
+        // Phase 3.2: 自保机制 - 优先级 2（比闲逛高，可以边跑边喝）
+        this.goalSelector.add(2, new DrinkPotionGoal(this));
+
+        // Phase 3.3: 趋光性 - 优先级 7（比闲逛低，但比漫无目的的走动高）
+        this.goalSelector.add(7, new SeekLightGoal(this));
+
+        if (DEBUG_AI) {
+            System.out.println("[MysteriousMerchant] AI Goals 已注册");
+        }
     }
 
     // 获取或创建玩家交易数据

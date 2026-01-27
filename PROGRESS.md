@@ -1,8 +1,8 @@
 # 神秘商人模组 - 开发进度
 
-## 当前状态：Phase 2 进行中
+## 当前状态：Phase 3 已完成
 
-最后更新：2026-01-23
+最后更新：2026-01-27
 
 ---
 
@@ -40,11 +40,34 @@
 
 ---
 
-## 📋 Phase 3 - AI行为（未开始）
+## ✅ Phase 3 - AI行为（已完成）
 
-- [ ] 逃跑状态强化
-- [ ] 自保机制（喝治疗/隐身药水）
-- [ ] 趋光性（夜晚向光亮移动）
+### 已完成
+- [x] Phase 3.1: 逃跑状态强化 (EnhancedFleeGoal)
+  - 检测威胁范围: 16格
+  - 受伤记忆: 60 ticks (3秒)
+  - 逃跑速度倍率: 1.4x
+  - 重新选路间隔: 20 ticks (1秒)
+- [x] Phase 3.2: 自保机制 (DrinkPotionGoal)
+  - 隐身药水: 威胁存在时触发, 冷却100秒, 持续40秒
+  - 治疗药水: 生命值<60%时触发, 冷却45秒
+  - 喝药动作持续1秒, 带粒子和音效
+- [x] Phase 3.3: 趋光性 (SeekLightGoal)
+  - 仅夜晚生效
+  - 扫描范围: 16格
+  - 低光照阈值: <7
+  - 光照差值阈值: 4
+- [x] DEBUG_AI 调试开关已添加
+
+### 新增文件
+- src/main/java/mod/test/mymodtest/entity/ai/EnhancedFleeGoal.java
+- src/main/java/mod/test/mymodtest/entity/ai/DrinkPotionGoal.java
+- src/main/java/mod/test/mymodtest/entity/ai/SeekLightGoal.java
+
+### 待验证
+- [ ] 逃跑测试: 召唤僵尸/骷髅靠近商人
+- [ ] 自保测试: 打商人到半血观察喝药
+- [ ] 趋光测试: 夜晚在野外召唤, 附近放火把
 
 ---
 
@@ -75,15 +98,16 @@
 
 ## 下次开发指令
 
-继续 Phase 2 验证，然后开始 Phase 3：
+验证 Phase 3 功能，然后开始 Phase 4：
 ```
-1. 先验证 Phase 2 待验证项：
-   - 交易 10 次测试隐藏交易解锁
-   - 持久化测试
+1. 验证 Phase 3 AI 行为：
+   - 逃跑测试: /summon mymodtest:mysterious_merchant 然后 /summon zombie
+   - 自保测试: 打商人到半血
+   - 趋光测试: /time set night 后在附近放火把
 
-2. 如果 Phase 2 全部通过，开始 Phase 3：
-   - 实现 MerchantFleeGoal（逃跑AI）
-   - 实现自保机制（血量低喝药水）
+2. 开始 Phase 4：
+   - 生成条件检测（村庄附近）
+   - Despawn 逻辑
 ```
 
 ---
@@ -97,6 +121,9 @@
 | 玩家数据 | src/main/java/mod/test/mymodtest/entity/data/PlayerTradeData.java |
 | 实体注册 | src/main/java/mod/test/mymodtest/registry/ModEntities.java |
 | Client入口 | src/client/java/mod/test/mymodtest/client/MymodtestClient.java |
+| 逃跑AI | src/main/java/mod/test/mymodtest/entity/ai/EnhancedFleeGoal.java |
+| 自保AI | src/main/java/mod/test/mymodtest/entity/ai/DrinkPotionGoal.java |
+| 趋光AI | src/main/java/mod/test/mymodtest/entity/ai/SeekLightGoal.java |
 
 ---
 
