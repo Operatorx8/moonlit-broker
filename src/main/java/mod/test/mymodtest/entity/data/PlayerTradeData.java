@@ -55,8 +55,9 @@ public class PlayerTradeData {
 
     public static PlayerTradeData fromNbt(UUID uuid, NbtCompound nbt) {
         PlayerTradeData data = new PlayerTradeData(uuid);
-        data.tradeCount = nbt.getInt("TradeCount").orElse(0);
-        data.secretUnlocked = nbt.getBoolean("SecretUnlocked").orElse(false);
+        // 1.21.1 API: getInt/getBoolean 直接返回原始类型
+        data.tradeCount = nbt.getInt("TradeCount");
+        data.secretUnlocked = nbt.getBoolean("SecretUnlocked");
         return data;
     }
 }

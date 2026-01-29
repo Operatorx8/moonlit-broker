@@ -5,6 +5,7 @@ import mod.test.mymodtest.entity.ai.EnhancedFleeGoal;
 import mod.test.mymodtest.entity.ai.SeekLightGoal;
 import mod.test.mymodtest.entity.data.PlayerTradeData;
 import mod.test.mymodtest.registry.ModItems;
+import mod.test.mymodtest.world.MerchantSpawnerState;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -14,9 +15,9 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.passive.WanderingTraderEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -29,8 +30,6 @@ import net.minecraft.util.Hand;
 import net.minecraft.village.TradeOffer;
 import net.minecraft.village.TradeOfferList;
 import net.minecraft.village.TradedItem;
-import net.minecraft.storage.ReadView;
-import net.minecraft.storage.WriteView;
 import net.minecraft.world.World;
 
 import java.util.HashMap;
@@ -101,12 +100,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
 
-        // 初始化 spawnTick（首次 tick 时记录）
+        // 初始化 spawnTick（首次 tick 时记录，仅当未从 NBT 加载时）
         if (spawnTick < 0) {
             spawnTick = this.getEntityWorld().getTime();
-            if (DEBUG_AI) {
-                System.out.println("[MysteriousMerchant] 记录 spawnTick: " + spawnTick);
-            }
+            System.out.println("[Merchant] INIT_SPAWN_TICK side=SERVER spawnTick=" + spawnTick +
+                " worldTime=" + this.getEntityWorld().getTime());
         }
 
         long currentTick = this.getEntityWorld().getTime();
@@ -125,10 +123,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (aliveTicks >= warningTime) {
             if (!isInWarningPhase) {
                 isInWarningPhase = true;
-                if (DEBUG_AI) {
-                    System.out.println("[MysteriousMerchant] 进入消失预警阶段，剩余时间: " +
-                            (despawnTime - aliveTicks) / 20 + " 秒");
-                }
+                int remainingSec = (int)((despawnTime - aliveTicks) / 20);
+                System.out.println("[Merchant] WARNING_ENTER side=SERVER remaining=" + remainingSec + "s" +
+                    " aliveTicks=" + aliveTicks +
+                    " spawnTick=" + spawnTick +
+                    " worldTime=" + currentTick);
             }
             performWarningEffect(currentTick);
         }
@@ -158,9 +157,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * 执行消失：播放效果并移除实体
      */
     private void performDespawn() {
-        if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] 执行消失！存活时间: " +
-                    (this.getEntityWorld().getTime() - spawnTick) / 20 + " 秒");
+        long lifetime = this.getEntityWorld().getTime() - spawnTick;
+        System.out.println("[Merchant] DESPAWN_TRIGGER side=SERVER lifetime=" + (lifetime/20) + "s" +
+            " spawnTick=" + spawnTick +
+            " uuid=" + this.getUuid() +
+            " worldTime=" + this.getEntityWorld().getTime());
+
+        // 通知 SpawnerState 清除活跃商人追踪
+        if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
+            notifySpawnerStateClear(serverWorld, "DESPAWN");
         }
 
         if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
@@ -190,6 +195,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                     0.3, 0.5, 0.3,
                     0.05
             );
+
+            System.out.println("[Merchant] FX_SPAWN side=SERVER portal=50 smoke=20 sound=ENDERMAN_TELEPORT pos=" +
+                String.format("%.1f,%.1f,%.1f", this.getX(), this.getY(), this.getZ()));
         }
 
         // 移除实体
@@ -213,18 +221,36 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         return isInWarningPhase;
     }
 
+    /**
+     * 通知 SpawnerState 清除活跃商人追踪
+     * @param serverWorld 服务端世界
+     * @param reason 清除原因（DESPAWN / DEATH）
+     */
+    private void notifySpawnerStateClear(ServerWorld serverWorld, String reason) {
+        try {
+            MerchantSpawnerState state = MerchantSpawnerState.getServerState(serverWorld);
+            boolean cleared = state.clearActiveMerchantIfMatch(this.getUuid());
+            System.out.println("[Merchant] NOTIFY_STATE_CLEAR reason=" + reason +
+                " uuid=" + this.getUuid() +
+                " cleared=" + cleared);
+        } catch (Exception e) {
+            System.err.println("[Merchant] Failed to notify SpawnerState: " + e.getMessage());
+        }
+    }
+
     // ========== Phase 5: 攻击与击杀惩罚 ==========
 
     /**
      * 覆写伤害处理：当玩家攻击商人时施加惩罚
+     * 1.21.1 API: damage(DamageSource, float)
      */
     @Override
-    public boolean damage(ServerWorld world, DamageSource source, float amount) {
+    public boolean damage(DamageSource source, float amount) {
         // 检查攻击者是否为玩家
         if (source.getAttacker() instanceof PlayerEntity player) {
             applyAttackPunishment(player);
         }
-        return super.damage(world, source, amount);
+        return super.damage(source, amount);
     }
 
     /**
@@ -277,6 +303,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (source.getAttacker() instanceof PlayerEntity player) {
             applyKillPunishment(player);
         }
+
+        // 通知 SpawnerState 清除活跃商人追踪
+        if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
+            notifySpawnerStateClear(serverWorld, "DEATH");
+        }
+
         super.onDeath(source);
     }
 
@@ -556,7 +588,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     @Override
-    protected void fillRecipes(ServerWorld world) {
+    protected void fillRecipes() {
         // Phase 2.1: 测试交易列表
         TradeOfferList offers = this.getOffers();
 
@@ -705,8 +737,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     public static DefaultAttributeContainer.Builder createMerchantAttributes() {
         return MobEntity.createMobAttributes()
-                .add(EntityAttributes.MAX_HEALTH, 20.0)
-                .add(EntityAttributes.MOVEMENT_SPEED, 0.5);
+                .add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
+                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.5);
     }
 
     // Phase 2.5 & 4 & 6: NBT 持久化
@@ -719,8 +751,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final String NBT_HAS_SECRET_OFFERS = "HasSecretOffers";
 
     @Override
-    protected void writeCustomData(WriteView nbt) {
-        super.writeCustomData(nbt);
+    public void writeCustomDataToNbt(NbtCompound nbt) {
+        super.writeCustomDataToNbt(nbt);
 
         // 保存 hasEverTraded
         nbt.putBoolean(NBT_HAS_EVER_TRADED, this.hasEverTraded);
@@ -737,9 +769,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             uuidList.append(uuidStr);
 
             // 保存每个玩家的数据
-            WriteView playerNbt = nbt.get(NBT_PLAYER_PREFIX + uuidStr);
+            NbtCompound playerNbt = new NbtCompound();
             playerNbt.putInt("TradeCount", entry.getValue().getTradeCount());
             playerNbt.putBoolean("SecretUnlocked", entry.getValue().isSecretUnlocked());
+            nbt.put(NBT_PLAYER_PREFIX + uuidStr, playerNbt);
         }
         nbt.putString(NBT_PLAYER_UUIDS, uuidList.toString());
 
@@ -747,32 +780,36 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putString(NBT_MERCHANT_NAME, this.merchantName);
         nbt.putBoolean(NBT_HAS_SECRET_OFFERS, this.secretOffers != null);
 
-        System.out.println("[MysteriousMerchant] NBT 已保存, spawnTick: " + spawnTick +
-                ", merchantName: " + merchantName + ", 玩家数据条目: " + playerDataMap.size());
+        System.out.println("[Merchant] NBT_SAVE side=SERVER spawnTick=" + spawnTick +
+            " isInWarningPhase=" + isInWarningPhase +
+            " hasEverTraded=" + hasEverTraded +
+            " merchantName=" + merchantName +
+            " playerDataCount=" + playerDataMap.size());
     }
 
     @Override
-    protected void readCustomData(ReadView nbt) {
-        super.readCustomData(nbt);
+    public void readCustomDataFromNbt(NbtCompound nbt) {
+        super.readCustomDataFromNbt(nbt);
 
         // 读取 hasEverTraded
-        this.hasEverTraded = nbt.getBoolean(NBT_HAS_EVER_TRADED, false);
+        this.hasEverTraded = nbt.getBoolean(NBT_HAS_EVER_TRADED);
 
         // Phase 4: 读取 spawnTick
-        this.spawnTick = nbt.getLong(NBT_SPAWN_TICK, -1);
-        this.isInWarningPhase = nbt.getBoolean(NBT_IN_WARNING_PHASE, false);
+        this.spawnTick = nbt.getLong(NBT_SPAWN_TICK);
+        if (this.spawnTick == 0) this.spawnTick = -1;  // 兼容旧数据
+        this.isInWarningPhase = nbt.getBoolean(NBT_IN_WARNING_PHASE);
 
         // 读取玩家数据
         playerDataMap.clear();
-        String uuidListStr = nbt.getString(NBT_PLAYER_UUIDS, "");
+        String uuidListStr = nbt.getString(NBT_PLAYER_UUIDS);
         if (!uuidListStr.isEmpty()) {
             for (String uuidStr : uuidListStr.split(",")) {
                 try {
                     UUID uuid = UUID.fromString(uuidStr);
-                    ReadView playerNbt = nbt.getReadView(NBT_PLAYER_PREFIX + uuidStr);
+                    NbtCompound playerNbt = nbt.getCompound(NBT_PLAYER_PREFIX + uuidStr);
                     PlayerTradeData data = new PlayerTradeData(uuid);
-                    data.setTradeCount(playerNbt.getInt("TradeCount", 0));
-                    data.setSecretUnlocked(playerNbt.getBoolean("SecretUnlocked", false));
+                    data.setTradeCount(playerNbt.getInt("TradeCount"));
+                    data.setSecretUnlocked(playerNbt.getBoolean("SecretUnlocked"));
                     playerDataMap.put(uuid, data);
                 } catch (IllegalArgumentException e) {
                     System.err.println("[MysteriousMerchant] 无效的 UUID: " + uuidStr);
@@ -781,21 +818,23 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         // Phase 6: 读取商人名称
-        this.merchantName = nbt.getString(NBT_MERCHANT_NAME, "");
+        this.merchantName = nbt.getString(NBT_MERCHANT_NAME);
         if (!this.merchantName.isEmpty()) {
             this.setCustomName(Text.literal(this.merchantName).formatted(Formatting.GOLD));
             this.setCustomNameVisible(true);
         }
 
         // Phase 6: 如果之前有隐藏交易，重新创建
-        boolean hadSecretOffers = nbt.getBoolean(NBT_HAS_SECRET_OFFERS, false);
+        boolean hadSecretOffers = nbt.getBoolean(NBT_HAS_SECRET_OFFERS);
         if (hadSecretOffers) {
             this.secretOffers = createSecretOffers();
             // 注意：实际添加到交易列表会在玩家打开交易界面时根据玩家数据判断
         }
 
-        System.out.println("[MysteriousMerchant] NBT 已加载, spawnTick: " + spawnTick +
-                ", merchantName: " + merchantName + ", hasEverTraded: " + hasEverTraded +
-                ", 玩家数据条目: " + playerDataMap.size());
+        System.out.println("[Merchant] NBT_LOAD side=SERVER spawnTick=" + spawnTick +
+            " isInWarningPhase=" + isInWarningPhase +
+            " hasEverTraded=" + hasEverTraded +
+            " merchantName=" + merchantName +
+            " playerDataCount=" + playerDataMap.size());
     }
 }

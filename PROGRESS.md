@@ -1,8 +1,8 @@
 # 神秘商人模组 - 开发进度
 
-## 当前状态：Phase 6 已完成 (核心功能完成)
+## 当前状态：Phase 7 已完成 (Spawner 状态持久化)
 
-最后更新：2026-01-27
+最后更新：2026-01-29
 
 ---
 
@@ -173,6 +173,37 @@
 
 ---
 
+## ✅ Phase 7 - Spawner 状态持久化（已完成）
+
+### 已完成
+- [x] Phase 7.1: MerchantSpawnerState 类
+  - 继承 PersistentState
+  - 使用 Codec 进行序列化（Fabric 1.21+ API）
+  - 保存字段：lastSpawnDay, spawnCountToday, cooldownUntil, totalSpawnedCount
+  - 存储位置: world/data/mymodtest_merchant_spawner.dat
+- [x] Phase 7.2: 修改 MysteriousMerchantSpawner
+  - 使用 state.canSpawnToday() 替代内存日期检查
+  - 使用 state.isCooldownExpired() 检查冷却
+  - 生成成功后调用 state.recordSpawn()
+  - 调试模式冷却时间: 2 分钟 (2400 ticks)
+  - 正常模式冷却时间: 1 天 (24000 ticks)
+- [x] Phase 7.3: 增强日志
+  - [SpawnerState] GET_STATE: 获取状态时输出
+  - [SpawnerState] NEW_DAY: 新的一天重置
+  - [SpawnerState] RECORD_SPAWN: 记录生成
+  - [Spawner] SKIP_COOLDOWN: 冷却中跳过
+- [x] 编译通过
+
+### 新增文件
+- src/main/java/mod/test/mymodtest/world/MerchantSpawnerState.java
+
+### 待验证
+- [ ] 持久化测试：生成商人 → 退出 → 重进 → 检查 lastSpawnDay 是否保持
+- [ ] 冷却测试：商人消失后 → 等待冷却 → 检查是否按时生成新商人
+- [ ] 跨日测试：等待游戏内新的一天 → 检查 spawnCountToday 是否重置
+
+---
+
 ## 下次开发指令
 
 核心功能已完成！验证所有功能：
@@ -218,6 +249,7 @@
 | 自保AI | src/main/java/mod/test/mymodtest/entity/ai/DrinkPotionGoal.java |
 | 趋光AI | src/main/java/mod/test/mymodtest/entity/ai/SeekLightGoal.java |
 | 生成器 | src/main/java/mod/test/mymodtest/entity/spawn/MysteriousMerchantSpawner.java |
+| 生成器状态 | src/main/java/mod/test/mymodtest/world/MerchantSpawnerState.java |
 | 物品注册 | src/main/java/mod/test/mymodtest/registry/ModItems.java |
 
 ---

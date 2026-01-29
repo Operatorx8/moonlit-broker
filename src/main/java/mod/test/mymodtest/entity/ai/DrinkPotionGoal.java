@@ -98,7 +98,7 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 播放喝药音效
-        merchant.playSound(SoundEvents.ENTITY_GENERIC_DRINK.value(), 1.0f, 1.0f);
+        merchant.playSound(SoundEvents.ENTITY_GENERIC_DRINK, 1.0f, 1.0f);
     }
 
     @Override

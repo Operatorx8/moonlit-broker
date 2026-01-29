@@ -2,13 +2,16 @@ package mod.test.mymodtest.entity.spawn;
 
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
 import mod.test.mymodtest.registry.ModEntities;
-import net.minecraft.entity.SpawnReason;
+import mod.test.mymodtest.world.MerchantSpawnerState;
 import net.minecraft.registry.tag.StructureTags;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.TypeFilter;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.SpawnHelper;
+
+import java.util.UUID;
 
 /**
  * Phase 4: 神秘商人自然生成管理器
@@ -17,9 +20,15 @@ import net.minecraft.world.SpawnHelper;
  * 1. 村庄附近100格内
  * 2. 正在下雨（可选）
  * 3. 每天有一定概率生成
+ * 4. 全局冷却时间
+ * 5. 活跃商人追踪（防重复生成）
  *
  * 使用方式：
  * - 在 ServerTickEvents.END_WORLD_TICK 中调用 trySpawn()
+ *
+ * 状态持久化：
+ * - 使用 MerchantSpawnerState (PersistentState) 保存生成状态
+ * - 活跃商人 UUID 持久化追踪，即使商人在未加载区块也不会重复生成
  */
 public class MysteriousMerchantSpawner {
 
@@ -43,12 +52,19 @@ public class MysteriousMerchantSpawner {
     private static final int MAX_SPAWN_ATTEMPTS = 10;
     /** 生成位置搜索范围 */
     private static final int SPAWN_SEARCH_RANGE = 48;
-
-    // ========== 状态跟踪 ==========
-    private long lastCheckTick = 0;
-    private int merchantsSpawnedToday = 0;
     /** 每天最多生成的商人数量 */
     private static final int MAX_MERCHANTS_PER_DAY = 1;
+    /** 调试模式：生成后冷却 2 分钟 (2400 ticks) */
+    private static final long DEBUG_COOLDOWN_TICKS = 2400;
+    /** 正常模式：生成后冷却 1 天 (24000 ticks) */
+    private static final long NORMAL_COOLDOWN_TICKS = 24000;
+    /** 调试模式：商人预期存活时间 60 秒 (1200 ticks) */
+    private static final long DEBUG_EXPECTED_LIFETIME = 1200;
+    /** 正常模式：商人预期存活时间 30 天 (720000 ticks) */
+    private static final long NORMAL_EXPECTED_LIFETIME = 720000;
+
+    // ========== 内存状态（仅用于检查间隔，不影响持久化） ==========
+    private long lastCheckTick = 0;
 
     /**
      * 尝试生成神秘商人
@@ -60,70 +76,139 @@ public class MysteriousMerchantSpawner {
         long currentTick = world.getTime();
         int checkInterval = DEBUG ? DEBUG_CHECK_INTERVAL : NORMAL_CHECK_INTERVAL;
 
-        // 新的一天重置计数
-        if (currentTick / NORMAL_CHECK_INTERVAL > lastCheckTick / NORMAL_CHECK_INTERVAL) {
-            merchantsSpawnedToday = 0;
-        }
-
-        // 检查是否到达检查间隔
+        // 检查是否到达检查间隔（内存级别，用于减少检查频率）
         if (currentTick - lastCheckTick < checkInterval) {
             return;
         }
         lastCheckTick = currentTick;
 
-        // 检查今天是否已达到生成上限
-        if (merchantsSpawnedToday >= MAX_MERCHANTS_PER_DAY) {
+        // 1. 获取持久化状态
+        MerchantSpawnerState state = MerchantSpawnerState.getServerState(world);
+
+        if (DEBUG) {
+            System.out.println("[Spawner] CHECK_START worldTime=" + currentTick + " state={" + state.toDebugString() + "}");
+        }
+
+        // 2. 检查每日上限（使用持久化状态）
+        if (!state.canSpawnToday(world, MAX_MERCHANTS_PER_DAY)) {
+            if (DEBUG) {
+                System.out.println("[Spawner] SKIP_DAILY_LIMIT spawnCountToday=" + state.getSpawnCountToday() +
+                    " max=" + MAX_MERCHANTS_PER_DAY +
+                    " lastSpawnDay=" + state.getLastSpawnDay());
+            }
             return;
         }
 
-        // 检查天气条件
-        if (REQUIRE_RAIN && !DEBUG_SKIP_RAIN_CHECK) {
-            if (!world.isRaining()) {
+        // 3. 检查全局冷却（使用持久化状态）
+        if (!state.isCooldownExpired(world)) {
+            if (DEBUG) {
+                long remaining = state.getRemainingCooldown(world);
+                System.out.println("[Spawner] SKIP_COOLDOWN cooldownUntil=" + state.getCooldownUntil() +
+                    " remaining=" + remaining + "ticks(" + (remaining/20) + "s)" +
+                    " worldTime=" + currentTick);
+            }
+            return;
+        }
+
+        // 4. 检查活跃商人追踪（防重复生成核心 - 持久化级别）
+        if (state.hasActiveMerchant(world)) {
+            UUID activeUuid = state.getActiveMerchantUuid();
+            // 尝试在已加载区块中查找该商人
+            var existingMerchant = world.getEntity(activeUuid);
+            if (existingMerchant != null && existingMerchant.isAlive()) {
+                // 商人确实存在且存活
                 if (DEBUG) {
-                    System.out.println("[MysteriousMerchantSpawner] 未下雨，跳过生成检查");
+                    System.out.println("[Spawner] SKIP_ACTIVE_MERCHANT_EXISTS uuid=" + activeUuid +
+                        " pos=" + existingMerchant.getBlockPos().toShortString() +
+                        " worldTime=" + currentTick);
+                }
+                return;
+            } else if (existingMerchant != null && !existingMerchant.isAlive()) {
+                // 商人存在但已死亡，清除追踪
+                System.out.println("[Spawner] ACTIVE_MERCHANT_DEAD uuid=" + activeUuid + " clearing");
+                state.clearActiveMerchant();
+            } else {
+                // 商人不在已加载区块中，依赖持久化追踪
+                if (DEBUG) {
+                    System.out.println("[Spawner] SKIP_ACTIVE_MERCHANT_UNLOADED uuid=" + activeUuid +
+                        " expireAt=" + state.getActiveMerchantExpireAt() +
+                        " worldTime=" + currentTick);
                 }
                 return;
             }
         }
 
-        // 随机概率检查
-        Random random = world.getRandom();
-        if (random.nextFloat() > SPAWN_CHANCE_PER_DAY) {
+        // 5. 备用检查：扫描已加载区块中的商人（兜底机制）
+        // 注意：必须用 isAlive() 过滤，因为 discard() 后实体仍在列表中直到 tick 结束
+        int existingCount = world.getEntitiesByType(
+            TypeFilter.instanceOf(MysteriousMerchantEntity.class),
+            entity -> entity.isAlive()
+        ).size();
+        if (existingCount > 0) {
             if (DEBUG) {
-                System.out.println("[MysteriousMerchantSpawner] 概率检查未通过");
+                System.out.println("[Spawner] SKIP_EXISTING_LOADED existingMerchants=" + existingCount +
+                    " worldTime=" + currentTick);
             }
             return;
         }
 
-        // 获取随机玩家作为生成中心
+        // 6. 检查天气条件
+        if (REQUIRE_RAIN && !DEBUG_SKIP_RAIN_CHECK) {
+            if (!world.isRaining()) {
+                if (DEBUG) {
+                    System.out.println("[Spawner] SKIP_NO_RAIN worldTime=" + currentTick);
+                }
+                return;
+            }
+        }
+
+        // 7. 随机概率检查
+        Random random = world.getRandom();
+        float roll = random.nextFloat();
+        boolean passed = roll <= SPAWN_CHANCE_PER_DAY;
+        if (DEBUG) {
+            System.out.println("[Spawner] CHANCE_CHECK chance=" + SPAWN_CHANCE_PER_DAY +
+                " roll=" + String.format("%.3f", roll) +
+                " passed=" + passed +
+                " worldTime=" + currentTick);
+        }
+        if (!passed) {
+            return;
+        }
+
+        // 8. 获取随机玩家作为生成中心
         var players = world.getPlayers();
         if (players.isEmpty()) {
+            if (DEBUG) {
+                System.out.println("[Spawner] SKIP_NO_PLAYERS worldTime=" + currentTick);
+            }
             return;
         }
 
         var targetPlayer = players.get(random.nextInt(players.size()));
         BlockPos playerPos = targetPlayer.getBlockPos();
 
-        // 检查玩家附近是否有村庄
+        // 9. 检查玩家附近是否有村庄
         if (!isNearVillage(world, playerPos)) {
             if (DEBUG) {
-                System.out.println("[MysteriousMerchantSpawner] 玩家 " + targetPlayer.getName().getString() +
-                        " 附近没有村庄");
+                System.out.println("[Spawner] SKIP_NO_VILLAGE player=" + targetPlayer.getName().getString() +
+                    " pos=" + playerPos.toShortString());
             }
             return;
         }
 
-        // 尝试在玩家附近生成商人
+        // 10. 尝试在玩家附近生成商人
         BlockPos spawnPos = findSpawnPosition(world, playerPos, random);
         if (spawnPos == null) {
             if (DEBUG) {
-                System.out.println("[MysteriousMerchantSpawner] 找不到合适的生成位置");
+                System.out.println("[Spawner] SKIP_NO_VALID_POS attempts=" + MAX_SPAWN_ATTEMPTS +
+                    " searchRange=" + SPAWN_SEARCH_RANGE);
             }
             return;
         }
 
-        // 生成商人
-        MysteriousMerchantEntity merchant = ModEntities.MYSTERIOUS_MERCHANT.create(world, SpawnReason.EVENT);
+        // 11. 生成商人
+        MysteriousMerchantEntity merchant = ModEntities.MYSTERIOUS_MERCHANT.create(world);
         if (merchant != null) {
             merchant.refreshPositionAndAngles(
                     spawnPos.getX() + 0.5,
@@ -134,9 +219,19 @@ public class MysteriousMerchantSpawner {
             );
 
             if (world.spawnEntity(merchant)) {
-                merchantsSpawnedToday++;
-                System.out.println("[MysteriousMerchantSpawner] 成功生成神秘商人于 " +
-                        spawnPos.toShortString() + " (玩家: " + targetPlayer.getName().getString() + ")");
+                // 12. 记录到持久化状态（包含商人 UUID）
+                long cooldownTicks = DEBUG ? DEBUG_COOLDOWN_TICKS : NORMAL_COOLDOWN_TICKS;
+                long expectedLifetime = DEBUG ? DEBUG_EXPECTED_LIFETIME : NORMAL_EXPECTED_LIFETIME;
+                UUID merchantUuid = merchant.getUuid();
+                state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
+
+                System.out.println("[Spawner] SPAWN_SUCCESS pos=" + spawnPos.toShortString() +
+                    " uuid=" + merchantUuid +
+                    " nearPlayer=" + targetPlayer.getName().getString() +
+                    " spawnCountToday=" + state.getSpawnCountToday() +
+                    " totalSpawned=" + state.getTotalSpawnedCount() +
+                    " cooldownTicks=" + cooldownTicks +
+                    " worldTime=" + currentTick);
             }
         }
     }
@@ -145,20 +240,18 @@ public class MysteriousMerchantSpawner {
      * 检查指定位置附近是否有村庄
      */
     private boolean isNearVillage(ServerWorld world, BlockPos pos) {
-        // 使用 locateStructure 检测村庄
-        // locateStructure 返回的是 BlockPos（村庄位置）
         BlockPos villagePos = world.locateStructure(
                 StructureTags.VILLAGE,
                 pos,
-                VILLAGE_DETECTION_RANGE / 16,  // 转换为区块半径
-                false  // 不跳过已探索的区块
+                VILLAGE_DETECTION_RANGE / 16,
+                false
         );
 
         if (villagePos != null) {
             double distance = Math.sqrt(pos.getSquaredDistance(villagePos));
             if (DEBUG) {
-                System.out.println("[MysteriousMerchantSpawner] 找到村庄于 " +
-                        villagePos.toShortString() + "，距离: " + (int) distance);
+                System.out.println("[Spawner] VILLAGE_FOUND pos=" + villagePos.toShortString() +
+                    " distance=" + (int)distance + " maxRange=" + VILLAGE_DETECTION_RANGE);
             }
             return distance <= VILLAGE_DETECTION_RANGE;
         }
@@ -174,11 +267,9 @@ public class MysteriousMerchantSpawner {
             int x = center.getX() + random.nextInt(SPAWN_SEARCH_RANGE * 2) - SPAWN_SEARCH_RANGE;
             int z = center.getZ() + random.nextInt(SPAWN_SEARCH_RANGE * 2) - SPAWN_SEARCH_RANGE;
 
-            // 获取地表高度
             int y = world.getTopY(Heightmap.Type.WORLD_SURFACE, x, z);
             BlockPos testPos = new BlockPos(x, y, z);
 
-            // 检查是否可以生成
             if (isValidSpawnPosition(world, testPos)) {
                 return testPos;
             }
@@ -190,12 +281,10 @@ public class MysteriousMerchantSpawner {
      * 检查位置是否适合生成
      */
     private boolean isValidSpawnPosition(ServerWorld world, BlockPos pos) {
-        // 检查下方是否有固体方块
         if (!world.getBlockState(pos.down()).isSolidBlock(world, pos.down())) {
             return false;
         }
 
-        // 检查当前位置和上方是否为空
         if (!world.getBlockState(pos).isAir()) {
             return false;
         }
@@ -203,7 +292,6 @@ public class MysteriousMerchantSpawner {
             return false;
         }
 
-        // 使用 SpawnHelper 检查光照等条件
         return SpawnHelper.isClearForSpawn(world, pos, world.getBlockState(pos),
                 world.getFluidState(pos), ModEntities.MYSTERIOUS_MERCHANT);
     }
