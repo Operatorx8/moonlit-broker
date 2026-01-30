@@ -40,10 +40,10 @@ import java.util.UUID;
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     // ========== 调试开关 ==========
-    /** 设置为 true 以启用 AI 行为调试日志 */
-    public static final boolean DEBUG_AI = true;
-    /** 设置为 true 以使用更短的 despawn 时间（用于测试） */
-    public static final boolean DEBUG_DESPAWN = true;
+    /** 发布版默认关闭；开启后启用 AI 行为调试日志 */
+    public static final boolean DEBUG_AI = false;
+    /** 发布版默认关闭；开启后使用更短的 despawn 时间（用于测试） */
+    public static final boolean DEBUG_DESPAWN = false;
 
     // ========== Phase 3: AI 行为常量 ==========
     /** 基础移动速度 */
@@ -52,16 +52,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // ========== Phase 4: Despawn 常量 ==========
     /** 1 Minecraft 天 = 24000 ticks */
     private static final int TICKS_PER_DAY = 24000;
-    /** 正常模式：7天后开始消失预警 */
-    private static final int WARNING_TIME_NORMAL = 7 * TICKS_PER_DAY;  // 168000 ticks
-    /** 正常模式：30天后强制消失 */
-    private static final int DESPAWN_TIME_NORMAL = 30 * TICKS_PER_DAY; // 720000 ticks
+    /** 正常模式：2天后开始消失预警（事件 NPC 模式） */
+    private static final int WARNING_TIME_NORMAL = 2 * TICKS_PER_DAY;  // 48000 ticks
+    /** 正常模式：5天后强制消失（事件 NPC 模式） */
+    private static final int DESPAWN_TIME_NORMAL = 5 * TICKS_PER_DAY;  // 120000 ticks
     /** 调试模式：30秒后开始消失预警 */
     private static final int WARNING_TIME_DEBUG = 30 * 20;  // 600 ticks
     /** 调试模式：60秒后强制消失 */
     private static final int DESPAWN_TIME_DEBUG = 60 * 20;  // 1200 ticks
-    /** 闪烁间隔（ticks）*/
-    private static final int BLINK_INTERVAL = 10;
+    /** 闪烁间隔（ticks）- 20 ticks = 1秒 */
+    private static final int BLINK_INTERVAL = 20;
 
     // ========== Phase 5: 惩罚常量 ==========
     /** 攻击惩罚：失明持续时间（ticks）*/
@@ -103,8 +103,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 初始化 spawnTick（首次 tick 时记录，仅当未从 NBT 加载时）
         if (spawnTick < 0) {
             spawnTick = this.getEntityWorld().getTime();
-            System.out.println("[Merchant] INIT_SPAWN_TICK side=SERVER spawnTick=" + spawnTick +
-                " worldTime=" + this.getEntityWorld().getTime());
+            if (DEBUG_DESPAWN) {
+                System.out.println("[Merchant] INIT_SPAWN_TICK side=SERVER spawnTick=" + spawnTick +
+                    " worldTime=" + this.getEntityWorld().getTime());
+            }
         }
 
         long currentTick = this.getEntityWorld().getTime();
@@ -123,11 +125,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (aliveTicks >= warningTime) {
             if (!isInWarningPhase) {
                 isInWarningPhase = true;
-                int remainingSec = (int)((despawnTime - aliveTicks) / 20);
-                System.out.println("[Merchant] WARNING_ENTER side=SERVER remaining=" + remainingSec + "s" +
-                    " aliveTicks=" + aliveTicks +
-                    " spawnTick=" + spawnTick +
-                    " worldTime=" + currentTick);
+                if (DEBUG_DESPAWN) {
+                    int remainingSec = (int)((despawnTime - aliveTicks) / 20);
+                    System.out.println("[Merchant] WARNING_ENTER side=SERVER remaining=" + remainingSec + "s" +
+                        " aliveTicks=" + aliveTicks +
+                        " spawnTick=" + spawnTick +
+                        " worldTime=" + currentTick);
+                }
             }
             performWarningEffect(currentTick);
         }
@@ -158,10 +162,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      */
     private void performDespawn() {
         long lifetime = this.getEntityWorld().getTime() - spawnTick;
-        System.out.println("[Merchant] DESPAWN_TRIGGER side=SERVER lifetime=" + (lifetime/20) + "s" +
-            " spawnTick=" + spawnTick +
-            " uuid=" + this.getUuid() +
-            " worldTime=" + this.getEntityWorld().getTime());
+        // 重要事件：发布版保留精简日志
+        System.out.println("[Merchant] DESPAWN_TRIGGER lifetime=" + (lifetime/20) + "s" +
+            " uuid=" + this.getUuid().toString().substring(0, 8) + "...");
 
         // 通知 SpawnerState 清除活跃商人追踪
         if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
@@ -196,8 +199,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                     0.05
             );
 
-            System.out.println("[Merchant] FX_SPAWN side=SERVER portal=50 smoke=20 sound=ENDERMAN_TELEPORT pos=" +
-                String.format("%.1f,%.1f,%.1f", this.getX(), this.getY(), this.getZ()));
+            if (DEBUG_DESPAWN) {
+                System.out.println("[Merchant] FX_SPAWN portal=50 smoke=20 pos=" +
+                    String.format("%.1f,%.1f,%.1f", this.getX(), this.getY(), this.getZ()));
+            }
         }
 
         // 移除实体
@@ -230,11 +235,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         try {
             MerchantSpawnerState state = MerchantSpawnerState.getServerState(serverWorld);
             boolean cleared = state.clearActiveMerchantIfMatch(this.getUuid());
-            System.out.println("[Merchant] NOTIFY_STATE_CLEAR reason=" + reason +
-                " uuid=" + this.getUuid() +
-                " cleared=" + cleared);
+            if (DEBUG_DESPAWN) {
+                System.out.println("[Merchant] NOTIFY_STATE_CLEAR reason=" + reason +
+                    " uuid=" + this.getUuid().toString().substring(0, 8) + "..." +
+                    " cleared=" + cleared);
+            }
         } catch (Exception e) {
-            System.err.println("[Merchant] Failed to notify SpawnerState: " + e.getMessage());
+            // 异常性日志，始终保留
+            System.err.println("[Merchant][ERROR] Failed to notify SpawnerState: " + e.getMessage());
         }
     }
 
@@ -579,12 +587,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         false
                 );
             }
+            // 重要事件：发布版保留
             System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() + " 解锁了隐藏交易!");
         }
 
         // 6. 调试日志
-        System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                " 交易次数: " + count + ", hasEverTraded: " + hasEverTraded);
+        if (DEBUG_AI) {
+            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
+                    " 交易次数: " + count + ", hasEverTraded: " + hasEverTraded);
+        }
     }
 
     @Override
@@ -780,11 +791,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putString(NBT_MERCHANT_NAME, this.merchantName);
         nbt.putBoolean(NBT_HAS_SECRET_OFFERS, this.secretOffers != null);
 
-        System.out.println("[Merchant] NBT_SAVE side=SERVER spawnTick=" + spawnTick +
-            " isInWarningPhase=" + isInWarningPhase +
-            " hasEverTraded=" + hasEverTraded +
-            " merchantName=" + merchantName +
-            " playerDataCount=" + playerDataMap.size());
+        if (DEBUG_DESPAWN) {
+            System.out.println("[Merchant] NBT_SAVE spawnTick=" + spawnTick +
+                " isInWarningPhase=" + isInWarningPhase +
+                " hasEverTraded=" + hasEverTraded +
+                " playerDataCount=" + playerDataMap.size());
+        }
     }
 
     @Override
@@ -831,10 +843,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             // 注意：实际添加到交易列表会在玩家打开交易界面时根据玩家数据判断
         }
 
-        System.out.println("[Merchant] NBT_LOAD side=SERVER spawnTick=" + spawnTick +
-            " isInWarningPhase=" + isInWarningPhase +
-            " hasEverTraded=" + hasEverTraded +
-            " merchantName=" + merchantName +
-            " playerDataCount=" + playerDataMap.size());
+        if (DEBUG_DESPAWN) {
+            System.out.println("[Merchant] NBT_LOAD spawnTick=" + spawnTick +
+                " isInWarningPhase=" + isInWarningPhase +
+                " hasEverTraded=" + hasEverTraded +
+                " playerDataCount=" + playerDataMap.size());
+        }
     }
 }

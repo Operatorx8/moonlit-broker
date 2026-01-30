@@ -1,5 +1,6 @@
 package mod.test.mymodtest.world;
 
+import mod.test.mymodtest.entity.spawn.MysteriousMerchantSpawner;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.server.MinecraftServer;
@@ -107,8 +108,10 @@ public class MerchantSpawnerState extends PersistentState {
 
         // 新的一天，重置计数
         if (currentDay != this.lastSpawnDay) {
-            System.out.println("[SpawnerState] NEW_DAY previousDay=" + this.lastSpawnDay +
-                " currentDay=" + currentDay + " resetting spawnCountToday from " + this.spawnCountToday + " to 0");
+            if (MysteriousMerchantSpawner.DEBUG) {
+                System.out.println("[SpawnerState] NEW_DAY previousDay=" + this.lastSpawnDay +
+                    " currentDay=" + currentDay + " resetting spawnCountToday from " + this.spawnCountToday + " to 0");
+            }
             this.lastSpawnDay = currentDay;
             this.spawnCountToday = 0;
             this.markDirty();
@@ -142,10 +145,10 @@ public class MerchantSpawnerState extends PersistentState {
             return false;
         }
 
-        // 保险机制：如果超过预期过期时间，自动清除
+        // 保险机制：如果超过预期过期时间，自动清除（异常情况，保留日志）
         if (this.activeMerchantExpireAt > 0 && world.getTime() > this.activeMerchantExpireAt) {
-            System.out.println("[SpawnerState] ACTIVE_MERCHANT_EXPIRED uuid=" + this.activeMerchantUuid +
-                " expireAt=" + this.activeMerchantExpireAt + " worldTime=" + world.getTime() + " auto-clearing");
+            System.out.println("[SpawnerState][WARN] ACTIVE_MERCHANT_EXPIRED uuid=" +
+                this.activeMerchantUuid.toString().substring(0, 8) + "... auto-clearing");
             clearActiveMerchant();
             return false;
         }
@@ -176,12 +179,13 @@ public class MerchantSpawnerState extends PersistentState {
         this.activeMerchantExpireAt = world.getTime() + (long)(expectedLifetime * 1.5);
         this.markDirty();
 
-        System.out.println("[SpawnerState] RECORD_SPAWN spawnCountToday=" + this.spawnCountToday +
-            " totalSpawned=" + this.totalSpawnedCount +
-            " cooldownUntil=" + this.cooldownUntil +
-            " activeMerchantUuid=" + merchantUuid +
-            " expireAt=" + this.activeMerchantExpireAt +
-            " worldTime=" + world.getTime());
+        if (MysteriousMerchantSpawner.DEBUG) {
+            System.out.println("[SpawnerState] RECORD_SPAWN spawnCountToday=" + this.spawnCountToday +
+                " totalSpawned=" + this.totalSpawnedCount +
+                " cooldownUntil=" + this.cooldownUntil +
+                " activeMerchantUuid=" + merchantUuid.toString().substring(0, 8) + "..." +
+                " expireAt=" + this.activeMerchantExpireAt);
+        }
     }
 
     /**
@@ -193,7 +197,10 @@ public class MerchantSpawnerState extends PersistentState {
         this.activeMerchantExpireAt = 0;
         this.markDirty();
 
-        System.out.println("[SpawnerState] CLEAR_ACTIVE_MERCHANT previousUuid=" + previousUuid);
+        if (MysteriousMerchantSpawner.DEBUG) {
+            System.out.println("[SpawnerState] CLEAR_ACTIVE_MERCHANT previousUuid=" +
+                (previousUuid != null ? previousUuid.toString().substring(0, 8) + "..." : "null"));
+        }
     }
 
     /**

@@ -17,11 +17,16 @@ import java.util.UUID;
  * Phase 4: 神秘商人自然生成管理器
  *
  * 生成条件：
- * 1. 村庄附近100格内
+ * 1. 村庄附近 128 格（8 区块）内
  * 2. 正在下雨（可选）
- * 3. 每天有一定概率生成
+ * 3. 每次检查有一定概率生成（per-check 概率，非 per-day）
  * 4. 全局冷却时间
  * 5. 活跃商人追踪（防重复生成）
+ *
+ * 概率说明：
+ * - SPAWN_CHANCE_PER_CHECK 是每次检查的概率
+ * - 每天检查次数 = 24000 / NORMAL_CHECK_INTERVAL
+ * - 每天生成概率 ≈ 1 - (1 - pCheck)^checksPerDay
  *
  * 使用方式：
  * - 在 ServerTickEvents.END_WORLD_TICK 中调用 trySpawn()
@@ -33,18 +38,32 @@ import java.util.UUID;
 public class MysteriousMerchantSpawner {
 
     // ========== 调试开关 ==========
-    public static final boolean DEBUG = true;
+    /** 发布版默认关闭；开启后使用极短的时间参数和详细日志 */
+    public static final boolean DEBUG = false;
 
     // ========== 生成常量 ==========
-    /** 检测村庄的范围（格） */
-    private static final int VILLAGE_DETECTION_RANGE = 100;
-    /** 每天检查生成的概率 (0.0 ~ 1.0) */
-    private static final float SPAWN_CHANCE_PER_DAY = 0.3f;
+    /**
+     * 检测村庄的范围（区块数）
+     * locateStructure 的 radius 参数单位是 chunk，不是 block
+     */
+    private static final int VILLAGE_DETECTION_RANGE_CHUNKS = 8;  // 8 chunks = 128 blocks
+    /** 检测村庄的范围（格）- 用于二次距离验证 */
+    private static final int VILLAGE_DETECTION_RANGE_BLOCKS = VILLAGE_DETECTION_RANGE_CHUNKS * 16;  // 128 blocks
+    /**
+     * 每次检查的生成概率 (0.0 ~ 1.0)
+     *
+     * 概率换算：
+     * - checksPerDay = 24000 / NORMAL_CHECK_INTERVAL = 24000 / 3600 ≈ 6.67 次/天
+     * - dailyChance ≈ 1 - (1 - SPAWN_CHANCE_PER_CHECK)^checksPerDay
+     * - 当前值 0.02 → dailyChance ≈ 1 - 0.98^6.67 ≈ 12.7%/天（满足其他条件时）
+     * - 考虑下雨概率约 15%，实际约 1.9%/天
+     */
+    private static final float SPAWN_CHANCE_PER_CHECK = 0.02f;
     /** 调试模式：每 600 ticks (30秒) 检查一次 */
     private static final int DEBUG_CHECK_INTERVAL = 600;
-    /** 正常模式：每天检查一次（24000 ticks） */
-    private static final int NORMAL_CHECK_INTERVAL = 24000;
-    /** 是否需要下雨才能生成 */
+    /** 正常模式：每 3600 ticks (3分钟) 检查一次 */
+    private static final int NORMAL_CHECK_INTERVAL = 3600;
+    /** 是否需要下雨才能生成（发布版保持 true 增加稀有感） */
     private static final boolean REQUIRE_RAIN = true;
     /** 调试模式下是否跳过下雨检测 */
     private static final boolean DEBUG_SKIP_RAIN_CHECK = true;
@@ -56,12 +75,12 @@ public class MysteriousMerchantSpawner {
     private static final int MAX_MERCHANTS_PER_DAY = 1;
     /** 调试模式：生成后冷却 2 分钟 (2400 ticks) */
     private static final long DEBUG_COOLDOWN_TICKS = 2400;
-    /** 正常模式：生成后冷却 1 天 (24000 ticks) */
-    private static final long NORMAL_COOLDOWN_TICKS = 24000;
+    /** 正常模式：生成后冷却 15 分钟 (18000 ticks) */
+    private static final long NORMAL_COOLDOWN_TICKS = 18000;
     /** 调试模式：商人预期存活时间 60 秒 (1200 ticks) */
     private static final long DEBUG_EXPECTED_LIFETIME = 1200;
-    /** 正常模式：商人预期存活时间 30 天 (720000 ticks) */
-    private static final long NORMAL_EXPECTED_LIFETIME = 720000;
+    /** 正常模式：商人预期存活时间 5 天 (120000 ticks) */
+    private static final long NORMAL_EXPECTED_LIFETIME = 120000;
 
     // ========== 内存状态（仅用于检查间隔，不影响持久化） ==========
     private long lastCheckTick = 0;
@@ -124,8 +143,8 @@ public class MysteriousMerchantSpawner {
                 }
                 return;
             } else if (existingMerchant != null && !existingMerchant.isAlive()) {
-                // 商人存在但已死亡，清除追踪
-                System.out.println("[Spawner] ACTIVE_MERCHANT_DEAD uuid=" + activeUuid + " clearing");
+                // 商人存在但已死亡，清除追踪（异常情况，保留日志）
+                System.out.println("[Spawner][WARN] ACTIVE_MERCHANT_DEAD uuid=" + activeUuid + " clearing");
                 state.clearActiveMerchant();
             } else {
                 // 商人不在已加载区块中，依赖持久化追踪
@@ -162,12 +181,12 @@ public class MysteriousMerchantSpawner {
             }
         }
 
-        // 7. 随机概率检查
+        // 7. 随机概率检查（per-check 概率）
         Random random = world.getRandom();
         float roll = random.nextFloat();
-        boolean passed = roll <= SPAWN_CHANCE_PER_DAY;
+        boolean passed = roll <= SPAWN_CHANCE_PER_CHECK;
         if (DEBUG) {
-            System.out.println("[Spawner] CHANCE_CHECK chance=" + SPAWN_CHANCE_PER_DAY +
+            System.out.println("[Spawner] CHANCE_CHECK chancePerCheck=" + SPAWN_CHANCE_PER_CHECK +
                 " roll=" + String.format("%.3f", roll) +
                 " passed=" + passed +
                 " worldTime=" + currentTick);
@@ -225,13 +244,15 @@ public class MysteriousMerchantSpawner {
                 UUID merchantUuid = merchant.getUuid();
                 state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
 
+                // 重要事件：发布版也保留此日志
                 System.out.println("[Spawner] SPAWN_SUCCESS pos=" + spawnPos.toShortString() +
-                    " uuid=" + merchantUuid +
+                    " uuid=" + merchantUuid.toString().substring(0, 8) + "..." +
                     " nearPlayer=" + targetPlayer.getName().getString() +
-                    " spawnCountToday=" + state.getSpawnCountToday() +
-                    " totalSpawned=" + state.getTotalSpawnedCount() +
-                    " cooldownTicks=" + cooldownTicks +
-                    " worldTime=" + currentTick);
+                    " totalSpawned=" + state.getTotalSpawnedCount());
+                if (DEBUG) {
+                    System.out.println("[Spawner]   └─ cooldownTicks=" + cooldownTicks +
+                        " worldTime=" + currentTick);
+                }
             }
         }
     }
@@ -243,7 +264,7 @@ public class MysteriousMerchantSpawner {
         BlockPos villagePos = world.locateStructure(
                 StructureTags.VILLAGE,
                 pos,
-                VILLAGE_DETECTION_RANGE / 16,
+                VILLAGE_DETECTION_RANGE_CHUNKS,  // 单位：区块
                 false
         );
 
@@ -251,9 +272,9 @@ public class MysteriousMerchantSpawner {
             double distance = Math.sqrt(pos.getSquaredDistance(villagePos));
             if (DEBUG) {
                 System.out.println("[Spawner] VILLAGE_FOUND pos=" + villagePos.toShortString() +
-                    " distance=" + (int)distance + " maxRange=" + VILLAGE_DETECTION_RANGE);
+                    " distance=" + (int)distance + " maxRange=" + VILLAGE_DETECTION_RANGE_BLOCKS);
             }
-            return distance <= VILLAGE_DETECTION_RANGE;
+            return distance <= VILLAGE_DETECTION_RANGE_BLOCKS;  // 单位：格
         }
 
         return false;
