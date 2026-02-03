@@ -3,9 +3,9 @@ package mod.test.mymodtest.entity;
 import mod.test.mymodtest.entity.ai.DrinkPotionGoal;
 import mod.test.mymodtest.entity.ai.EnhancedFleeGoal;
 import mod.test.mymodtest.entity.ai.SeekLightGoal;
-import mod.test.mymodtest.entity.data.PlayerTradeData;
 import mod.test.mymodtest.registry.ModItems;
 import mod.test.mymodtest.world.MerchantSpawnerState;
+import mod.test.mymodtest.world.MerchantUnlockState;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -19,6 +19,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
@@ -27,6 +28,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
+import net.minecraft.util.Identifier;
 import net.minecraft.village.TradeOffer;
 import net.minecraft.village.TradeOfferList;
 import net.minecraft.village.TradedItem;
@@ -34,10 +36,10 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Random;
 import java.util.Optional;
-import java.util.UUID;
 
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final Logger LOGGER = LoggerFactory.getLogger(MysteriousMerchantEntity.class);
@@ -76,17 +78,20 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     /** 击杀惩罚：额外的不幸效果持续时间（ticks）*/
     private static final int KILL_UNLUCK_DURATION = 24000;     // 20分钟
 
-    // Phase 2.3: 玩家交易数据
-    private final Map<UUID, PlayerTradeData> playerDataMap = new HashMap<>();
+    // Phase 2.3: 交易统计
     private boolean hasEverTraded = false;
 
     // Phase 4: Despawn 数据
     private long spawnTick = -1;
     private boolean isInWarningPhase = false;
 
-    // Phase 6: 隐藏交易和自定义名称
-    private TradeOfferList secretOffers = null;
+    // Phase 8: 解封系统交易
+    private TradeOfferList katanaHiddenOffers = null;
     private String merchantName = "";
+
+    private static final int ELIGIBLE_TRADE_COUNT = 15;
+    private static final int REFRESH_GUARANTEE_COUNT = 3;
+    private static final Identifier KATANA_ITEM_ID = Identifier.of(ModItems.MOD_ID, "katana");
 
     public MysteriousMerchantEntity(EntityType<? extends WanderingTraderEntity> type, World world) {
         super(type, world);
@@ -420,6 +425,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return handleMysteriousCoinInteraction(player, heldItem, hand);
         }
 
+        if (!this.getEntityWorld().isClient() && player instanceof ServerPlayerEntity serverPlayer) {
+            rebuildOffersForPlayer(serverPlayer);
+        }
+
         // 默认交互（打开交易界面）
         return super.interactMob(player, hand);
     }
@@ -435,13 +444,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 消耗一个硬币
         if (!player.isCreative()) {
             coinStack.decrement(1);
-        }
-
-        // 给予玩家特殊奖励
-        PlayerTradeData playerData = getOrCreatePlayerData(player.getUuid());
-        int bonusCount = 3;  // 相当于额外 3 次交易
-        for (int i = 0; i < bonusCount; i++) {
-            playerData.incrementTradeCount();
         }
 
         // 给予强化的正面效果
@@ -491,26 +493,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             );
         }
 
-        // 检查是否解锁隐藏交易
-        if (playerData.getTradeCount() >= 10 && !playerData.isSecretUnlocked()) {
-            playerData.setSecretUnlocked(true);
-            unlockSecretTrades(player);  // Phase 6: 添加隐藏交易
-            if (player instanceof ServerPlayerEntity serverPlayer) {
-                serverPlayer.sendMessage(
-                        Text.literal("[神秘商人] 你的虔诚打动了我，隐藏交易已解锁！")
-                                .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
-                        false
-                );
-            }
-            if (DEBUG_AI) {
-                LOGGER.debug("[MysteriousMerchant] 玩家 {} 通过神秘硬币解锁了隐藏交易！",
-                        player.getName().getString());
-            }
-        }
-
         if (DEBUG_AI) {
-            LOGGER.debug("[MysteriousMerchant] 玩家 {} 使用了神秘硬币，当前交易次数: {}",
-                    player.getName().getString(), playerData.getTradeCount());
+            LOGGER.debug("[MysteriousMerchant] 玩家 {} 使用了神秘硬币，获得祝福效果",
+                    player.getName().getString());
         }
 
         return ActionResult.SUCCESS;
@@ -546,11 +531,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
-    // 获取或创建玩家交易数据
-    public PlayerTradeData getOrCreatePlayerData(UUID playerUUID) {
-        return playerDataMap.computeIfAbsent(playerUUID, PlayerTradeData::new);
-    }
-
     public boolean hasEverTraded() {
         return hasEverTraded;
     }
@@ -573,44 +553,72 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
 
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+
+        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+
         // 3. 更新玩家交易数据
-        PlayerTradeData playerData = getOrCreatePlayerData(player.getUuid());
-        playerData.incrementTradeCount();
-        int count = playerData.getTradeCount();
+        progress.setTradeCount(progress.getTradeCount() + 1);
+        int count = progress.getTradeCount();
+        state.markDirty();
 
         // 4. 给玩家正面效果 (100 ticks = 5秒)
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 100, 0));
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 100, 0));
 
-        // 5. 检查隐藏交易解锁
-        if (count >= 10 && !playerData.isSecretUnlocked()) {
-            playerData.setSecretUnlocked(true);
-            unlockSecretTrades(player);  // Phase 6: 添加隐藏交易
+        // 5. 达到解封资格提示（仅一次）
+        if (count >= ELIGIBLE_TRADE_COUNT && !progress.isEligibleNotified()) {
+            progress.setEligibleNotified(true);
+            state.markDirty();
             if (player instanceof ServerPlayerEntity serverPlayer) {
                 serverPlayer.sendMessage(
-                        Text.literal("[神秘商人] 你的忠诚令我感动，特殊商品已为你开放！")
-                                .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
+                        Text.literal("[神秘商人] 你已获得解封资格。")
+                                .formatted(Formatting.GOLD, Formatting.BOLD),
                         false
                 );
             }
             if (DEBUG_AI) {
-                LOGGER.debug("[MysteriousMerchant] 玩家 {} 解锁了隐藏交易!",
+                LOGGER.debug("[MysteriousMerchant] 玩家 {} 达到解封资格",
                         player.getName().getString());
+            }
+        }
+
+        // 6. 识别解封交易
+        if (isUnsealOffer(offer)) {
+            if (!progress.isUnlockedKatanaHidden()) {
+                progress.setUnlockedKatanaHidden(true);
+                state.markDirty();
+            }
+            if (!progress.isUnlockedNotified()) {
+                progress.setUnlockedNotified(true);
+                state.markDirty();
+                if (player instanceof ServerPlayerEntity serverPlayer) {
+                    serverPlayer.sendMessage(
+                            Text.literal("[神秘商人] 你解封了卷轴，隐藏交易已开启。")
+                                    .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
+                            false
+                    );
+                }
             }
         }
 
         // 6. 调试日志
         if (DEBUG_AI) {
-            LOGGER.debug("[MysteriousMerchant] 玩家 {} 交易次数: {}, hasEverTraded: {}",
-                    player.getName().getString(), count, hasEverTraded);
+            LOGGER.debug("[MysteriousMerchant] 玩家 {} 交易次数: {}, hasEverTraded: {}, unlocked: {}",
+                    player.getName().getString(), count, hasEverTraded, progress.isUnlockedKatanaHidden());
         }
     }
 
     @Override
     protected void fillRecipes() {
-        // Phase 2.1: 测试交易列表
         TradeOfferList offers = this.getOffers();
+        addBaseOffers(offers);
+    }
 
+    private void addBaseOffers(TradeOfferList offers) {
         // 5 绿宝石 → 1 钻石
         offers.add(new TradeOffer(
                 new TradedItem(Items.EMERALD, 5),
@@ -638,7 +646,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 0.05f
         ));
 
-        // Phase 6: 添加神秘硬币交易（用绿宝石购买）
+        // 添加神秘硬币交易（用绿宝石购买）
         offers.add(new TradeOffer(
                 new TradedItem(Items.EMERALD, 32),
                 new ItemStack(ModItems.MYSTERIOUS_COIN, 1),
@@ -648,91 +656,263 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         ));
     }
 
-    // ========== Phase 6: 隐藏交易系统 ==========
+    private void rebuildOffersForPlayer(ServerPlayerEntity player) {
+        TradeOfferList offers = this.getOffers();
+        offers.clear();
+        addBaseOffers(offers);
 
-    /**
-     * 创建隐藏交易列表
-     */
-    private TradeOfferList createSecretOffers() {
-        TradeOfferList secrets = new TradeOfferList();
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
 
-        // 隐藏交易 1: 神秘硬币 → 附魔金苹果
-        secrets.add(new TradeOffer(
-                new TradedItem(ModItems.MYSTERIOUS_COIN, 3),
-                new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 1),
-                1,     // 极其稀有
-                50,
-                0.0f   // 不涨价
-        ));
+        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+        boolean eligible = progress.getTradeCount() >= ELIGIBLE_TRADE_COUNT;
 
-        // 隐藏交易 2: 神秘硬币 + 绿宝石 → 不死图腾
-        secrets.add(new TradeOffer(
-                new TradedItem(ModItems.MYSTERIOUS_COIN, 5),
-                Optional.of(new TradedItem(Items.EMERALD, 64)),
-                new ItemStack(Items.TOTEM_OF_UNDYING, 1),
-                1,
-                100,
-                0.0f
-        ));
+        if (eligible) {
+            offers.add(createSealedLedgerOffer());
+        }
 
-        // 隐藏交易 3: 神秘硬币 → 龙息
-        secrets.add(new TradeOffer(
-                new TradedItem(ModItems.MYSTERIOUS_COIN, 2),
-                new ItemStack(Items.DRAGON_BREATH, 3),
-                3,
-                30,
-                0.0f
-        ));
+        if (eligible && !progress.isUnlockedKatanaHidden()) {
+            progress.setRefreshSeenCount(progress.getRefreshSeenCount() + 1);
+            state.markDirty();
+            offers.add(createUnsealOffer());
+            addSigilOffers(offers, progress);
+        }
 
-        // 隐藏交易 4: 神秘硬币 + 钻石 → 下界之星
-        secrets.add(new TradeOffer(
-                new TradedItem(ModItems.MYSTERIOUS_COIN, 8),
-                Optional.of(new TradedItem(Items.DIAMOND, 16)),
-                new ItemStack(Items.NETHER_STAR, 1),
-                1,
-                200,
-                0.0f
-        ));
-
-        // 隐藏交易 5: 神秘硬币 + 绿宝石 → 鞘翅
-        secrets.add(new TradeOffer(
-                new TradedItem(ModItems.MYSTERIOUS_COIN, 10),
-                Optional.of(new TradedItem(Items.EMERALD, 64)),
-                new ItemStack(Items.ELYTRA, 1),
-                1,
-                250,
-                0.0f
-        ));
-
-        return secrets;
+        if (progress.isUnlockedKatanaHidden()) {
+            addKatanaHiddenOffers(offers);
+        }
     }
 
-    /**
-     * 为玩家解锁隐藏交易
-     */
-    public void unlockSecretTrades(PlayerEntity player) {
-        if (secretOffers == null) {
-            secretOffers = createSecretOffers();
+    private TradeOffer createSealedLedgerOffer() {
+        return new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                new ItemStack(ModItems.SEALED_LEDGER, 1),
+                1,
+                25,
+                0.0f
+        );
+    }
+
+    private TradeOffer createUnsealOffer() {
+        return new TradeOffer(
+                new TradedItem(ModItems.SEALED_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SIGIL, 1)),
+                new ItemStack(ModItems.ARCANE_LEDGER, 1),
+                1,
+                50,
+                0.0f
+        );
+    }
+
+    private void addSigilOffers(TradeOfferList offers, MerchantUnlockState.Progress progress) {
+        ArrayList<SigilOfferEntry> pool = createSigilOfferPool();
+        ArrayList<SigilOfferEntry> aList = new ArrayList<>();
+        ArrayList<SigilOfferEntry> bList = new ArrayList<>();
+        ArrayList<SigilOfferEntry> cList = new ArrayList<>();
+
+        for (SigilOfferEntry entry : pool) {
+            switch (entry.tier) {
+                case A -> aList.add(entry);
+                case B -> bList.add(entry);
+                case C -> cList.add(entry);
+            }
         }
 
-        // 将隐藏交易添加到主交易列表
-        TradeOfferList mainOffers = this.getOffers();
-        for (TradeOffer offer : secretOffers) {
-            // 检查是否已存在（避免重复添加）
-            boolean exists = false;
-            for (TradeOffer existing : mainOffers) {
-                if (existing.getSellItem().getItem() == offer.getSellItem().getItem()) {
-                    exists = true;
-                    break;
-                }
+        int targetCount = 3 + this.random.nextInt(3);
+        boolean guaranteeB1 = progress.getRefreshSeenCount() >= REFRESH_GUARANTEE_COUNT;
+        int maxA = guaranteeB1 ? 0 : 1;
+
+        ArrayList<SigilOfferEntry> chosen = new ArrayList<>();
+
+        if (guaranteeB1) {
+            SigilOfferEntry b1 = extractById(bList, "B1");
+            if (b1 != null) {
+                chosen.add(b1);
             }
-            if (!exists) {
-                mainOffers.add(offer);
+        } else {
+            SigilOfferEntry firstBc = extractRandomFrom(bList, cList);
+            if (firstBc != null) {
+                chosen.add(firstBc);
             }
         }
 
-        if (DEBUG_AI) {
-            LOGGER.debug("[MysteriousMerchant] 隐藏交易已添加到列表，当前交易数: {}", mainOffers.size());
+        if (maxA > 0 && !aList.isEmpty() && this.random.nextBoolean() && chosen.size() < targetCount) {
+            chosen.add(pickRandomEntry(aList));
+        }
+
+        ArrayList<SigilOfferEntry> remaining = new ArrayList<>();
+        remaining.addAll(bList);
+        remaining.addAll(cList);
+        if (maxA > 0) {
+            remaining.addAll(aList);
+        }
+        Collections.shuffle(remaining, new Random(this.random.nextLong()));
+
+        for (SigilOfferEntry entry : remaining) {
+            if (chosen.size() >= targetCount) {
+                break;
+            }
+            chosen.add(entry);
+        }
+
+        for (SigilOfferEntry entry : chosen) {
+            offers.add(entry.offer);
+        }
+    }
+
+    private void addKatanaHiddenOffers(TradeOfferList offers) {
+        if (katanaHiddenOffers == null) {
+            katanaHiddenOffers = createKatanaHiddenOffers();
+        }
+        for (TradeOffer offer : katanaHiddenOffers) {
+            offers.add(offer);
+        }
+    }
+
+    private TradeOfferList createKatanaHiddenOffers() {
+        TradeOfferList list = new TradeOfferList();
+        ItemStack katanaStack = resolveKatanaStack();
+        if (katanaStack.isEmpty()) {
+            return list;
+        }
+
+        list.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(Items.EMERALD, 32)),
+                katanaStack,
+                1,
+                80,
+                0.0f
+        ));
+
+        return list;
+    }
+
+    private ItemStack resolveKatanaStack() {
+        if (Registries.ITEM.containsId(KATANA_ITEM_ID)) {
+            return new ItemStack(Registries.ITEM.get(KATANA_ITEM_ID), 1);
+        }
+        LOGGER.warn("[MysteriousMerchant] katana 物品未注册，使用下界合金剑作为占位");
+        return new ItemStack(Items.NETHERITE_SWORD, 1);
+    }
+
+    private ArrayList<SigilOfferEntry> createSigilOfferPool() {
+        ArrayList<SigilOfferEntry> pool = new ArrayList<>();
+
+        pool.add(new SigilOfferEntry("A1", SigilTier.A, new TradeOffer(
+                new TradedItem(Items.EMERALD, 64),
+                new ItemStack(ModItems.SIGIL, 1),
+                1, 40, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("A2", SigilTier.A, new TradeOffer(
+                new TradedItem(Items.DIAMOND, 8),
+                new ItemStack(ModItems.SIGIL, 1),
+                1, 40, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("A3", SigilTier.A, new TradeOffer(
+                new TradedItem(Items.NETHERITE_INGOT, 1),
+                new ItemStack(ModItems.SIGIL, 1),
+                1, 60, 0.0f
+        )));
+
+        pool.add(new SigilOfferEntry("B1", SigilTier.B, new TradeOffer(
+                new TradedItem(Items.BLAZE_ROD, 2),
+                new ItemStack(ModItems.SIGIL, 1),
+                2, 30, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("B2", SigilTier.B, new TradeOffer(
+                new TradedItem(Items.GOLD_INGOT, 12),
+                new ItemStack(ModItems.SIGIL, 1),
+                2, 25, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("B3", SigilTier.B, new TradeOffer(
+                new TradedItem(Items.ENDER_PEARL, 6),
+                new ItemStack(ModItems.SIGIL, 1),
+                2, 25, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("B4", SigilTier.B, new TradeOffer(
+                new TradedItem(Items.GHAST_TEAR, 2),
+                new ItemStack(ModItems.SIGIL, 1),
+                2, 30, 0.0f
+        )));
+
+        pool.add(new SigilOfferEntry("C1", SigilTier.C, new TradeOffer(
+                new TradedItem(Items.EMERALD, 24),
+                new ItemStack(ModItems.SIGIL, 1),
+                3, 15, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("C2", SigilTier.C, new TradeOffer(
+                new TradedItem(Items.IRON_INGOT, 16),
+                new ItemStack(ModItems.SIGIL, 1),
+                3, 15, 0.0f
+        )));
+        pool.add(new SigilOfferEntry("C3", SigilTier.C, new TradeOffer(
+                new TradedItem(Items.REDSTONE, 24),
+                new ItemStack(ModItems.SIGIL, 1),
+                3, 15, 0.0f
+        )));
+
+        return pool;
+    }
+
+    private SigilOfferEntry extractById(ArrayList<SigilOfferEntry> list, String id) {
+        for (int i = 0; i < list.size(); i++) {
+            SigilOfferEntry entry = list.get(i);
+            if (entry.id.equals(id)) {
+                list.remove(i);
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private SigilOfferEntry extractRandomFrom(ArrayList<SigilOfferEntry> first, ArrayList<SigilOfferEntry> second) {
+        ArrayList<SigilOfferEntry> combined = new ArrayList<>();
+        combined.addAll(first);
+        combined.addAll(second);
+        if (combined.isEmpty()) {
+            return null;
+        }
+        SigilOfferEntry pick = combined.get(this.random.nextInt(combined.size()));
+        first.remove(pick);
+        second.remove(pick);
+        return pick;
+    }
+
+    private SigilOfferEntry pickRandomEntry(ArrayList<SigilOfferEntry> list) {
+        SigilOfferEntry entry = list.remove(this.random.nextInt(list.size()));
+        return entry;
+    }
+
+    private boolean isUnsealOffer(TradeOffer offer) {
+        if (!offer.getSellItem().isOf(ModItems.ARCANE_LEDGER)) {
+            return false;
+        }
+        ItemStack first = offer.getOriginalFirstBuyItem();
+        if (!first.isOf(ModItems.SEALED_LEDGER)) {
+            return false;
+        }
+        Optional<TradedItem> second = offer.getSecondBuyItem();
+        return second.isPresent() && second.get().item() == ModItems.SIGIL;
+    }
+
+    private enum SigilTier {
+        A,
+        B,
+        C
+    }
+
+    private static class SigilOfferEntry {
+        private final String id;
+        private final SigilTier tier;
+        private final TradeOffer offer;
+
+        private SigilOfferEntry(String id, SigilTier tier, TradeOffer offer) {
+            this.id = id;
+            this.tier = tier;
+            this.offer = offer;
         }
     }
 
@@ -762,12 +942,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     // Phase 2.5 & 4 & 6: NBT 持久化
     private static final String NBT_HAS_EVER_TRADED = "HasEverTraded";
-    private static final String NBT_PLAYER_UUIDS = "PlayerUUIDs";
-    private static final String NBT_PLAYER_PREFIX = "Player_";
     private static final String NBT_SPAWN_TICK = "SpawnTick";
     private static final String NBT_IN_WARNING_PHASE = "InWarningPhase";
     private static final String NBT_MERCHANT_NAME = "MerchantName";
-    private static final String NBT_HAS_SECRET_OFFERS = "HasSecretOffers";
 
     @Override
     public void writeCustomDataToNbt(NbtCompound nbt) {
@@ -780,28 +957,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putLong(NBT_SPAWN_TICK, this.spawnTick);
         nbt.putBoolean(NBT_IN_WARNING_PHASE, this.isInWarningPhase);
 
-        // 保存玩家 UUID 列表（逗号分隔）
-        StringBuilder uuidList = new StringBuilder();
-        for (Map.Entry<UUID, PlayerTradeData> entry : playerDataMap.entrySet()) {
-            String uuidStr = entry.getKey().toString();
-            if (uuidList.length() > 0) uuidList.append(",");
-            uuidList.append(uuidStr);
-
-            // 保存每个玩家的数据
-            NbtCompound playerNbt = new NbtCompound();
-            playerNbt.putInt("TradeCount", entry.getValue().getTradeCount());
-            playerNbt.putBoolean("SecretUnlocked", entry.getValue().isSecretUnlocked());
-            nbt.put(NBT_PLAYER_PREFIX + uuidStr, playerNbt);
-        }
-        nbt.putString(NBT_PLAYER_UUIDS, uuidList.toString());
-
-        // Phase 6: 保存商人名称和隐藏交易状态
+        // Phase 6: 保存商人名称
         nbt.putString(NBT_MERCHANT_NAME, this.merchantName);
-        nbt.putBoolean(NBT_HAS_SECRET_OFFERS, this.secretOffers != null);
 
         if (DEBUG_DESPAWN) {
-            LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={} playerDataCount={}",
-                spawnTick, isInWarningPhase, hasEverTraded, playerDataMap.size());
+            LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={}",
+                spawnTick, isInWarningPhase, hasEverTraded);
         }
     }
 
@@ -817,24 +978,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (this.spawnTick == 0) this.spawnTick = -1;  // 兼容旧数据
         this.isInWarningPhase = nbt.getBoolean(NBT_IN_WARNING_PHASE);
 
-        // 读取玩家数据
-        playerDataMap.clear();
-        String uuidListStr = nbt.getString(NBT_PLAYER_UUIDS);
-        if (!uuidListStr.isEmpty()) {
-            for (String uuidStr : uuidListStr.split(",")) {
-                try {
-                    UUID uuid = UUID.fromString(uuidStr);
-                    NbtCompound playerNbt = nbt.getCompound(NBT_PLAYER_PREFIX + uuidStr);
-                    PlayerTradeData data = new PlayerTradeData(uuid);
-                    data.setTradeCount(playerNbt.getInt("TradeCount"));
-                    data.setSecretUnlocked(playerNbt.getBoolean("SecretUnlocked"));
-                    playerDataMap.put(uuid, data);
-                } catch (IllegalArgumentException e) {
-                    LOGGER.warn("[MysteriousMerchant] 无效的 UUID: {}", uuidStr);
-                }
-            }
-        }
-
         // Phase 6: 读取商人名称
         this.merchantName = nbt.getString(NBT_MERCHANT_NAME);
         if (!this.merchantName.isEmpty()) {
@@ -842,16 +985,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             this.setCustomNameVisible(true);
         }
 
-        // Phase 6: 如果之前有隐藏交易，重新创建
-        boolean hadSecretOffers = nbt.getBoolean(NBT_HAS_SECRET_OFFERS);
-        if (hadSecretOffers) {
-            this.secretOffers = createSecretOffers();
-            // 注意：实际添加到交易列表会在玩家打开交易界面时根据玩家数据判断
-        }
-
         if (DEBUG_DESPAWN) {
-            LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={} playerDataCount={}",
-                spawnTick, isInWarningPhase, hasEverTraded, playerDataMap.size());
+            LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={}",
+                spawnTick, isInWarningPhase, hasEverTraded);
         }
     }
 }
