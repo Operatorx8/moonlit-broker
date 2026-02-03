@@ -580,10 +580,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         false
                 );
             }
-            if (DEBUG_AI) {
-                LOGGER.debug("[MysteriousMerchant] 玩家 {} 达到解封资格",
-                        player.getName().getString());
-            }
+            // P0-9 修复：关键业务日志使用 info 级别
+            LOGGER.info("[MerchantUnlock] ELIGIBLE player={} tradeCount={}",
+                    player.getName().getString(), count);
         }
 
         // 6. 识别解封交易
@@ -591,6 +590,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             if (!progress.isUnlockedKatanaHidden()) {
                 progress.setUnlockedKatanaHidden(true);
                 state.markDirty();
+                LOGGER.info("[MerchantUnlock] UNLOCK player={} uuid={}",
+                        player.getName().getString(), player.getUuid().toString().substring(0, 8));
             }
             if (!progress.isUnlockedNotified()) {
                 progress.setUnlockedNotified(true);
@@ -601,14 +602,20 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                                     .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
                             false
                     );
+                    // P0-6 修复：提示玩家重新打开交易界面以查看隐藏交易
+                    serverPlayer.sendMessage(
+                            Text.literal("[神秘商人] 请关闭并重新打开交易界面查看隐藏交易。")
+                                    .formatted(Formatting.GRAY, Formatting.ITALIC),
+                            false
+                    );
                 }
             }
         }
 
-        // 6. 调试日志
+        // 6. 调试日志（仅在 DEBUG_AI 开启时输出详细信息）
         if (DEBUG_AI) {
-            LOGGER.debug("[MysteriousMerchant] 玩家 {} 交易次数: {}, hasEverTraded: {}, unlocked: {}",
-                    player.getName().getString(), count, hasEverTraded, progress.isUnlockedKatanaHidden());
+            LOGGER.debug("[MysteriousMerchant] TRADE_COMPLETE player={} count={} unlocked={}",
+                    player.getName().getString(), count, progress.isUnlockedKatanaHidden());
         }
     }
 
@@ -895,7 +902,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return false;
         }
         Optional<TradedItem> second = offer.getSecondBuyItem();
-        return second.isPresent() && second.get().item() == ModItems.SIGIL;
+        // P1-10 修复：使用 itemStack.isOf() 进行物品比较，更稳健
+        return second.isPresent() && second.get().itemStack().isOf(ModItems.SIGIL);
     }
 
     private enum SigilTier {

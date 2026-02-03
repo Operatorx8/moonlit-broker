@@ -131,11 +131,22 @@ public class MerchantUnlockState extends PersistentState {
 
         public static Progress fromNbt(NbtCompound nbt) {
             Progress progress = new Progress();
-            progress.tradeCount = nbt.getInt("TradeCount");
-            progress.eligibleNotified = nbt.getBoolean("EligibleNotified");
-            progress.unlockedKatanaHidden = nbt.getBoolean("UnlockedKatanaHidden");
-            progress.unlockedNotified = nbt.getBoolean("UnlockedNotified");
-            progress.refreshSeenCount = nbt.getInt("RefreshSeenCount");
+            // 硬化补丁：防御性读取，缺失字段使用默认值（int=0, boolean=false）
+            if (nbt.contains("TradeCount")) {
+                progress.tradeCount = nbt.getInt("TradeCount");
+            }
+            if (nbt.contains("EligibleNotified")) {
+                progress.eligibleNotified = nbt.getBoolean("EligibleNotified");
+            }
+            if (nbt.contains("UnlockedKatanaHidden")) {
+                progress.unlockedKatanaHidden = nbt.getBoolean("UnlockedKatanaHidden");
+            }
+            if (nbt.contains("UnlockedNotified")) {
+                progress.unlockedNotified = nbt.getBoolean("UnlockedNotified");
+            }
+            if (nbt.contains("RefreshSeenCount")) {
+                progress.refreshSeenCount = nbt.getInt("RefreshSeenCount");
+            }
             return progress;
         }
     }
