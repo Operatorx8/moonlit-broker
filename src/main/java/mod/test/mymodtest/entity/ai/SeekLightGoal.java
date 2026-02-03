@@ -8,6 +8,8 @@ import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LightType;
 import net.minecraft.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -20,6 +22,7 @@ import java.util.List;
  * - 周期性扫描附近寻找亮度更高的位置
  */
 public class SeekLightGoal extends Goal {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SeekLightGoal.class);
 
     // ========== 可配置常量 ==========
     /** 扫描光源的范围 (格) */
@@ -123,8 +126,8 @@ public class SeekLightGoal extends Goal {
 
                 if (MysteriousMerchantEntity.DEBUG_AI) {
                     int targetLight = merchant.getEntityWorld().getLightLevel(LightType.BLOCK, targetLightPos);
-                    System.out.println("[MerchantAI] 趋光：向 " + targetLightPos.toShortString() +
-                            " 移动 (光照等级 " + targetLight + ")");
+                    LOGGER.debug("[MerchantAI] 趋光：向 {} 移动 (光照等级 {})",
+                            targetLightPos.toShortString(), targetLight);
                 }
             }
         }
@@ -136,7 +139,7 @@ public class SeekLightGoal extends Goal {
         targetLightPos = null;
 
         if (MysteriousMerchantEntity.DEBUG_AI) {
-            System.out.println("[MerchantAI] 趋光结束");
+            LOGGER.debug("[MerchantAI] 趋光结束");
         }
     }
 

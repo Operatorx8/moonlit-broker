@@ -7,11 +7,14 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class Mymodtest implements ModInitializer {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Mymodtest.class);
 
     // Phase 4: 每个世界维度一个生成器实例
     private static final Map<ServerWorld, MysteriousMerchantSpawner> spawners = new HashMap<>();
@@ -33,6 +36,6 @@ public class Mymodtest implements ModInitializer {
             }
         });
 
-        System.out.println("[Mymodtest] 模组已加载，神秘商人生成器已注册");
+        LOGGER.debug("[Mymodtest] 模组已加载，神秘商人生成器已注册");
     }
 }

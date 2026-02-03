@@ -10,6 +10,9 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.SpawnHelper;
+import net.minecraft.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
@@ -36,6 +39,7 @@ import java.util.UUID;
  * - 活跃商人 UUID 持久化追踪，即使商人在未加载区块也不会重复生成
  */
 public class MysteriousMerchantSpawner {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MysteriousMerchantSpawner.class);
 
     // ========== 调试开关 ==========
     /** 发布版默认关闭；开启后使用极短的时间参数和详细日志 */
@@ -92,6 +96,10 @@ public class MysteriousMerchantSpawner {
      * @param world 服务端世界
      */
     public void trySpawn(ServerWorld world) {
+        if (world.getRegistryKey() != World.OVERWORLD) {
+            return;
+        }
+
         long currentTick = world.getTime();
         int checkInterval = DEBUG ? DEBUG_CHECK_INTERVAL : NORMAL_CHECK_INTERVAL;
 
@@ -105,15 +113,14 @@ public class MysteriousMerchantSpawner {
         MerchantSpawnerState state = MerchantSpawnerState.getServerState(world);
 
         if (DEBUG) {
-            System.out.println("[Spawner] CHECK_START worldTime=" + currentTick + " state={" + state.toDebugString() + "}");
+            LOGGER.debug("[Spawner] CHECK_START worldTime={} state={{{}}}", currentTick, state.toDebugString());
         }
 
         // 2. 检查每日上限（使用持久化状态）
         if (!state.canSpawnToday(world, MAX_MERCHANTS_PER_DAY)) {
             if (DEBUG) {
-                System.out.println("[Spawner] SKIP_DAILY_LIMIT spawnCountToday=" + state.getSpawnCountToday() +
-                    " max=" + MAX_MERCHANTS_PER_DAY +
-                    " lastSpawnDay=" + state.getLastSpawnDay());
+                LOGGER.debug("[Spawner] SKIP_DAILY_LIMIT spawnCountToday={} max={} lastSpawnDay={}",
+                    state.getSpawnCountToday(), MAX_MERCHANTS_PER_DAY, state.getLastSpawnDay());
             }
             return;
         }
@@ -122,9 +129,8 @@ public class MysteriousMerchantSpawner {
         if (!state.isCooldownExpired(world)) {
             if (DEBUG) {
                 long remaining = state.getRemainingCooldown(world);
-                System.out.println("[Spawner] SKIP_COOLDOWN cooldownUntil=" + state.getCooldownUntil() +
-                    " remaining=" + remaining + "ticks(" + (remaining/20) + "s)" +
-                    " worldTime=" + currentTick);
+                LOGGER.debug("[Spawner] SKIP_COOLDOWN cooldownUntil={} remaining={}ticks({}s) worldTime={}",
+                    state.getCooldownUntil(), remaining, (remaining / 20), currentTick);
             }
             return;
         }
@@ -137,21 +143,20 @@ public class MysteriousMerchantSpawner {
             if (existingMerchant != null && existingMerchant.isAlive()) {
                 // 商人确实存在且存活
                 if (DEBUG) {
-                    System.out.println("[Spawner] SKIP_ACTIVE_MERCHANT_EXISTS uuid=" + activeUuid +
-                        " pos=" + existingMerchant.getBlockPos().toShortString() +
-                        " worldTime=" + currentTick);
+                    LOGGER.debug("[Spawner] SKIP_ACTIVE_MERCHANT_EXISTS uuid={} pos={} worldTime={}",
+                        activeUuid, existingMerchant.getBlockPos().toShortString(), currentTick);
                 }
                 return;
             } else if (existingMerchant != null && !existingMerchant.isAlive()) {
                 // 商人存在但已死亡，清除追踪（异常情况，保留日志）
-                System.out.println("[Spawner][WARN] ACTIVE_MERCHANT_DEAD uuid=" + activeUuid + " clearing");
+                LOGGER.warn("[Spawner] ACTIVE_MERCHANT_DEAD uuid={} clearing",
+                    activeUuid.toString().substring(0, 8));
                 state.clearActiveMerchant();
             } else {
                 // 商人不在已加载区块中，依赖持久化追踪
                 if (DEBUG) {
-                    System.out.println("[Spawner] SKIP_ACTIVE_MERCHANT_UNLOADED uuid=" + activeUuid +
-                        " expireAt=" + state.getActiveMerchantExpireAt() +
-                        " worldTime=" + currentTick);
+                    LOGGER.debug("[Spawner] SKIP_ACTIVE_MERCHANT_UNLOADED uuid={} expireAt={} worldTime={}",
+                        activeUuid, state.getActiveMerchantExpireAt(), currentTick);
                 }
                 return;
             }
@@ -165,17 +170,17 @@ public class MysteriousMerchantSpawner {
         ).size();
         if (existingCount > 0) {
             if (DEBUG) {
-                System.out.println("[Spawner] SKIP_EXISTING_LOADED existingMerchants=" + existingCount +
-                    " worldTime=" + currentTick);
+                LOGGER.debug("[Spawner] SKIP_EXISTING_LOADED existingMerchants={} worldTime={}",
+                    existingCount, currentTick);
             }
             return;
         }
 
         // 6. 检查天气条件
-        if (REQUIRE_RAIN && !DEBUG_SKIP_RAIN_CHECK) {
+        if (REQUIRE_RAIN && !(DEBUG && DEBUG_SKIP_RAIN_CHECK)) {
             if (!world.isRaining()) {
                 if (DEBUG) {
-                    System.out.println("[Spawner] SKIP_NO_RAIN worldTime=" + currentTick);
+                    LOGGER.debug("[Spawner] SKIP_NO_RAIN worldTime={}", currentTick);
                 }
                 return;
             }
@@ -186,10 +191,8 @@ public class MysteriousMerchantSpawner {
         float roll = random.nextFloat();
         boolean passed = roll <= SPAWN_CHANCE_PER_CHECK;
         if (DEBUG) {
-            System.out.println("[Spawner] CHANCE_CHECK chancePerCheck=" + SPAWN_CHANCE_PER_CHECK +
-                " roll=" + String.format("%.3f", roll) +
-                " passed=" + passed +
-                " worldTime=" + currentTick);
+            LOGGER.debug("[Spawner] CHANCE_CHECK chancePerCheck={} roll={} passed={} worldTime={}",
+                SPAWN_CHANCE_PER_CHECK, String.format("%.3f", roll), passed, currentTick);
         }
         if (!passed) {
             return;
@@ -199,7 +202,7 @@ public class MysteriousMerchantSpawner {
         var players = world.getPlayers();
         if (players.isEmpty()) {
             if (DEBUG) {
-                System.out.println("[Spawner] SKIP_NO_PLAYERS worldTime=" + currentTick);
+                LOGGER.debug("[Spawner] SKIP_NO_PLAYERS worldTime={}", currentTick);
             }
             return;
         }
@@ -210,8 +213,8 @@ public class MysteriousMerchantSpawner {
         // 9. 检查玩家附近是否有村庄
         if (!isNearVillage(world, playerPos)) {
             if (DEBUG) {
-                System.out.println("[Spawner] SKIP_NO_VILLAGE player=" + targetPlayer.getName().getString() +
-                    " pos=" + playerPos.toShortString());
+                LOGGER.debug("[Spawner] SKIP_NO_VILLAGE player={} pos={}",
+                    targetPlayer.getName().getString(), playerPos.toShortString());
             }
             return;
         }
@@ -220,8 +223,8 @@ public class MysteriousMerchantSpawner {
         BlockPos spawnPos = findSpawnPosition(world, playerPos, random);
         if (spawnPos == null) {
             if (DEBUG) {
-                System.out.println("[Spawner] SKIP_NO_VALID_POS attempts=" + MAX_SPAWN_ATTEMPTS +
-                    " searchRange=" + SPAWN_SEARCH_RANGE);
+                LOGGER.debug("[Spawner] SKIP_NO_VALID_POS attempts={} searchRange={}",
+                    MAX_SPAWN_ATTEMPTS, SPAWN_SEARCH_RANGE);
             }
             return;
         }
@@ -244,14 +247,15 @@ public class MysteriousMerchantSpawner {
                 UUID merchantUuid = merchant.getUuid();
                 state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
 
-                // 重要事件：发布版也保留此日志
-                System.out.println("[Spawner] SPAWN_SUCCESS pos=" + spawnPos.toShortString() +
-                    " uuid=" + merchantUuid.toString().substring(0, 8) + "..." +
-                    " nearPlayer=" + targetPlayer.getName().getString() +
-                    " totalSpawned=" + state.getTotalSpawnedCount());
                 if (DEBUG) {
-                    System.out.println("[Spawner]   └─ cooldownTicks=" + cooldownTicks +
-                        " worldTime=" + currentTick);
+                    LOGGER.info("[Spawner] SPAWN_SUCCESS pos={} uuid={}... nearPlayer={} totalSpawned={}",
+                        spawnPos.toShortString(),
+                        merchantUuid.toString().substring(0, 8),
+                        targetPlayer.getName().getString(),
+                        state.getTotalSpawnedCount());
+                }
+                if (DEBUG) {
+                    LOGGER.debug("[Spawner]   └─ cooldownTicks={} worldTime={}", cooldownTicks, currentTick);
                 }
             }
         }
@@ -271,8 +275,8 @@ public class MysteriousMerchantSpawner {
         if (villagePos != null) {
             double distance = Math.sqrt(pos.getSquaredDistance(villagePos));
             if (DEBUG) {
-                System.out.println("[Spawner] VILLAGE_FOUND pos=" + villagePos.toShortString() +
-                    " distance=" + (int)distance + " maxRange=" + VILLAGE_DETECTION_RANGE_BLOCKS);
+                LOGGER.debug("[Spawner] VILLAGE_FOUND pos={} distance={} maxRange={}",
+                    villagePos.toShortString(), (int) distance, VILLAGE_DETECTION_RANGE_BLOCKS);
             }
             return distance <= VILLAGE_DETECTION_RANGE_BLOCKS;  // 单位：格
         }

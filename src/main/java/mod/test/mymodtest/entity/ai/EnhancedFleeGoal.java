@@ -8,6 +8,8 @@ import net.minecraft.entity.ai.pathing.EntityNavigation;
 import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.util.math.Vec3d;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -18,6 +20,7 @@ import java.util.List;
  * - 行为：更高逃跑速度、更频繁重选路径、远离威胁源
  */
 public class EnhancedFleeGoal extends Goal {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EnhancedFleeGoal.class);
 
     // ========== 可配置常量 ==========
     /** 检测敌对生物的范围 */
@@ -52,7 +55,7 @@ public class EnhancedFleeGoal extends Goal {
         if (wasRecentlyHurt()) {
             threatEntity = merchant.getAttacker();
             if (MysteriousMerchantEntity.DEBUG_AI) {
-                System.out.println("[MerchantAI] 逃跑触发：最近受伤");
+                LOGGER.debug("[MerchantAI] 逃跑触发：最近受伤");
             }
             return true;
         }
@@ -62,7 +65,8 @@ public class EnhancedFleeGoal extends Goal {
         if (nearestHostile != null) {
             threatEntity = nearestHostile;
             if (MysteriousMerchantEntity.DEBUG_AI) {
-                System.out.println("[MerchantAI] 逃跑触发：检测到敌对生物 " + nearestHostile.getType().getUntranslatedName());
+                LOGGER.debug("[MerchantAI] 逃跑触发：检测到敌对生物 {}",
+                    nearestHostile.getType().getUntranslatedName());
             }
             return true;
         }
@@ -112,7 +116,7 @@ public class EnhancedFleeGoal extends Goal {
         navigation.stop();
         threatEntity = null;
         if (MysteriousMerchantEntity.DEBUG_AI) {
-            System.out.println("[MerchantAI] 逃跑结束");
+            LOGGER.debug("[MerchantAI] 逃跑结束");
         }
     }
 

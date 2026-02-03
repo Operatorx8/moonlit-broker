@@ -31,6 +31,8 @@ import net.minecraft.village.TradeOffer;
 import net.minecraft.village.TradeOfferList;
 import net.minecraft.village.TradedItem;
 import net.minecraft.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,6 +40,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MysteriousMerchantEntity.class);
 
     // ========== 调试开关 ==========
     /** 发布版默认关闭；开启后启用 AI 行为调试日志 */
@@ -104,8 +107,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (spawnTick < 0) {
             spawnTick = this.getEntityWorld().getTime();
             if (DEBUG_DESPAWN) {
-                System.out.println("[Merchant] INIT_SPAWN_TICK side=SERVER spawnTick=" + spawnTick +
-                    " worldTime=" + this.getEntityWorld().getTime());
+                LOGGER.debug("[Merchant] INIT_SPAWN_TICK side=SERVER spawnTick={} worldTime={}",
+                    spawnTick, this.getEntityWorld().getTime());
             }
         }
 
@@ -127,10 +130,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 isInWarningPhase = true;
                 if (DEBUG_DESPAWN) {
                     int remainingSec = (int)((despawnTime - aliveTicks) / 20);
-                    System.out.println("[Merchant] WARNING_ENTER side=SERVER remaining=" + remainingSec + "s" +
-                        " aliveTicks=" + aliveTicks +
-                        " spawnTick=" + spawnTick +
-                        " worldTime=" + currentTick);
+                    LOGGER.debug("[Merchant] WARNING_ENTER side=SERVER remaining={}s aliveTicks={} spawnTick={} worldTime={}",
+                        remainingSec, aliveTicks, spawnTick, currentTick);
                 }
             }
             performWarningEffect(currentTick);
@@ -162,9 +163,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      */
     private void performDespawn() {
         long lifetime = this.getEntityWorld().getTime() - spawnTick;
-        // 重要事件：发布版保留精简日志
-        System.out.println("[Merchant] DESPAWN_TRIGGER lifetime=" + (lifetime/20) + "s" +
-            " uuid=" + this.getUuid().toString().substring(0, 8) + "...");
+        if (DEBUG_DESPAWN) {
+            LOGGER.info("[Merchant] DESPAWN_TRIGGER lifetime={}s uuid={}...",
+                lifetime / 20,
+                this.getUuid().toString().substring(0, 8));
+        }
 
         // 通知 SpawnerState 清除活跃商人追踪
         if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
@@ -200,7 +203,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             );
 
             if (DEBUG_DESPAWN) {
-                System.out.println("[Merchant] FX_SPAWN portal=50 smoke=20 pos=" +
+                LOGGER.debug("[Merchant] FX_SPAWN portal=50 smoke=20 pos={}",
                     String.format("%.1f,%.1f,%.1f", this.getX(), this.getY(), this.getZ()));
             }
         }
@@ -236,13 +239,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             MerchantSpawnerState state = MerchantSpawnerState.getServerState(serverWorld);
             boolean cleared = state.clearActiveMerchantIfMatch(this.getUuid());
             if (DEBUG_DESPAWN) {
-                System.out.println("[Merchant] NOTIFY_STATE_CLEAR reason=" + reason +
-                    " uuid=" + this.getUuid().toString().substring(0, 8) + "..." +
-                    " cleared=" + cleared);
+                LOGGER.debug("[Merchant] NOTIFY_STATE_CLEAR reason={} uuid={}... cleared={}",
+                    reason, this.getUuid().toString().substring(0, 8), cleared);
             }
         } catch (Exception e) {
             // 异常性日志，始终保留
-            System.err.println("[Merchant][ERROR] Failed to notify SpawnerState: " + e.getMessage());
+            LOGGER.error("[Merchant] Failed to notify SpawnerState: {}", e.getMessage());
         }
     }
 
@@ -297,8 +299,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                    " 攻击了商人，施加惩罚效果");
+            LOGGER.debug("[MysteriousMerchant] 玩家 {} 攻击了商人，施加惩罚效果",
+                    player.getName().getString());
         }
     }
 
@@ -398,8 +400,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             );
         }
 
-        System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                " 击杀了商人，施加严重惩罚！");
+        if (DEBUG_AI) {
+            LOGGER.info("[MysteriousMerchant] 玩家 {} 击杀了商人，施加严重惩罚！",
+                player.getName().getString());
+        }
     }
 
     // ========== Phase 5: 特殊交互 ==========
@@ -498,13 +502,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         false
                 );
             }
-            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                    " 通过神秘硬币解锁了隐藏交易！");
+            if (DEBUG_AI) {
+                LOGGER.debug("[MysteriousMerchant] 玩家 {} 通过神秘硬币解锁了隐藏交易！",
+                        player.getName().getString());
+            }
         }
 
         if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                    " 使用了神秘硬币，当前交易次数: " + playerData.getTradeCount());
+            LOGGER.debug("[MysteriousMerchant] 玩家 {} 使用了神秘硬币，当前交易次数: {}",
+                    player.getName().getString(), playerData.getTradeCount());
         }
 
         return ActionResult.SUCCESS;
@@ -536,7 +542,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         this.goalSelector.add(7, new SeekLightGoal(this));
 
         if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] AI Goals 已注册");
+            LOGGER.debug("[MysteriousMerchant] AI Goals 已注册");
         }
     }
 
@@ -587,14 +593,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         false
                 );
             }
-            // 重要事件：发布版保留
-            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() + " 解锁了隐藏交易!");
+            if (DEBUG_AI) {
+                LOGGER.debug("[MysteriousMerchant] 玩家 {} 解锁了隐藏交易!",
+                        player.getName().getString());
+            }
         }
 
         // 6. 调试日志
         if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] 玩家 " + player.getName().getString() +
-                    " 交易次数: " + count + ", hasEverTraded: " + hasEverTraded);
+            LOGGER.debug("[MysteriousMerchant] 玩家 {} 交易次数: {}, hasEverTraded: {}",
+                    player.getName().getString(), count, hasEverTraded);
         }
     }
 
@@ -724,7 +732,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         if (DEBUG_AI) {
-            System.out.println("[MysteriousMerchant] 隐藏交易已添加到列表，当前交易数: " + mainOffers.size());
+            LOGGER.debug("[MysteriousMerchant] 隐藏交易已添加到列表，当前交易数: {}", mainOffers.size());
         }
     }
 
@@ -792,10 +800,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putBoolean(NBT_HAS_SECRET_OFFERS, this.secretOffers != null);
 
         if (DEBUG_DESPAWN) {
-            System.out.println("[Merchant] NBT_SAVE spawnTick=" + spawnTick +
-                " isInWarningPhase=" + isInWarningPhase +
-                " hasEverTraded=" + hasEverTraded +
-                " playerDataCount=" + playerDataMap.size());
+            LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={} playerDataCount={}",
+                spawnTick, isInWarningPhase, hasEverTraded, playerDataMap.size());
         }
     }
 
@@ -824,7 +830,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                     data.setSecretUnlocked(playerNbt.getBoolean("SecretUnlocked"));
                     playerDataMap.put(uuid, data);
                 } catch (IllegalArgumentException e) {
-                    System.err.println("[MysteriousMerchant] 无效的 UUID: " + uuidStr);
+                    LOGGER.warn("[MysteriousMerchant] 无效的 UUID: {}", uuidStr);
                 }
             }
         }
@@ -844,10 +850,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         if (DEBUG_DESPAWN) {
-            System.out.println("[Merchant] NBT_LOAD spawnTick=" + spawnTick +
-                " isInWarningPhase=" + isInWarningPhase +
-                " hasEverTraded=" + hasEverTraded +
-                " playerDataCount=" + playerDataMap.size());
+            LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={} playerDataCount={}",
+                spawnTick, isInWarningPhase, hasEverTraded, playerDataMap.size());
         }
     }
 }

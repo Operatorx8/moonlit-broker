@@ -1,7 +1,7 @@
 # 神秘商人生成系统 - 发布版参数微调与日志收敛
 
-**版本:** 1.0.1-release
-**日期:** 2026-01-29
+**版本:** 1.0.2-release
+**日期:** 2026-01-30
 **作者:** Claude (维护助手)
 
 ---
@@ -37,6 +37,15 @@
 | DESPAWN_TIME_NORMAL | Entity.java:58 | `720000` (30天) | `120000` (5天) | 事件 NPC：5 天后消失 |
 | BLINK_INTERVAL | Entity.java:64 | `10` (0.5秒) | `20` (1秒) | 闪烁频率更舒适 |
 | 日志 gating | 多个文件 | 无条件打印 | `if (DEBUG)` | 过程性日志默认不输出 |
+
+### 2.1 1.0.2 最小 patch 追加修复
+
+| 项目 | 文件路径:行号 | 修改前 | 修改后 | 理由 |
+|------|---------------|--------|--------|------|
+| 下雨条件跳过逻辑 | Spawner.java:178 | `REQUIRE_RAIN && !DEBUG_SKIP_RAIN_CHECK` | `REQUIRE_RAIN && !(DEBUG && DEBUG_SKIP_RAIN_CHECK)` | 仅在调试时跳过下雨限制 |
+| 关键事件 stdout | Spawner.java / Entity.java | `System.out.println` | `LOGGER.info`（DEBUG 下） | 避免发布版 stdout 刷屏 |
+| 保险机制日志 | State.java:150 | `System.out.println` | `LOGGER.warn` | 保留异常日志、统一日志系统 |
+| 限定主世界 | Spawner.java:98 | 无 | `if (world.getRegistryKey() != World.OVERWORLD) return;` | 避免维度语义混乱 |
 
 **文件路径缩写：**
 - `Spawner.java` = `src/main/java/mod/test/mymodtest/entity/spawn/MysteriousMerchantSpawner.java`
@@ -214,7 +223,7 @@ dailyChance ≈ 1 - (1 - SPAWN_CHANCE_PER_CHECK)^checksPerDay
 | DEBUG_CHECK_INTERVAL | `600` ticks (30秒) | 快速检查间隔 |
 | DEBUG_COOLDOWN_TICKS | `2400` ticks (2分钟) | 短冷却 |
 | DEBUG_EXPECTED_LIFETIME | `1200` ticks (60秒) | 短存活时间 |
-| DEBUG_SKIP_RAIN_CHECK | `true` | 跳过下雨检测 |
+| DEBUG_SKIP_RAIN_CHECK | `true` | 跳过下雨检测（仅 DEBUG=true 时生效） |
 | WARNING_TIME_DEBUG | `600` ticks (30秒) | 快速预警 |
 | DESPAWN_TIME_DEBUG | `1200` ticks (60秒) | 快速消失 |
 
@@ -226,7 +235,7 @@ dailyChance ≈ 1 - (1 - SPAWN_CHANCE_PER_CHECK)^checksPerDay
 
 1. **启动游戏，确认无刷屏日志**
    - 观察控制台，不应出现 `[Spawner] CHECK_START`、`[Spawner] CHANCE_CHECK`、`[Spawner] VILLAGE_FOUND` 等过程性日志
-   - 只有在商人实际生成时才会看到 `[Spawner] SPAWN_SUCCESS` 日志
+   - 默认不会看到 `[Spawner] SPAWN_SUCCESS` / `[Merchant] DESPAWN_TRIGGER` 等事件日志（仅 DEBUG 下输出）
 
 2. **验证商人生成**
    - 在村庄附近等待下雨（或使用 `/weather rain`）
@@ -238,7 +247,7 @@ dailyChance ≈ 1 - (1 - SPAWN_CHANCE_PER_CHECK)^checksPerDay
 
 4. **验证强制消失**
    - 商人存活 5 天后应消失
-   - 应看到简洁的 `[Merchant] DESPAWN_TRIGGER lifetime=...s uuid=...`
+   - 发布版不输出 `[Merchant] DESPAWN_TRIGGER`（仅 DEBUG_DESPAWN 下输出）
 
 5. **验证异常日志保留**
    - 如果出现保险机制触发，应看到 `[SpawnerState][WARN] ACTIVE_MERCHANT_EXPIRED`
@@ -322,14 +331,13 @@ git checkout HEAD~1 -- <file>  # 回滚单个文件
 - `[MerchantAI] *` (所有 AI 日志)
 - `[MysteriousMerchant] 交易次数:...`
 
-### 重要事件日志（始终保留）
+### 重要事件日志（DEBUG 下输出）
 - `[Spawner] SPAWN_SUCCESS` - 商人生成成功
 - `[Merchant] DESPAWN_TRIGGER` - 商人消失
-- `[MysteriousMerchant] 玩家 xxx 解锁了隐藏交易!` - 隐藏交易解锁
 - `[MysteriousMerchant] 玩家 xxx 击杀了商人，施加严重惩罚！` - 击杀惩罚
 
 ### 异常性日志（[WARN]/[ERROR] 标记，始终保留）
 - `[Spawner][WARN] ACTIVE_MERCHANT_DEAD` - 商人已死亡
-- `[SpawnerState][WARN] ACTIVE_MERCHANT_EXPIRED` - 保险机制触发
+- `[SpawnerState] ACTIVE_MERCHANT_EXPIRED` - 保险机制触发（LOGGER.warn）
 - `[Merchant][ERROR] Failed to notify SpawnerState` - 状态通知失败
 - `[MysteriousMerchant] 无效的 UUID: xxx` - UUID 解析错误

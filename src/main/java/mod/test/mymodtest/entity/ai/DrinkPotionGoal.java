@@ -8,6 +8,8 @@ import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.List;
  * - 有冷却机制防止刷屏
  */
 public class DrinkPotionGoal extends Goal {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DrinkPotionGoal.class);
 
     // ========== 可配置常量 ==========
     /** 隐身冷却时间 (ticks) */
@@ -94,7 +97,7 @@ public class DrinkPotionGoal extends Goal {
 
         if (MysteriousMerchantEntity.DEBUG_AI) {
             String potionName = pendingPotion == PotionType.HEALING ? "治疗" : "隐身";
-            System.out.println("[MerchantAI] 开始喝" + potionName + "药水");
+            LOGGER.debug("[MerchantAI] 开始喝{}药水", potionName);
         }
 
         // 播放喝药音效
@@ -145,8 +148,8 @@ public class DrinkPotionGoal extends Goal {
             healCooldown = HEAL_COOLDOWN;
 
             if (MysteriousMerchantEntity.DEBUG_AI) {
-                System.out.println("[MerchantAI] 喝下治疗药水，当前生命: " +
-                        merchant.getHealth() + "/" + merchant.getMaxHealth());
+                LOGGER.debug("[MerchantAI] 喝下治疗药水，当前生命: {}/{}",
+                        merchant.getHealth(), merchant.getMaxHealth());
             }
 
         } else if (pendingPotion == PotionType.INVISIBILITY) {
@@ -157,7 +160,7 @@ public class DrinkPotionGoal extends Goal {
             invisibilityCooldown = INVISIBILITY_COOLDOWN;
 
             if (MysteriousMerchantEntity.DEBUG_AI) {
-                System.out.println("[MerchantAI] 喝下隐身药水，持续 " + (INVISIBILITY_DURATION / 20) + " 秒");
+                LOGGER.debug("[MerchantAI] 喝下隐身药水，持续 {} 秒", (INVISIBILITY_DURATION / 20));
             }
         }
 

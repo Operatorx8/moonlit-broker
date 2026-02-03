@@ -7,6 +7,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.PersistentState;
 import net.minecraft.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
@@ -17,6 +19,7 @@ import java.util.UUID;
  * 使用 PersistentState.Type 进行序列化（Fabric 1.21.1 API）
  */
 public class MerchantSpawnerState extends PersistentState {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MerchantSpawnerState.class);
 
     // 全局状态
     private long lastSpawnDay;              // 上次生成的游戏天数
@@ -109,8 +112,8 @@ public class MerchantSpawnerState extends PersistentState {
         // 新的一天，重置计数
         if (currentDay != this.lastSpawnDay) {
             if (MysteriousMerchantSpawner.DEBUG) {
-                System.out.println("[SpawnerState] NEW_DAY previousDay=" + this.lastSpawnDay +
-                    " currentDay=" + currentDay + " resetting spawnCountToday from " + this.spawnCountToday + " to 0");
+                LOGGER.debug("[SpawnerState] NEW_DAY previousDay={} currentDay={} resetting spawnCountToday from {} to 0",
+                    this.lastSpawnDay, currentDay, this.spawnCountToday);
             }
             this.lastSpawnDay = currentDay;
             this.spawnCountToday = 0;
@@ -147,8 +150,8 @@ public class MerchantSpawnerState extends PersistentState {
 
         // 保险机制：如果超过预期过期时间，自动清除（异常情况，保留日志）
         if (this.activeMerchantExpireAt > 0 && world.getTime() > this.activeMerchantExpireAt) {
-            System.out.println("[SpawnerState][WARN] ACTIVE_MERCHANT_EXPIRED uuid=" +
-                this.activeMerchantUuid.toString().substring(0, 8) + "... auto-clearing");
+            LOGGER.warn("[SpawnerState] ACTIVE_MERCHANT_EXPIRED uuid={}... auto-clearing",
+                this.activeMerchantUuid.toString().substring(0, 8));
             clearActiveMerchant();
             return false;
         }
@@ -180,11 +183,9 @@ public class MerchantSpawnerState extends PersistentState {
         this.markDirty();
 
         if (MysteriousMerchantSpawner.DEBUG) {
-            System.out.println("[SpawnerState] RECORD_SPAWN spawnCountToday=" + this.spawnCountToday +
-                " totalSpawned=" + this.totalSpawnedCount +
-                " cooldownUntil=" + this.cooldownUntil +
-                " activeMerchantUuid=" + merchantUuid.toString().substring(0, 8) + "..." +
-                " expireAt=" + this.activeMerchantExpireAt);
+            LOGGER.debug("[SpawnerState] RECORD_SPAWN spawnCountToday={} totalSpawned={} cooldownUntil={} activeMerchantUuid={}... expireAt={}",
+                this.spawnCountToday, this.totalSpawnedCount, this.cooldownUntil,
+                merchantUuid.toString().substring(0, 8), this.activeMerchantExpireAt);
         }
     }
 
@@ -198,7 +199,7 @@ public class MerchantSpawnerState extends PersistentState {
         this.markDirty();
 
         if (MysteriousMerchantSpawner.DEBUG) {
-            System.out.println("[SpawnerState] CLEAR_ACTIVE_MERCHANT previousUuid=" +
+            LOGGER.debug("[SpawnerState] CLEAR_ACTIVE_MERCHANT previousUuid={}",
                 (previousUuid != null ? previousUuid.toString().substring(0, 8) + "..." : "null"));
         }
     }
