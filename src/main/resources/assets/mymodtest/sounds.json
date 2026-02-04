@@ -1,0 +1,12 @@
+{
+  "moontrace.mark": {
+    "category": "blocks",
+    "subtitle": "subtitles.mymodtest.moontrace.mark",
+    "sounds": [
+      {
+        "name": "mymodtest:moonlight_chime",
+        "stream": false
+      }
+    ]
+  }
+}

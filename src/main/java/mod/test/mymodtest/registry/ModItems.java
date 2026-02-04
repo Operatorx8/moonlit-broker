@@ -64,6 +64,14 @@ public final class ModItems {
             )
     );
 
+    /** Sacrifice 材料 - 用于神秘铁砧修复 */
+    public static final Identifier SACRIFICE_ID = Identifier.of(MOD_ID, "sacrifice");
+    public static final Item SACRIFICE = Registry.register(
+            Registries.ITEM,
+            SACRIFICE_ID,
+            new Item(new Item.Settings())
+    );
+
     /**
      * 注册所有物品
      * 在 ModInitializer.onInitialize() 中调用

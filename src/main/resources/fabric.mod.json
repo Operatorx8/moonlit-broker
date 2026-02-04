@@ -2,30 +2,24 @@
   "schemaVersion": 1,
   "id": "mymodtest",
   "version": "${version}",
-  "name": "MyModTest",
-  "description": "",
+  "name": "Mysterious Merchant",
+  "description": "Mysterious Merchant with Katana weapons",
   "authors": [],
   "contact": {},
   "license": "All-Rights-Reserved",
-  "icon": "assets/mymodtest/icon.png",
   "environment": "*",
   "entrypoints": {
-    "fabric-datagen": [
-      "mod.test.mymodtest.client.MymodtestDataGenerator"
+    "main": [
+      "mod.test.mymodtest.Mymodtest"
     ],
     "client": [
       "mod.test.mymodtest.client.MymodtestClient"
-    ],
-    "main": [
-      "mod.test.mymodtest.Mymodtest"
     ]
   },
   "mixins": [
     "mymodtest.mixins.json",
-    {
-      "config": "mymodtest.client.mixins.json",
-      "environment": "client"
-    }
+    "mymodtest.katana.mixins.json",
+    "mymodtest.armor.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

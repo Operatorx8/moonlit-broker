@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mymodtest:block/mysterious_anvil" },
+    "facing=south": { "model": "mymodtest:block/mysterious_anvil", "y": 180 },
+    "facing=west": { "model": "mymodtest:block/mysterious_anvil", "y": 270 },
+    "facing=east": { "model": "mymodtest:block/mysterious_anvil", "y": 90 }
+  }
+}

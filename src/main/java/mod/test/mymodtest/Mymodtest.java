@@ -1,6 +1,9 @@
 package mod.test.mymodtest;
 
+import mod.test.mymodtest.armor.ArmorInit;
 import mod.test.mymodtest.entity.spawn.MysteriousMerchantSpawner;
+import mod.test.mymodtest.katana.KatanaInit;
+import mod.test.mymodtest.registry.ModBlocks;
 import mod.test.mymodtest.registry.ModEntities;
 import mod.test.mymodtest.registry.ModItems;
 import net.fabricmc.api.ModInitializer;
@@ -14,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Mymodtest implements ModInitializer {
+    public static final String MOD_ID = "mymodtest";
     private static final Logger LOGGER = LoggerFactory.getLogger(Mymodtest.class);
 
     // Phase 4: 每个世界维度一个生成器实例
@@ -21,8 +25,18 @@ public class Mymodtest implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        LOGGER.info("[Mymodtest] Initializing Mysterious Merchant mod...");
+
+        // 注册商人系统
         ModItems.register();
+        ModBlocks.register();
         ModEntities.register();
+
+        // 初始化 Katana 子系统
+        KatanaInit.init();
+
+        // 初始化 Armor 子系统
+        ArmorInit.init();
 
         // Phase 4: 注册世界 tick 事件，用于自然生成
         ServerTickEvents.END_WORLD_TICK.register(world -> {
@@ -36,6 +50,6 @@ public class Mymodtest implements ModInitializer {
             }
         });
 
-        LOGGER.debug("[Mymodtest] 模组已加载，神秘商人生成器已注册");
+        LOGGER.info("[Mymodtest] Mod initialization complete!");
     }
 }

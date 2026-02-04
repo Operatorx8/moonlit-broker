@@ -3,6 +3,7 @@ package mod.test.mymodtest.entity;
 import mod.test.mymodtest.entity.ai.DrinkPotionGoal;
 import mod.test.mymodtest.entity.ai.EnhancedFleeGoal;
 import mod.test.mymodtest.entity.ai.SeekLightGoal;
+import mod.test.mymodtest.katana.item.KatanaItems;
 import mod.test.mymodtest.registry.ModItems;
 import mod.test.mymodtest.world.MerchantSpawnerState;
 import mod.test.mymodtest.world.MerchantUnlockState;
@@ -91,7 +92,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     private static final int ELIGIBLE_TRADE_COUNT = 15;
     private static final int REFRESH_GUARANTEE_COUNT = 3;
-    private static final Identifier KATANA_ITEM_ID = Identifier.of(ModItems.MOD_ID, "katana");
 
     public MysteriousMerchantEntity(EntityType<? extends WanderingTraderEntity> type, World world) {
         super(type, world);
@@ -798,11 +798,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     private ItemStack resolveKatanaStack() {
-        if (Registries.ITEM.containsId(KATANA_ITEM_ID)) {
-            return new ItemStack(Registries.ITEM.get(KATANA_ITEM_ID), 1);
-        }
-        LOGGER.warn("[MysteriousMerchant] katana 物品未注册，使用下界合金剑作为占位");
-        return new ItemStack(Items.NETHERITE_SWORD, 1);
+        // 直接引用 KatanaItems.MOON_GLOW_KATANA，不再使用字符串查找
+        return new ItemStack(KatanaItems.MOON_GLOW_KATANA, 1);
     }
 
     private ArrayList<SigilOfferEntry> createSigilOfferPool() {
