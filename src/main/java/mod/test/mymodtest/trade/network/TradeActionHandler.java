@@ -1,6 +1,7 @@
 package mod.test.mymodtest.trade.network;
 
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
+import mod.test.mymodtest.mixin.MerchantScreenHandlerAccessor;
 import mod.test.mymodtest.trade.SecretGateValidator;
 import mod.test.mymodtest.trade.TradeAction;
 import mod.test.mymodtest.trade.TradeConfig;
@@ -9,15 +10,16 @@ import mod.test.mymodtest.trade.loot.BountyHandler;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.screen.MerchantScreenHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.village.Merchant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 服务端交易操作包处理器
@@ -25,8 +27,12 @@ import java.util.UUID;
 public class TradeActionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(TradeActionHandler.class);
     
-    // 玩家操作冷却追踪
-    private static final Map<UUID, Long> playerCooldowns = new HashMap<>();
+    // Per-session cooldown key: player UUID + merchant UUID
+    private static final Map<String, Long> sessionCooldowns = new HashMap<>();
+    
+    // Track which page each player is on (per merchant session)
+    // Key: playerUUID + merchantUUID, Value: true = secret page, false = normal page
+    private static final Map<String, Boolean> playerPageState = new HashMap<>();
 
     /**
      * 处理客户端发来的交易操作请求
@@ -34,11 +40,11 @@ public class TradeActionHandler {
     public static void handle(TradeActionC2SPacket packet, ServerPlayNetworking.Context context) {
         ServerPlayerEntity player = context.player();
         
-        // 冷却检查
-        if (!checkCooldown(player)) {
-            if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] ACTION_THROTTLED player={}", player.getName().getString());
-            }
+        // 1.1 FIX: Reject invalid opcode
+        TradeAction action = packet.getAction();
+        if (action == null) {
+            LOGGER.warn("[MoonTrade] INVALID_OPCODE player={} ordinal={}", 
+                player.getName().getString(), packet.action());
             return;
         }
         
@@ -50,14 +56,21 @@ public class TradeActionHandler {
             return;
         }
         
-        // 检查距离
-        if (player.squaredDistanceTo(merchant) > 64.0) { // 8格距离
-            LOGGER.warn("[MoonTrade] TOO_FAR player={} distance={}", 
-                player.getName().getString(), Math.sqrt(player.squaredDistanceTo(merchant)));
+        // 1.2 FIX: Validate active merchant UI session
+        if (!validateMerchantSession(player, merchant)) {
+            LOGGER.warn("[MoonTrade] INVALID_SESSION player={} merchantId={}", 
+                player.getName().getString(), packet.merchantId());
             return;
         }
         
-        TradeAction action = packet.getAction();
+        // 1.3 FIX: Per-session throttling using world time
+        // AUDIT FIX: Throttle key now includes action
+        if (!checkSessionCooldown(player, merchant, action)) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.debug("[MoonTrade] ACTION_THROTTLED player={} action={}", player.getName().getString(), action);
+            }
+            return;
+        }
         
         switch (action) {
             case OPEN_NORMAL -> handleOpenNormal(player, merchant);
@@ -68,19 +81,87 @@ public class TradeActionHandler {
         }
     }
     
-    private static boolean checkCooldown(ServerPlayerEntity player) {
-        long now = System.currentTimeMillis();
-        Long lastAction = playerCooldowns.get(player.getUuid());
+    /**
+     * 1.2 FIX: Validate that player has active merchant screen handler bound to this merchant
+     * AUDIT FIX: Added explicit handler->merchant identity cross-check
+     */
+    private static boolean validateMerchantSession(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
+        // Check player has MerchantScreenHandler open
+        if (!(player.currentScreenHandler instanceof MerchantScreenHandler handler)) {
+            return false;
+        }
+        
+        // AUDIT FIX: Explicit cross-check - handler's merchant must match packet's merchant
+        // Use accessor mixin to get the private merchant field
+        Merchant handlerMerchant = ((MerchantScreenHandlerAccessor) handler).getMerchant();
+        if (handlerMerchant != merchant) {
+            LOGGER.warn("[MoonTrade] HANDLER_MERCHANT_MISMATCH player={} packetMerchant={} handlerMerchant={}",
+                player.getName().getString(), 
+                merchant.getUuid().toString().substring(0, 8),
+                handlerMerchant instanceof MysteriousMerchantEntity m ? m.getUuid().toString().substring(0, 8) : "unknown");
+            return false;
+        }
+        
+        // Validate the merchant's current customer is this player
+        // This ensures the handler is bound to the same merchant entity
+        if (merchant.getCustomer() != player) {
+            return false;
+        }
+        
+        // Check distance (8 blocks = 64 squared distance)
+        if (player.squaredDistanceTo(merchant) > 64.0) {
+            LOGGER.warn("[MoonTrade] TOO_FAR player={} distance={}", 
+                player.getName().getString(), Math.sqrt(player.squaredDistanceTo(merchant)));
+            return false;
+        }
+        
+        // Check merchant is alive
+        if (!merchant.isAlive()) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 1.3 FIX: Per-session cooldown using server tick time
+     * AUDIT FIX: Throttle key now includes action (player+merchant+action)
+     */
+    private static boolean checkSessionCooldown(ServerPlayerEntity player, MysteriousMerchantEntity merchant, TradeAction action) {
+        String sessionKey = player.getUuid().toString() + ":" + merchant.getUuid().toString() + ":" + action.name();
+        long currentTick = player.getServerWorld().getTime();
+        Long lastAction = sessionCooldowns.get(sessionKey);
         
         if (lastAction != null) {
-            long cooldownMs = TradeConfig.PAGE_ACTION_COOLDOWN_TICKS * 50L; // ticks to ms
-            if (now - lastAction < cooldownMs) {
+            long cooldownTicks = TradeConfig.PAGE_ACTION_COOLDOWN_TICKS;
+            if (currentTick - lastAction < cooldownTicks) {
                 return false;
             }
         }
         
-        playerCooldowns.put(player.getUuid(), now);
+        sessionCooldowns.put(sessionKey, currentTick);
         return true;
+    }
+    
+    /**
+     * Get session key for page state tracking
+     */
+    private static String getSessionKey(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
+        return player.getUuid().toString() + ":" + merchant.getUuid().toString();
+    }
+    
+    /**
+     * Check if player is on secret page
+     */
+    private static boolean isOnSecretPage(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
+        return playerPageState.getOrDefault(getSessionKey(player, merchant), false);
+    }
+    
+    /**
+     * Set player page state
+     */
+    private static void setOnSecretPage(ServerPlayerEntity player, MysteriousMerchantEntity merchant, boolean secret) {
+        playerPageState.put(getSessionKey(player, merchant), secret);
     }
     
     private static void handleOpenNormal(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
@@ -91,15 +172,27 @@ public class TradeActionHandler {
             return;
         }
         
-        if (!TradeScrollItem.tryConsume(scroll, TradeConfig.COST_OPEN_NORMAL)) {
+        // Check scroll has enough uses BEFORE rebuilding
+        if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_OPEN_NORMAL) {
             player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
             return;
         }
         
+        // 2 FIX: Actually rebuild offers
+        merchant.rebuildOffersForPlayer(player);
+        
+        // Now consume scroll uses AFTER successful rebuild
+        TradeScrollItem.tryConsume(scroll, TradeConfig.COST_OPEN_NORMAL);
+        
+        // Mark as on normal page
+        setOnSecretPage(player, merchant, false);
+        
+        // Sync offers to client - merchant.setOffers triggers sync via setCustomer
+        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+        
         LOGGER.info("[MoonTrade] OPEN_NORMAL player={} cost={}", 
             player.getName().getString(), TradeConfig.COST_OPEN_NORMAL);
         
-        // 交易界面由原版处理，这里只消耗卷轴
         player.sendMessage(Text.literal("消耗卷轴次数: " + TradeConfig.COST_OPEN_NORMAL).formatted(Formatting.GRAY), true);
     }
     
@@ -114,18 +207,31 @@ public class TradeActionHandler {
             return;
         }
         
-        // 找到封印卷轴并消耗
+        // 找到封印卷轴
         ItemStack scroll = SecretGateValidator.findSealedScroll(player);
-        if (!TradeScrollItem.tryConsume(scroll, TradeConfig.COST_SWITCH_SECRET)) {
+        
+        // Check scroll has enough uses BEFORE rebuilding
+        if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_SWITCH_SECRET) {
             player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
             return;
         }
+        
+        // 2 FIX: Actually switch to secret page offers (respects secretSold flag)
+        merchant.rebuildSecretOffersForPlayer(player);
+        
+        // Now consume scroll uses AFTER successful rebuild
+        TradeScrollItem.tryConsume(scroll, TradeConfig.COST_SWITCH_SECRET);
+        
+        // Mark as on secret page
+        setOnSecretPage(player, merchant, true);
+        
+        // Sync offers to client
+        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
         
         LOGGER.info("[MoonTrade] SWITCH_SECRET_SUCCESS player={} cost={}", 
             player.getName().getString(), TradeConfig.COST_SWITCH_SECRET);
         
         player.sendMessage(Text.literal("已进入隐藏交易页").formatted(Formatting.LIGHT_PURPLE), false);
-        // TODO: 实际切换交易列表
     }
     
     private static void handleRefresh(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
@@ -136,16 +242,30 @@ public class TradeActionHandler {
             return;
         }
         
-        if (!TradeScrollItem.tryConsume(scroll, TradeConfig.COST_REFRESH)) {
+        // Check scroll has enough uses BEFORE rebuilding
+        if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_REFRESH) {
             player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
             return;
         }
         
-        LOGGER.info("[MoonTrade] REFRESH player={} cost={}", 
-            player.getName().getString(), TradeConfig.COST_REFRESH);
+        // 2 FIX: Actually refresh offers based on current page
+        boolean onSecret = isOnSecretPage(player, merchant);
+        if (onSecret) {
+            merchant.rebuildSecretOffersForPlayer(player);
+        } else {
+            merchant.rebuildOffersForPlayer(player);
+        }
+        
+        // Now consume scroll uses AFTER successful rebuild
+        TradeScrollItem.tryConsume(scroll, TradeConfig.COST_REFRESH);
+        
+        // Sync offers to client
+        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+        
+        LOGGER.info("[MoonTrade] REFRESH player={} cost={} page={}", 
+            player.getName().getString(), TradeConfig.COST_REFRESH, onSecret ? "SECRET" : "NORMAL");
         
         player.sendMessage(Text.literal("交易已刷新").formatted(Formatting.GREEN), true);
-        // TODO: 实际刷新交易列表
     }
     
     private static void handlePageNav(ServerPlayerEntity player, MysteriousMerchantEntity merchant, TradeAction action) {
@@ -154,6 +274,20 @@ public class TradeActionHandler {
             LOGGER.debug("[MoonTrade] PAGE_NAV player={} action={}", 
                 player.getName().getString(), action);
         }
-        // TODO: 实际页面导航
+        // Page navigation within current offer list - handled by vanilla UI
+    }
+    
+    /**
+     * Clean up session state when player closes merchant UI
+     * AUDIT FIX: Now clears all action-specific cooldown keys
+     */
+    public static void onSessionClosed(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
+        String baseKey = getSessionKey(player, merchant);
+        // Remove page state
+        playerPageState.remove(baseKey);
+        // Remove all action-specific cooldowns
+        for (TradeAction action : TradeAction.values()) {
+            sessionCooldowns.remove(baseKey + ":" + action.name());
+        }
     }
 }

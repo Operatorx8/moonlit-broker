@@ -4,6 +4,8 @@
   "package": "mod.test.mymodtest.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "MerchantScreenHandlerMixin",
+    "MerchantScreenHandlerAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

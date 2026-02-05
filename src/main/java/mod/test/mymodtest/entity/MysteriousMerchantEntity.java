@@ -445,7 +445,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     /**
-     * 首次见面赠送指南卷轴
+     * 首次见面赠送指南卷轴和商人印记
      */
     private void grantFirstMeetGuideIfNeeded(ServerPlayerEntity player) {
         if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
@@ -466,9 +466,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 player.dropItem(guideScroll, false);
             }
             
+            // 4 FIX: 赠送商人印记并绑定到玩家
+            ItemStack merchantMark = new ItemStack(ModItems.MERCHANT_MARK, 1);
+            mod.test.mymodtest.trade.item.MerchantMarkItem.bindToPlayer(merchantMark, player);
+            if (!player.giveItemStack(merchantMark)) {
+                player.dropItem(merchantMark, false);
+            }
+            
             // 发送消息
             player.sendMessage(
-                Text.literal("[神秘商人] 初次见面，送你一份指南。")
+                Text.literal("[神秘商人] 初次见面，送你一份指南和印记。")
                     .formatted(Formatting.GOLD),
                 false
             );
@@ -707,7 +714,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         ));
     }
 
-    private void rebuildOffersForPlayer(ServerPlayerEntity player) {
+    /**
+     * Rebuild normal page offers for player (public for TradeActionHandler)
+     */
+    public void rebuildOffersForPlayer(ServerPlayerEntity player) {
         TradeOfferList offers = this.getOffers();
         offers.clear();
         addBaseOffers(offers);
@@ -730,9 +740,30 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             offers.add(createUnsealOffer());
             addSigilOffers(offers, progress);
         }
+        // AUDIT FIX: Hidden katana offers removed from normal page rebuild.
+        // Hidden offers must ONLY be generated via rebuildSecretOffersForPlayer().
+    }
 
-        if (progress.isUnlockedKatanaHidden()) {
+    /**
+     * Rebuild secret page offers for player (public for TradeActionHandler)
+     * 3.1 FIX: Respects secretSold flag - does not include katana if already sold
+     */
+    public void rebuildSecretOffersForPlayer(ServerPlayerEntity player) {
+        TradeOfferList offers = this.getOffers();
+        offers.clear();
+        
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+        
+        // Add secret page specific offers
+        // 3.1 FIX: Only add katana offer if not already sold
+        if (!this.secretSold) {
             addKatanaHiddenOffers(offers);
+        } else {
+            // Add a "SOLD" placeholder or alternative offers
+            LOGGER.info("[MoonTrade] SECRET_ALREADY_SOLD merchant={} player={}", 
+                this.getUuid().toString().substring(0, 8), player.getName().getString());
         }
     }
 
@@ -841,9 +872,34 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         return list;
     }
 
+    /**
+     * AUDIT FIX: Resolve secretKatanaId to actual item.
+     * Fail-safe: if id unknown/invalid, return empty stack and log warning.
+     */
     private ItemStack resolveKatanaStack() {
-        // 直接引用 KatanaItems.MOON_GLOW_KATANA，不再使用字符串查找
-        return new ItemStack(KatanaItems.MOON_GLOW_KATANA, 1);
+        // Validate secretKatanaId is initialized
+        if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} reason=empty_id",
+                this.getUuid().toString().substring(0, 8));
+            return ItemStack.EMPTY;
+        }
+        
+        // Currently only one katana type supported; validate prefix
+        if (!this.secretKatanaId.startsWith("katana_")) {
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} secretKatanaId={} reason=invalid_prefix",
+                this.getUuid().toString().substring(0, 8), this.secretKatanaId);
+            return ItemStack.EMPTY;
+        }
+        
+        // Resolve to actual item - currently hardcoded to MOON_GLOW_KATANA
+        // Future: could use registry lookup based on secretKatanaId suffix
+        try {
+            return new ItemStack(KatanaItems.MOON_GLOW_KATANA, 1);
+        } catch (Exception e) {
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} secretKatanaId={} error={}",
+                this.getUuid().toString().substring(0, 8), this.secretKatanaId, e.getMessage());
+            return ItemStack.EMPTY;
+        }
     }
 
     private ArrayList<SigilOfferEntry> createSigilOfferPool() {
