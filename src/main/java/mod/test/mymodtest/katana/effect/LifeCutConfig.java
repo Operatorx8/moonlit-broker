@@ -19,15 +19,15 @@ public class LifeCutConfig {
     // === 护甲穿透 ===
     // 穿透值表示无视多少比例的护甲，剩余护甲参与减伤计算
     // effectiveArmor = armor * (1 - penetration)
-    public static final float ARMOR_PENETRATION_NORMAL = 0.00f; // 普通亡灵：0% 穿透（护甲正常减伤）
-    public static final float ARMOR_PENETRATION_BOSS = 0.35f;   // 亡灵 Boss：无视 35% 护甲
+    public static final float ARMOR_PENETRATION_NORMAL = 0.35f; // 普通目标：无视 35% 护甲
+    public static final float ARMOR_PENETRATION_BOSS = 0.35f;   // Boss：无视 35% 护甲
 
     // === Boss 处理 ===
     public static final boolean ALLOW_BOSS = true;              // 允许对 Boss 生效
     public static final float BOSS_EFFECT_MULTIPLIER = 0.333f;  // Boss 效果只有 1/3
 
     // === 安全限制 ===
-    public static final boolean ONLY_UNDEAD = true;             // 限定亡灵
+    public static final boolean ONLY_UNDEAD = false;            // 安全阀：允许任意 LivingEntity
     public static final boolean CANNOT_KILL = true;             // 不能通过特效击杀
     public static final float MIN_HEALTH_AFTER_CUT = 1.0f;      // 至少保留 1 血
 }

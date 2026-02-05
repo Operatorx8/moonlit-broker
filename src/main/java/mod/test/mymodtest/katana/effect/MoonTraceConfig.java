@@ -13,6 +13,9 @@ public class MoonTraceConfig {
     public static final boolean REQUIRE_MOONLIGHT = true;         // 月光判定（天空可见 + 光照）
     public static final int SKY_LIGHT_THRESHOLD = 8;              // 天空光照阈值（0-15）
     public static final boolean FORBID_BOSS = false;              // 不再禁止 Boss（可对 Boss 生效，但效果减弱）
+    public static final boolean LIGHT_MARK_ENABLED = true;        // 非月光条件下可用光照标记
+    public static final int LIGHT_MARK_MIN_LIGHT = 12;            // 总光照阈值（max(block, sky)）
+    public static final float LIGHT_MARK_DAMAGE_MULT = 0.70f;     // 光照标记消耗伤害倍率
 
     // === Mark 概率：finalChance = clamp(BASE + SCALE * moonFactor, MIN, MAX) ===
     public static final boolean CRIT_GUARANTEES_MARK = true;      // 暴击必触发 Mark（跳过概率 roll）

@@ -15,6 +15,23 @@
   - 遗世之环：被盯上时获得护盾
   - 回溯者的额饰：爆炸致死保护
 
+### Changed
+
+- Moon Glow（月之光芒）平衡调整
+  - 保留原有月光触发路径（夜晚 + 露天 + 天空光照阈值）
+  - 新增光照触发路径：当月光条件不满足时，可按总光照（`max(blockLight, skyLight)`）触发 LIGHT_MARK
+  - 引入独立 LIGHT_MARK 状态与独立冷却，不影响原月光标记平衡
+  - LIGHT_MARK 消耗增伤按倍率降低（默认 `0.70`）
+  - 新增调试配置：`LIGHT_MARK_ENABLED`、`LIGHT_MARK_MIN_LIGHT`、`LIGHT_MARK_DAMAGE_MULT`
+  - DEBUG 日志补充：标记来源（MOONLIGHT/LIGHT）、光照值与触发原因、消耗时倍率
+
+- Regret Blade（残念之刃）平衡调整
+  - LifeCut 触发目标由亡灵扩展为任意 `LivingEntity`
+  - 保留 30% 触发率与 cannot-kill 机制
+  - 维持/明确每目标触发成功后 60 ticks（3 秒）冷却作为安全阀
+  - 护甲穿透统一为 `35%`（普通与 Boss）
+  - DEBUG 日志补充：触发详情（攻击者、目标 UUID、maxHealth、cut、结果血量、冷却）与穿透值
+
 ---
 
 ## [0.8.0] - Katana 武器系统

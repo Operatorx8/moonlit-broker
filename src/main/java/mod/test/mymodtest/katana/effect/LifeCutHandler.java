@@ -6,7 +6,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
-import net.minecraft.entity.mob.*;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
@@ -111,12 +110,6 @@ public class LifeCutHandler {
             return false;
         }
 
-        // 亡灵检查（如果开启）
-        if (LifeCutConfig.ONLY_UNDEAD && !isUndead(target)) {
-            if (LifeCutConfig.DEBUG) LOGGER.info("[LifeCut] Skip: not undead");
-            return false;
-        }
-
         // 概率判定
         float roll = world.getRandom().nextFloat();
         boolean triggered = roll < LifeCutConfig.TRIGGER_CHANCE;
@@ -183,6 +176,8 @@ public class LifeCutHandler {
 
         // === Step 5: 排入延迟队列（下一 tick 结算）===
         if (finalCut > 0) {
+            float expectedHpAfter = Math.max(0.0f, currentHp - finalCut);
+
             pendingDamage.add(new PendingLifeCutDamage(
                 target.getUuid(),
                 player.getUuid(),
@@ -196,6 +191,14 @@ public class LifeCutHandler {
 
             // Debug 日志：入队
             if (LifeCutConfig.DEBUG) {
+                LOGGER.info("[LifeCut] TRIGGERED attacker={} targetUuid={} targetMaxHP={} cut={} resultHP={} cooldown={}t",
+                    player.getName().getString(),
+                    target.getUuid(),
+                    String.format("%.1f", target.getMaxHealth()),
+                    String.format("%.1f", finalCut),
+                    String.format("%.1f", expectedHpAfter),
+                    LifeCutConfig.LIFECUT_TRIGGER_CD_TICKS);
+
                 LOGGER.info("[LifeCut] Schedule: target={} damage={} boss={}",
                     target.getName().getString(),
                     String.format("%.1f", finalCut),
@@ -211,6 +214,8 @@ public class LifeCutHandler {
                     String.format("%.1f", effectiveArmor),
                     String.format("%.1f", armor),
                     String.format("%.1f", toughness));
+                LOGGER.info("[LifeCut]   Penetration applied={} (35%)",
+                    String.format("%.2f", armorPenetration));
                 LOGGER.info("[LifeCut]   FinalCut: {}{}",
                     String.format("%.1f", finalCut),
                     clamped ? " (clamped to preserve 1.0 HP)" : "");
@@ -320,16 +325,6 @@ public class LifeCutHandler {
 
     private static boolean isBoss(LivingEntity entity) {
         return entity instanceof EnderDragonEntity || entity instanceof WitherEntity;
-    }
-
-    private static boolean isUndead(LivingEntity entity) {
-        // 检查常见亡灵类型
-        return entity instanceof ZombieEntity
-            || entity instanceof SkeletonEntity
-            || entity instanceof AbstractSkeletonEntity
-            || entity instanceof PhantomEntity
-            || entity instanceof WitherEntity
-            || entity instanceof ZombifiedPiglinEntity;
     }
 
     /**

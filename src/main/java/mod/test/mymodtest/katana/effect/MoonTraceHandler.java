@@ -30,8 +30,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MoonTraceHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger("MoonTrace");
 
-    // Mark 冷却追踪：EntityId -> 下次可 mark 的 tick
-    private static final Map<Integer, Long> markCooldowns = new ConcurrentHashMap<>();
+    // Moonlight Mark 冷却追踪：EntityId -> 下次可 mark 的 tick
+    private static final Map<Integer, Long> moonlightMarkCooldowns = new ConcurrentHashMap<>();
+
+    // Light Mark 冷却追踪：EntityId -> 下次可 mark 的 tick
+    private static final Map<Integer, Long> lightMarkCooldowns = new ConcurrentHashMap<>();
 
     // Speed buff 刷新追踪：PlayerId -> 上次刷新 tick
     private static final Map<Integer, Long> speedBuffLastRefresh = new ConcurrentHashMap<>();
@@ -55,18 +58,52 @@ public class MoonTraceHandler {
             // 1. 尝试消耗已有月痕
             var consumed = MoonTraceManager.getAndConsume(target, player);
             if (consumed.isPresent()) {
-                applyConsumeBonus(player, target);
+                applyConsumeBonus(player, target, consumed.get().markType());
                 return ActionResult.PASS;
             }
 
-            // 2. 尝试触发新月痕
-            if (shouldTrigger(world, player, target)) {
-                applyInstantEffects(player, target);
-                MoonTraceManager.applyMark(target, player, MoonTraceConfig.MARK_DURATION);
+            // 2. 尝试触发新月痕（优先月光路径；仅在月光条件不满足时尝试光照路径）
+            BlockPos targetPos = target.getBlockPos();
+            int blockLight = world.getLightLevel(LightType.BLOCK, targetPos);
+            int skyLight = world.getLightLevel(LightType.SKY, targetPos);
+            int totalLight = getTotalLight(blockLight, skyLight);
 
-                // 设置 mark 冷却
+            boolean moonlightPathSatisfied = isMoonlightPathSatisfied(world, targetPos);
+
+            if (moonlightPathSatisfied && shouldTriggerMoonlight(world, player, target, targetPos)) {
+                applyInstantEffects(player, target);
+                MoonTraceManager.applyMoonlightMark(target, player, MoonTraceConfig.MARK_DURATION);
+
+                // 设置 moonlight mark 冷却
                 long cooldownExpire = world.getTime() + MoonTraceConfig.MARK_COOLDOWN;
-                markCooldowns.put(target.getId(), cooldownExpire);
+                moonlightMarkCooldowns.put(target.getId(), cooldownExpire);
+
+                if (MoonTraceConfig.DEBUG) {
+                    LOGGER.info("[MoonTrace] APPLY {} allowed=moonlight_path skyVisible={} skyLight={} blockLight={} totalLight={} threshold={}",
+                        MoonTraceManager.MarkType.MOONLIGHT_MARK,
+                        world.isSkyVisible(targetPos),
+                        skyLight,
+                        blockLight,
+                        totalLight,
+                        MoonTraceConfig.SKY_LIGHT_THRESHOLD);
+                }
+            } else if (!moonlightPathSatisfied && shouldTriggerLight(world, player, target, totalLight)) {
+                applyInstantEffects(player, target);
+                MoonTraceManager.applyLightMark(target, player, MoonTraceConfig.MARK_DURATION);
+
+                // 设置 light mark 冷却
+                long cooldownExpire = world.getTime() + MoonTraceConfig.MARK_COOLDOWN;
+                lightMarkCooldowns.put(target.getId(), cooldownExpire);
+
+                if (MoonTraceConfig.DEBUG) {
+                    LOGGER.info("[MoonTrace] APPLY {} allowed=light_path skyVisible={} skyLight={} blockLight={} totalLight={} threshold={}",
+                        MoonTraceManager.MarkType.LIGHT_MARK,
+                        world.isSkyVisible(targetPos),
+                        skyLight,
+                        blockLight,
+                        totalLight,
+                        MoonTraceConfig.LIGHT_MARK_MIN_LIGHT);
+                }
             }
 
             return ActionResult.PASS;
@@ -148,6 +185,10 @@ public class MoonTraceHandler {
         return skyLight >= MoonTraceConfig.SKY_LIGHT_THRESHOLD;
     }
 
+    public static int getTotalLight(int blockLight, int skyLight) {
+        return Math.max(blockLight, skyLight);
+    }
+
     /**
      * 获取月相倍率（0-7 对应 8 个月相）
      * 0 = 满月，4 = 新月
@@ -193,8 +234,17 @@ public class MoonTraceHandler {
 
     // ==================== 触发判定 ====================
 
-    private static boolean shouldTrigger(World world, PlayerEntity player, LivingEntity target) {
-        BlockPos targetPos = target.getBlockPos();
+    private static boolean isMoonlightPathSatisfied(World world, BlockPos targetPos) {
+        if (MoonTraceConfig.REQUIRE_NIGHT && !isNight(world)) {
+            return false;
+        }
+        if (MoonTraceConfig.REQUIRE_MOONLIGHT && !isMoonlit(world, targetPos)) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean shouldTriggerMoonlight(World world, PlayerEntity player, LivingEntity target, BlockPos targetPos) {
         boolean boss = isBoss(target);
 
         // 夜晚检查
@@ -220,7 +270,7 @@ public class MoonTraceHandler {
         }
 
         // Mark 冷却检查（暴击也要遵守冷却）
-        Long cooldownExpire = markCooldowns.get(target.getId());
+        Long cooldownExpire = moonlightMarkCooldowns.get(target.getId());
         if (cooldownExpire != null && world.getTime() < cooldownExpire) {
             if (MoonTraceConfig.DEBUG) {
                 LOGGER.info("[MoonTrace] Blocked: cooldown ({} ticks remain)",
@@ -255,6 +305,59 @@ public class MoonTraceHandler {
                 String.format("%.2f", moonFactor),
                 MoonTraceConfig.CHANCE_MIN,
                 MoonTraceConfig.CHANCE_MAX,
+                String.format("%.3f", finalChance),
+                String.format("%.3f", roll),
+                triggered ? "TRIGGERED" : "miss");
+        }
+
+        return triggered;
+    }
+
+    private static boolean shouldTriggerLight(World world, PlayerEntity player, LivingEntity target, int totalLight) {
+        boolean boss = isBoss(target);
+
+        if (!MoonTraceConfig.LIGHT_MARK_ENABLED) {
+            if (MoonTraceConfig.DEBUG) LOGGER.info("[MoonTrace] Light mark blocked: disabled");
+            return false;
+        }
+
+        if (totalLight < MoonTraceConfig.LIGHT_MARK_MIN_LIGHT) {
+            if (MoonTraceConfig.DEBUG) {
+                LOGGER.info("[MoonTrace] Light mark blocked: totalLight={} < threshold={}",
+                    totalLight, MoonTraceConfig.LIGHT_MARK_MIN_LIGHT);
+            }
+            return false;
+        }
+
+        if (MoonTraceConfig.FORBID_BOSS && boss) {
+            if (MoonTraceConfig.DEBUG) LOGGER.info("[MoonTrace] Light mark blocked: boss target forbidden");
+            return false;
+        }
+
+        Long cooldownExpire = lightMarkCooldowns.get(target.getId());
+        if (cooldownExpire != null && world.getTime() < cooldownExpire) {
+            if (MoonTraceConfig.DEBUG) {
+                LOGGER.info("[MoonTrace] Light mark blocked: cooldown ({} ticks remain)",
+                    cooldownExpire - world.getTime());
+            }
+            return false;
+        }
+
+        boolean isCrit = isCriticalHit(player);
+        if (MoonTraceConfig.CRIT_GUARANTEES_MARK && isCrit) {
+            if (MoonTraceConfig.DEBUG) {
+                LOGGER.info("[MoonTrace] Light mark CRIT TRIGGER (skip roll) | target={}",
+                    boss ? "Boss" : "Normal");
+            }
+            return true;
+        }
+
+        float finalChance = getMarkProbability(world);
+        float roll = world.getRandom().nextFloat();
+        boolean triggered = roll < finalChance;
+
+        if (MoonTraceConfig.DEBUG) {
+            LOGGER.info("[MoonTrace] Light mark roll: chance={}, roll={}, result={}",
                 String.format("%.3f", finalChance),
                 String.format("%.3f", roll),
                 triggered ? "TRIGGERED" : "miss");
@@ -313,16 +416,20 @@ public class MoonTraceHandler {
      * 消耗月痕时的增伤效果
      * 包含：护甲穿透物理伤害 + 魔法补偿（BASE + min(maxHP * PERCENT, CAP)）
      */
-    private static void applyConsumeBonus(PlayerEntity player, LivingEntity target) {
+    private static void applyConsumeBonus(PlayerEntity player, LivingEntity target, MoonTraceManager.MarkType markType) {
         boolean boss = isBoss(target);
         float maxHp = target.getMaxHealth();
+        float damageMultiplier = markType == MoonTraceManager.MarkType.LIGHT_MARK
+            ? MoonTraceConfig.LIGHT_MARK_DAMAGE_MULT
+            : 1.0f;
 
         // === 物理伤害（带护甲穿透）===
-        float rawBonus = randomRange(
+        float baseRawBonus = randomRange(
             MoonTraceConfig.CONSUME_DAMAGE_MIN,
             MoonTraceConfig.CONSUME_DAMAGE_MAX,
             player.getRandom().nextFloat()
         );
+        float rawBonus = baseRawBonus * damageMultiplier;
 
         float armor = target.getArmor();
         float toughness = (float) target.getAttributeValue(EntityAttributes.GENERIC_ARMOR_TOUGHNESS);
@@ -339,7 +446,7 @@ public class MoonTraceHandler {
         float percentCap = boss ? MoonTraceConfig.MAGIC_PERCENT_CAP_BOSS : MoonTraceConfig.MAGIC_PERCENT_CAP_NORMAL;
 
         float percentMagic = Math.min(maxHp * percentHp, percentCap);
-        float totalMagic = baseMagic + percentMagic;
+        float totalMagic = (baseMagic + percentMagic) * damageMultiplier;
 
         // 加入延迟队列，下一 tick 结算
         pendingMagicDamage.add(new PendingMagicDamage(
@@ -351,7 +458,10 @@ public class MoonTraceHandler {
 
         // === DEBUG 日志 ===
         if (MoonTraceConfig.DEBUG) {
-            LOGGER.info("[MoonTrace] CONSUMED! Physical: raw={} -> final={} | pen={}% | armor={} eff={} tough={}",
+            LOGGER.info("[MoonTrace] CONSUMED {} mult={} Physical: rawBase={} rawScaled={} -> final={} | pen={}% | armor={} eff={} tough={}",
+                markType,
+                String.format("%.2f", damageMultiplier),
+                String.format("%.1f", baseRawBonus),
                 String.format("%.1f", rawBonus),
                 String.format("%.1f", finalBonus),
                 String.format("%.0f", pen * 100f),
@@ -403,7 +513,8 @@ public class MoonTraceHandler {
      * 清理过期的冷却记录
      */
     public static void cleanupCooldowns(long currentTick) {
-        markCooldowns.entrySet().removeIf(entry -> entry.getValue() < currentTick);
+        moonlightMarkCooldowns.entrySet().removeIf(entry -> entry.getValue() < currentTick);
+        lightMarkCooldowns.entrySet().removeIf(entry -> entry.getValue() < currentTick);
     }
 
     /**
