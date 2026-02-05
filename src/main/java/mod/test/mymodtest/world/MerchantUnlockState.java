@@ -78,6 +78,16 @@ public class MerchantUnlockState extends PersistentState {
         private boolean unlockedKatanaHidden;
         private boolean unlockedNotified;
         private int refreshSeenCount;
+        
+        // ========== Trade System 新增字段 ==========
+        /** 声望值 - 仅在成功完成交易时增加 */
+        private int reputation;
+        /** 是否已赠送首次见面指南 */
+        private boolean firstMeetGuideGiven;
+        /** 银币掉落窗口开始时间 */
+        private long silverWindowStart;
+        /** 当前窗口内银币掉落计数 */
+        private int silverDropCount;
 
         public int getTradeCount() {
             return tradeCount;
@@ -119,6 +129,65 @@ public class MerchantUnlockState extends PersistentState {
             this.refreshSeenCount = refreshSeenCount;
         }
 
+        // ========== Trade System 新增方法 ==========
+        
+        public int getReputation() {
+            return reputation;
+        }
+
+        public void setReputation(int reputation) {
+            this.reputation = Math.max(0, reputation);
+        }
+
+        public void incrementReputation() {
+            this.reputation++;
+        }
+
+        public boolean isFirstMeetGuideGiven() {
+            return firstMeetGuideGiven;
+        }
+
+        public void setFirstMeetGuideGiven(boolean firstMeetGuideGiven) {
+            this.firstMeetGuideGiven = firstMeetGuideGiven;
+        }
+
+        public long getSilverWindowStart() {
+            return silverWindowStart;
+        }
+
+        public void setSilverWindowStart(long silverWindowStart) {
+            this.silverWindowStart = silverWindowStart;
+        }
+
+        public int getSilverDropCount() {
+            return silverDropCount;
+        }
+
+        public void setSilverDropCount(int silverDropCount) {
+            this.silverDropCount = silverDropCount;
+        }
+
+        /**
+         * 检查并尝试记录银币掉落
+         * @param currentTime 当前世界时间
+         * @param windowTicks 窗口时长
+         * @param maxDrops 窗口内最大掉落数
+         * @return true 如果允许掉落
+         */
+        public boolean tryRecordSilverDrop(long currentTime, long windowTicks, int maxDrops) {
+            // 检查是否需要重置窗口
+            if (currentTime - silverWindowStart >= windowTicks) {
+                silverWindowStart = currentTime;
+                silverDropCount = 0;
+            }
+            // 检查是否超过限制
+            if (silverDropCount >= maxDrops) {
+                return false;
+            }
+            silverDropCount++;
+            return true;
+        }
+
         public NbtCompound toNbt() {
             NbtCompound nbt = new NbtCompound();
             nbt.putInt("TradeCount", this.tradeCount);
@@ -126,6 +195,11 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putBoolean("UnlockedKatanaHidden", this.unlockedKatanaHidden);
             nbt.putBoolean("UnlockedNotified", this.unlockedNotified);
             nbt.putInt("RefreshSeenCount", this.refreshSeenCount);
+            // Trade System 新增字段
+            nbt.putInt("Reputation", this.reputation);
+            nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
+            nbt.putLong("SilverWindowStart", this.silverWindowStart);
+            nbt.putInt("SilverDropCount", this.silverDropCount);
             return nbt;
         }
 
@@ -146,6 +220,19 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("RefreshSeenCount")) {
                 progress.refreshSeenCount = nbt.getInt("RefreshSeenCount");
+            }
+            // Trade System 新增字段
+            if (nbt.contains("Reputation")) {
+                progress.reputation = nbt.getInt("Reputation");
+            }
+            if (nbt.contains("FirstMeetGuideGiven")) {
+                progress.firstMeetGuideGiven = nbt.getBoolean("FirstMeetGuideGiven");
+            }
+            if (nbt.contains("SilverWindowStart")) {
+                progress.silverWindowStart = nbt.getLong("SilverWindowStart");
+            }
+            if (nbt.contains("SilverDropCount")) {
+                progress.silverDropCount = nbt.getInt("SilverDropCount");
             }
             return progress;
         }

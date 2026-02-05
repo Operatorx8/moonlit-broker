@@ -22,6 +22,8 @@
 3. **服务端权威**：所有判定在服务端执行，客户端只负责展示
 4. **固定 UUID**：动态属性修改器使用预定义 UUID，避免叠加 bug
 5. **日志规范**：所有触发必须输出 INFO 级别日志
+6. **附魔系数分档**：头盔 enchantability 按 `Rarity` 映射原版材质档位
+   `UNCOMMON -> IRON`, `RARE -> CHAIN`, `EPIC -> NETHERITE`
 
 ### 不允许
 
@@ -48,27 +50,29 @@
 
 ### 1. 哨兵的最后瞭望 (Sentinel's Last Watch)
 
-**效果**：黑暗中侦测敌对生物并标记
+**效果**：Echo Pulse（回声测距，仅给玩家线索）
 
 **机制**：
 - 仅在光照 ≤ 7 时可触发
 - 低频扫描（每 20 ticks 检查一次）
-- 触发时对范围内敌对生物施加 Glowing 5s
-- 范围：16-20 格（建议 18 格）
+- 触发时仅给玩家 `Speed I`，持续 30 ticks（1.5s）
+- 触发时播放原版警示音（`minecraft:block.bell.use`）
+- 不对敌对生物施加任何状态，不生成粒子环
+- 范围：16 格
 - 冷却：40s (800 ticks)
 
 **Lore**：
-- EN: "When the world goes dim, it makes predators confess their shape."
-- Subtitle: "A lantern for enemies—paid with silence."
+- EN: "When the dark moves, the watch bell answers."
 
 **触发条件**：
 ```
-穿戴该头盔 AND 光照 ≤ 7 AND CD 就绪
+穿戴该头盔 AND 光照 ≤ 7 AND 16 格内存在敌对生物 AND CD 就绪
 ```
 
 **日志**：
 ```
-[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=sentinel_glow targets=3 range=18 ctx{p=Steve dim=overworld light=3}
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=sentinel_echo_pulse targets=3 range=16 ctx{p=Steve dim=overworld light=3}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=speed final{dur=30 amp=0} sound=minecraft:block.bell.use ctx{p=Steve}
 ```
 
 ---
@@ -233,7 +237,9 @@ boolean hasTotem(Player player) {
 
 ### 名称颜色
 
-- 稀有度 EPIC → 紫色名称
+- `UNCOMMON` -> 绿色名称
+- `RARE` -> 蓝色名称
+- `EPIC` -> 紫色名称
 
 ### Tooltip 结构
 
@@ -252,12 +258,11 @@ boolean hasTotem(Player player) {
 
 ```
 §5哨兵的最后瞭望
-§7"When the world goes dim, it makes predators confess their shape."
-§8A lantern for enemies—paid with silence.
+§7"When the dark moves, the watch bell answers."
 
-§7【哨兵视野】
-§7在黑暗中侦测附近敌对生物，使其发光 5 秒。
-§7范围：18 格
+§7【回声测距】
+§7在黑暗中侦测附近敌对生物，触发后为玩家提供 Speed I 1.5 秒与提示音。
+§7范围：16 格
 
 §8冷却：40 秒
 ```

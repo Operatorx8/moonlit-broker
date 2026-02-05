@@ -37,8 +37,8 @@
   "item.mymodtest.nmap_katana.module_firewall": "防火墙穿透：拦截 Debuff 与投射物",
 
   "item.mymodtest.sentinel_helmet": "哨兵的最后瞭望",
-  "item.mymodtest.sentinel_helmet.lore": "当世界陷入黑暗，它让掠食者显露原形。",
-  "item.mymodtest.sentinel_helmet.effect": "[哨兵视野] 在黑暗中侦测附近敌对生物，使其发光5秒。范围：18格。冷却：40秒",
+  "item.mymodtest.sentinel_helmet.lore": "When the dark moves, the watch bell answers.",
+  "item.mymodtest.sentinel_helmet.effect": "[回声测距] 在黑暗中侦测附近敌对生物，为玩家提供速度 I 持续1.5秒并播放警示音。范围：16格。冷却：40秒",
 
   "item.mymodtest.silent_oath_helmet": "沉默之誓约",
   "item.mymodtest.silent_oath_helmet.lore": "第一击被宽恕——之后，你将付出代价。",
@@ -54,5 +54,25 @@
 
   "item.mymodtest.retracer_ornament_helmet": "回溯者的额饰",
   "item.mymodtest.retracer_ornament_helmet.lore": "不是永生——只是窃取的一次心跳。",
-  "item.mymodtest.retracer_ornament_helmet.effect": "[第二次机会] 一次爆炸致死伤害中存活，血量设为1心并获得抗性V持续2秒。图腾优先触发。冷却：15分钟"
+  "item.mymodtest.retracer_ornament_helmet.effect": "[第二次机会] 一次爆炸致死伤害中存活，血量设为1心并获得抗性V持续2秒。图腾优先触发。冷却：15分钟",
+
+  "item.mymodtest.old_market_chestplate": "旧市护甲",
+  "item.mymodtest.old_market_chestplate.lore": "Old coins still ring true—if you know where to spend them.",
+  "item.mymodtest.old_market_chestplate.effect": "[市场智慧] 交易经验：50%概率×1.5（每交易槽首次，冷却60秒）。击杀经验：25%概率×2（冷却30秒）",
+
+  "item.mymodtest.blood_pact_chestplate": "流血契约之胸铠",
+  "item.mymodtest.blood_pact_chestplate.lore": "Signed in blood—paid on the next strike.",
+  "item.mymodtest.blood_pact_chestplate.effect": "[血契] 受击时50%概率：额外自伤min(伤害×50%, 2♥)存入池（上限4♥）。下次攻击消耗池作为额外伤害。窗口10秒",
+
+  "item.mymodtest.ghost_god_chestplate": "鬼神之铠",
+  "item.mymodtest.ghost_god_chestplate.lore": "Undead curses stop at the edge of this steel.",
+  "item.mymodtest.ghost_god_chestplate.effect": "[鬼神护佑] 亡灵伤害：30%（Boss 15%）概率减伤15%。亡灵Debuff（凋零/饥饿/缓慢）：50%（Boss 25%）概率免疫",
+
+  "item.mymodtest.windbreaker_chestplate": "商人的防风衣",
+  "item.mymodtest.windbreaker_chestplate.lore": "Wind can't push you—panic can.",
+  "item.mymodtest.windbreaker_chestplate.effect": "[防风] +30%击退抗性。血量从≥50%跌到<50%时：速度I持续5秒（冷却90秒，需回到60%解锁）",
+
+  "item.mymodtest.void_devourer_chestplate": "虚空之噬",
+  "item.mymodtest.void_devourer_chestplate.lore": "Every five seconds, the void takes its bite.",
+  "item.mymodtest.void_devourer_chestplate.effect": "[虚空咬合] 攻击时：追加4%真实伤害（Boss 2%）。冷却：5秒"
 }

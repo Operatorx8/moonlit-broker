@@ -90,6 +90,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private TradeOfferList katanaHiddenOffers = null;
     private String merchantName = "";
 
+    // ========== Trade System: 隐藏交易限制 ==========
+    /** 是否已售出隐藏物品 */
+    private boolean secretSold = false;
+    /** 隐藏物品ID（每个商人实体唯一） */
+    private String secretKatanaId = "";
+
     private static final int ELIGIBLE_TRADE_COUNT = 15;
     private static final int REFRESH_GUARANTEE_COUNT = 3;
 
@@ -414,7 +420,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // ========== Phase 5: 特殊交互 ==========
 
     /**
-     * 覆写交互：检测神秘硬币
+     * 覆写交互：检测神秘硬币、首次见面赠送指南
      */
     @Override
     public ActionResult interactMob(PlayerEntity player, Hand hand) {
@@ -426,11 +432,49 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         if (!this.getEntityWorld().isClient() && player instanceof ServerPlayerEntity serverPlayer) {
+            // 首次见面赠送指南
+            grantFirstMeetGuideIfNeeded(serverPlayer);
+            // 初始化隐藏物品ID
+            initSecretKatanaIdIfNeeded();
+            // 重建交易列表
             rebuildOffersForPlayer(serverPlayer);
         }
 
         // 默认交互（打开交易界面）
         return super.interactMob(player, hand);
+    }
+
+    /**
+     * 首次见面赠送指南卷轴
+     */
+    private void grantFirstMeetGuideIfNeeded(ServerPlayerEntity player) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+        
+        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+        
+        if (!progress.isFirstMeetGuideGiven()) {
+            progress.setFirstMeetGuideGiven(true);
+            state.markDirty();
+            
+            // 赠送指南卷轴
+            ItemStack guideScroll = new ItemStack(ModItems.GUIDE_SCROLL, 1);
+            if (!player.giveItemStack(guideScroll)) {
+                // 背包满了，掉落在地上
+                player.dropItem(guideScroll, false);
+            }
+            
+            // 发送消息
+            player.sendMessage(
+                Text.literal("[神秘商人] 初次见面，送你一份指南。")
+                    .formatted(Formatting.GOLD),
+                false
+            );
+            
+            LOGGER.info("[MoonTrade] FIRST_MEET_GUIDE player={}", player.getName().getString());
+        }
     }
 
     /**
@@ -950,6 +994,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final String NBT_SPAWN_TICK = "SpawnTick";
     private static final String NBT_IN_WARNING_PHASE = "InWarningPhase";
     private static final String NBT_MERCHANT_NAME = "MerchantName";
+    // Trade System NBT 键
+    private static final String NBT_SECRET_SOLD = "SecretSold";
+    private static final String NBT_SECRET_KATANA_ID = "SecretKatanaId";
 
     @Override
     public void writeCustomDataToNbt(NbtCompound nbt) {
@@ -965,9 +1012,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // Phase 6: 保存商人名称
         nbt.putString(NBT_MERCHANT_NAME, this.merchantName);
 
+        // Trade System: 保存隐藏交易状态
+        nbt.putBoolean(NBT_SECRET_SOLD, this.secretSold);
+        nbt.putString(NBT_SECRET_KATANA_ID, this.secretKatanaId);
+
         if (DEBUG_DESPAWN) {
-            LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={}",
-                spawnTick, isInWarningPhase, hasEverTraded);
+            LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
+                spawnTick, isInWarningPhase, hasEverTraded, secretSold);
         }
     }
 
@@ -990,9 +1041,54 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             this.setCustomNameVisible(true);
         }
 
+        // Trade System: 读取隐藏交易状态
+        this.secretSold = nbt.getBoolean(NBT_SECRET_SOLD);
+        this.secretKatanaId = nbt.getString(NBT_SECRET_KATANA_ID);
+
         if (DEBUG_DESPAWN) {
-            LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={}",
-                spawnTick, isInWarningPhase, hasEverTraded);
+            LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
+                spawnTick, isInWarningPhase, hasEverTraded, secretSold);
         }
+    }
+
+    // ========== Trade System: Getter/Setter ==========
+
+    public boolean isSecretSold() {
+        return secretSold;
+    }
+
+    public void setSecretSold(boolean secretSold) {
+        this.secretSold = secretSold;
+    }
+
+    public String getSecretKatanaId() {
+        return secretKatanaId;
+    }
+
+    public void setSecretKatanaId(String secretKatanaId) {
+        this.secretKatanaId = secretKatanaId;
+    }
+
+    /**
+     * 初始化隐藏物品ID（仅在首次调用时生成）
+     */
+    public void initSecretKatanaIdIfNeeded() {
+        if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
+            this.secretKatanaId = "katana_" + this.getUuid().toString().substring(0, 8);
+        }
+    }
+
+    /**
+     * 尝试标记隐藏物品已售出（原子操作）
+     * @return true 如果成功标记（之前未售出）
+     */
+    public synchronized boolean tryMarkSecretSold() {
+        if (this.secretSold) {
+            return false;
+        }
+        this.secretSold = true;
+        LOGGER.info("[MoonTrade] SECRET_SOLD merchant={} katanaId={}",
+            this.getUuid().toString().substring(0, 8), this.secretKatanaId);
+        return true;
     }
 }

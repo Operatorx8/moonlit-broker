@@ -4,7 +4,11 @@
   "package": "mod.test.mymodtest.armor.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ArmorDamageMixin"
+    "ArmorDamageMixin",
+    "PlayerAttackMixin",
+    "StatusEffectMixin",
+    "LivingEntityDropXpMixin",
+    "TradeOutputSlotMixin"
   ],
   "injectors": {
     "defaultRequire": 1

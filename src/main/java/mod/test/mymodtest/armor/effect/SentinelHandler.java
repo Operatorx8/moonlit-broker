@@ -8,8 +8,12 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.Monster;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 import net.minecraft.world.LightType;
 import org.slf4j.Logger;
@@ -20,12 +24,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 哨兵的最后瞭望 - 黑暗中侦测敌对生物并标记
+ * 哨兵的最后瞭望 - Echo Pulse 回声测距
  *
  * 机制：
  * - 仅在光照 <= 7 时可触发
  * - 低频扫描（每 20 ticks 检查一次）
- * - 触发时对范围内敌对生物施加 Glowing 5s
+ * - 触发时仅给玩家提供线索：Speed I + 提示音
  * - 冷却：40s (800 ticks)
  */
 public class SentinelHandler {
@@ -92,16 +96,28 @@ public class SentinelHandler {
                 continue;
             }
 
-            // 应用 Glowing 效果
-            for (LivingEntity hostile : hostiles) {
-                hostile.addStatusEffect(new StatusEffectInstance(
-                        StatusEffects.GLOWING,
-                        ArmorConfig.SENTINEL_GLOW_DURATION,
-                        0,
-                        false,  // ambient
-                        false,  // showParticles
-                        true    // showIcon
-                ));
+            // Echo Pulse：仅给玩家短时速度线索
+            serverPlayer.addStatusEffect(new StatusEffectInstance(
+                    StatusEffects.SPEED,
+                    ArmorConfig.SENTINEL_SPEED_DURATION,
+                    ArmorConfig.SENTINEL_SPEED_AMPLIFIER,
+                    false,  // ambient
+                    false,  // showParticles
+                    true    // showIcon
+            ));
+
+            SoundEvent pulseSound = resolvePulseSound();
+            if (pulseSound != null) {
+                world.playSound(
+                        null,
+                        serverPlayer.getX(),
+                        serverPlayer.getY(),
+                        serverPlayer.getZ(),
+                        pulseSound,
+                        SoundCategory.PLAYERS,
+                        ArmorConfig.SENTINEL_SOUND_VOLUME,
+                        ArmorConfig.SENTINEL_SOUND_PITCH
+                );
             }
 
             // 进入冷却
@@ -111,7 +127,14 @@ public class SentinelHandler {
             LOGGER.info("[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect={} targets={} range={} ctx{{p={} dim={} light={}}}",
                     ArmorConfig.SENTINEL_EFFECT_ID, hostiles.size(), (int) range,
                     serverPlayer.getName().getString(), world.getRegistryKey().getValue().getPath(), combinedLight);
+            LOGGER.info("[MoonTrace|Armor|APPLY] action=apply result=OK effect=speed final{{dur={} amp={}}} sound={} ctx{{p={}}}",
+                    ArmorConfig.SENTINEL_SPEED_DURATION, ArmorConfig.SENTINEL_SPEED_AMPLIFIER,
+                    ArmorConfig.SENTINEL_SOUND_ID, serverPlayer.getName().getString());
         }
+    }
+
+    private static SoundEvent resolvePulseSound() {
+        return Registries.SOUND_EVENT.getOrEmpty(Identifier.of(ArmorConfig.SENTINEL_SOUND_ID)).orElse(null);
     }
 
     private static boolean isWearing(ServerPlayerEntity player) {

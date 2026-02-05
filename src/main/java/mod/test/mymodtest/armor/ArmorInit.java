@@ -1,8 +1,11 @@
 package mod.test.mymodtest.armor;
 
+import mod.test.mymodtest.armor.effect.BloodPactHandler;
 import mod.test.mymodtest.armor.effect.ExileMaskHandler;
+import mod.test.mymodtest.armor.effect.OldMarketHandler;
 import mod.test.mymodtest.armor.effect.RelicCircletHandler;
 import mod.test.mymodtest.armor.effect.SentinelHandler;
+import mod.test.mymodtest.armor.effect.WindbreakerHandler;
 import mod.test.mymodtest.armor.item.ArmorItems;
 import mod.test.mymodtest.armor.util.CooldownManager;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -33,6 +36,7 @@ public class ArmorInit {
 
             long currentTick = world.getTime();
 
+            // ===== 头盔效果 =====
             // 哨兵的最后瞭望 - 黑暗侦测
             SentinelHandler.tick(serverWorld, currentTick);
 
@@ -41,6 +45,10 @@ public class ArmorInit {
 
             // 遗世之环 - 愤怒检测
             RelicCircletHandler.tick(serverWorld, currentTick);
+
+            // ===== 胸甲效果 =====
+            // 商人的防风衣 - 低血速度边沿触发
+            WindbreakerHandler.tick(serverWorld, currentTick);
 
             // 低频清理（每 600 ticks = 30秒）
             tickCounter++;
@@ -54,8 +62,13 @@ public class ArmorInit {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var player = handler.getPlayer();
             CooldownManager.clearAllCooldowns(player.getUuid());
+            // 头盔效果清理
             ExileMaskHandler.onPlayerLogout(player);
             RelicCircletHandler.onPlayerLogout(player);
+            // 胸甲效果清理
+            BloodPactHandler.onPlayerLogout(player);
+            WindbreakerHandler.onPlayerLogout(player);
+            OldMarketHandler.clearPlayerTrades(player.getUuid());
         });
 
         LOGGER.info("[MoonTrace|Armor|BOOT] action=init_complete result=OK debug={}", ArmorConfig.DEBUG);

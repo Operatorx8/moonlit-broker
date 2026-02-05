@@ -27,3 +27,4 @@
 ## Known Issues
 
 - 遗世之环对末影人/猪灵的愤怒检测可能有延迟（20 ticks 低频检测）
+- enchantability 分档已接线到材质，但仍需按 `ARMOR_TESTPLAN` 完成附魔台分布抽样验证（UNCOMMON/RARE/EPIC 对照原版材质）

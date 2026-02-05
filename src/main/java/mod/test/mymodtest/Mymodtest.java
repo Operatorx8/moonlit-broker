@@ -6,6 +6,9 @@ import mod.test.mymodtest.katana.KatanaInit;
 import mod.test.mymodtest.registry.ModBlocks;
 import mod.test.mymodtest.registry.ModEntities;
 import mod.test.mymodtest.registry.ModItems;
+import mod.test.mymodtest.trade.loot.LootTableInjector;
+import mod.test.mymodtest.trade.loot.MobDropHandler;
+import mod.test.mymodtest.trade.network.TradeNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.world.ServerWorld;
@@ -37,6 +40,15 @@ public class Mymodtest implements ModInitializer {
 
         // 初始化 Armor 子系统
         ArmorInit.init();
+
+        // Trade System: 注册网络包
+        TradeNetworking.registerServer();
+
+        // Trade System: 注册战利品表注入
+        LootTableInjector.register();
+
+        // Trade System: 注册怪物掉落处理器
+        MobDropHandler.register();
 
         // Phase 4: 注册世界 tick 事件，用于自然生成
         ServerTickEvents.END_WORLD_TICK.register(world -> {
