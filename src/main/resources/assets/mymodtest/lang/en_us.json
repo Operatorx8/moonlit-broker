@@ -114,5 +114,17 @@
 
   "item.mymodtest.gossamer_boots": "Gossamer Boots",
   "item.mymodtest.gossamer_boots.lore": "Silk cannot bind what silk has made.",
-  "item.mymodtest.gossamer_boots.effect": "[Web Walk] In cobweb: 70% less slowdown. Slowness II downgraded to I. Effect fades on exit"
+  "item.mymodtest.gossamer_boots.effect": "[Web Walk] In cobweb: 70% less slowdown. Slowness II downgraded to I. Effect fades on exit",
+
+  "item.mymodtest.acer": "Acer",
+  "item.mymodtest.acer.effect": "[Keen Edge]",
+  "item.mymodtest.acer.desc": "Critical hits deal 1.7× damage (vanilla: 1.5×)",
+
+  "item.mymodtest.velox": "Velox",
+  "item.mymodtest.velox.effect": "[Swift Blade]",
+  "item.mymodtest.velox.desc": "Fast attack speed (2.2), lower damage",
+
+  "item.mymodtest.fatalis": "Fatalis",
+  "item.mymodtest.fatalis.effect": "[Heavy Strike]",
+  "item.mymodtest.fatalis.desc": "High damage (10), decisive blows"
 }

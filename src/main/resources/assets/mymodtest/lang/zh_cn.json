@@ -114,5 +114,17 @@
 
   "item.mymodtest.gossamer_boots": "轻灵之靴",
   "item.mymodtest.gossamer_boots.lore": "丝线无法束缚丝线所造之物。",
-  "item.mymodtest.gossamer_boots.effect": "[蛛行] 在蛛网中：减速降低70%。缓慢II降为I。离开蛛网后效果消退"
+  "item.mymodtest.gossamer_boots.effect": "[蛛行] 在蛛网中：减速降低70%。缓慢II降为I。离开蛛网后效果消退",
+
+  "item.mymodtest.acer": "锐锋",
+  "item.mymodtest.acer.effect": "[锋锐之刃]",
+  "item.mymodtest.acer.desc": "暴击伤害提升至1.7倍（原版：1.5倍）",
+
+  "item.mymodtest.velox": "疾风",
+  "item.mymodtest.velox.effect": "[迅捷之刃]",
+  "item.mymodtest.velox.desc": "高攻速（2.2），较低伤害",
+
+  "item.mymodtest.fatalis": "终结",
+  "item.mymodtest.fatalis.effect": "[重击之刃]",
+  "item.mymodtest.fatalis.desc": "高伤害（10），一击定音"
 }
