@@ -8,6 +8,8 @@ import mod.test.mymodtest.armor.effect.SilentOathHandler;
 import mod.test.mymodtest.armor.effect.StealthShinHandler;
 import mod.test.mymodtest.armor.effect.boots.BootsPlayerState;
 import mod.test.mymodtest.armor.effect.boots.BootsTickHandler;
+import mod.test.mymodtest.armor.transitional.effect.ReactiveBugPlateHandler;
+import mod.test.mymodtest.armor.transitional.effect.SanctifiedHoodHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -51,11 +53,17 @@ public class ArmorDamageMixin {
         // 2. 沉默之誓约 - 首次受伤减伤（头盔）
         float afterSilentOath = SilentOathHandler.onDamage(player, source, afterRetracer, currentTick);
 
+        // 2.5 祝圣兜帽 - 魔法减伤 15%（过渡头盔）
+        float afterSanctifiedHood = SanctifiedHoodHandler.onDamage(player, source, afterSilentOath);
+
         // 3. 鬼神之铠 - 亡灵伤害减免（胸甲）
-        float afterGhostGod = GhostGodHandler.onDamage(player, source, afterSilentOath, currentTick);
+        float afterGhostGod = GhostGodHandler.onDamage(player, source, afterSanctifiedHood, currentTick);
+
+        // 3.5 反应Bug装甲板 - 节肢近战减伤 -1.0（过渡胸甲）
+        float afterReactiveBugPlate = ReactiveBugPlateHandler.onDamage(player, source, afterGhostGod);
 
         // 4. 流血契约 - 受击储能（胸甲，可能增加伤害）
-        float afterBloodPact = BloodPactHandler.onDamage(player, source, afterGhostGod, currentTick);
+        float afterBloodPact = BloodPactHandler.onDamage(player, source, afterReactiveBugPlate, currentTick);
 
         // 5. 擦身护胫 - 概率减伤（护腿）
         float afterGrazeGuard = GrazeGuardHandler.onDamage(player, source, afterBloodPact, currentTick);

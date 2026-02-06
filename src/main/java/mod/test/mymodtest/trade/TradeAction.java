@@ -17,10 +17,14 @@ public enum TradeAction {
     /** 提交悬赏 */
     SUBMIT_BOUNTY;
     
+    /**
+     * Convert ordinal to TradeAction.
+     * @return the action, or null if ordinal is out of range (CRITICAL: do NOT default to a state-changing action)
+     */
     public static TradeAction fromOrdinal(int ordinal) {
         if (ordinal >= 0 && ordinal < values().length) {
             return values()[ordinal];
         }
-        return OPEN_NORMAL;
+        return null; // Invalid ordinal - caller must reject
     }
 }

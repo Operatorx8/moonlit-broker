@@ -7,6 +7,7 @@ import mod.test.mymodtest.world.MerchantUnlockState;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -61,7 +62,8 @@ public class MobDropHandler {
 
     /**
      * 检查掉落条件：
-     * - (夜晚 + 主世界地表) OR (装备怪/精英怪)
+     * - (夜晚 + 主世界地表) OR (装备怪) OR (精英怪)
+     * 6 FIX: Added elite mob condition
      */
     private static boolean checkDropCondition(LivingEntity entity, ServerWorld world) {
         // 条件1：夜晚 + 主世界地表
@@ -76,6 +78,11 @@ public class MobDropHandler {
 
         // 条件2：装备怪（有装备的怪物）
         if (isEquippedMob(entity)) {
+            return true;
+        }
+        
+        // 6 FIX: 条件3：精英怪
+        if (isEliteMob(entity)) {
             return true;
         }
 
@@ -93,6 +100,26 @@ public class MobDropHandler {
                 return true;
             }
         }
+        return false;
+    }
+    
+    /**
+     * 6 FIX: 检查是否为精英怪
+     * Elite mob definition: has any status effect OR has higher max health than baseline (>20)
+     * This is a simple heuristic that catches buffed/special mobs without requiring tags.
+     */
+    private static boolean isEliteMob(LivingEntity entity) {
+        // Check for any active status effects (buffed mobs)
+        if (!entity.getStatusEffects().isEmpty()) {
+            return true;
+        }
+        
+        // Check for higher than baseline max health (baseline zombie/skeleton = 20)
+        double maxHealth = entity.getAttributeValue(EntityAttributes.GENERIC_MAX_HEALTH);
+        if (maxHealth > 20.0) {
+            return true;
+        }
+        
         return false;
     }
 

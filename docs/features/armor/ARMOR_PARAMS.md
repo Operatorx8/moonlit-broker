@@ -32,6 +32,19 @@
 | `repairable` | false | 不可铁砧修复 |
 | `rarity` | 按胸甲定义 | 不同胸甲使用不同稀有度 |
 
+### 护腿通用属性（5 件护腿共享）
+
+| 属性 | 值 | 说明 |
+|------|-----|------|
+| `durabilityMultiplier` | 25 | 基础耐久乘数（护腿实际耐久 = 25 × 15 = 375） |
+| `protection` | 6 | 护甲值（护腿槽位） |
+| `toughness` | 2.0 | 韧性 |
+| `knockbackResistance` | 0.0 | 默认无击退抗性 |
+| `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
+| `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
+| `repairable` | false | 不可铁砧修复 |
+| `rarity` | 按护腿定义 | 不同护腿使用不同稀有度 |
+
 ### 材质属性
 
 | 属性 | 值 |
@@ -69,6 +82,16 @@
 | `ghost_god_chestplate` | `EPIC` | `NETHERITE` (15) |
 | `windbreaker_chestplate` | `UNCOMMON` | `IRON` (9) |
 | `void_devourer_chestplate` | `RARE` | `CHAIN` (12) |
+
+### 5 件护腿稀有度分配
+
+| 护腿 | rarity | enchantability 档位 |
+|------|--------|----------------------|
+| `smuggler_shin_leggings` | `UNCOMMON` | `IRON` (9) |
+| `smuggler_pouch_leggings` | `UNCOMMON` | `IRON` (9) |
+| `graze_guard_leggings` | `EPIC` | `NETHERITE` (15) |
+| `stealth_shin_leggings` | `RARE` | `CHAIN` (12) |
+| `clear_ledger_leggings` | `RARE` | `CHAIN` (12) |
 
 ---
 
@@ -220,6 +243,83 @@
 
 ---
 
+## 护腿效果参数
+
+### 1. 走私者之胫 (smuggler_shin_leggings)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | UNCOMMON | - |
+| `lootBonusChance` | 0.20 | (20%) |
+| `lootBonusChanceBoss` | 0.10 | (Boss/核心资源 10%) |
+| `doubleLootChance` | 0.10 | (10%) |
+| `doubleLootChanceBoss` | 0.05 | (Boss/核心资源 5%) |
+| `cooldown` | 800 | ticks (40s) |
+| `excludePvp` | true | - |
+| `coreLootTag` | `mymodtest:core_loot` | (掉落物包含此 tag 物品时概率减半) |
+
+#### Core Loot Tag 说明
+
+- **Tag 路径**: `data/mymodtest/tags/item/core_loot.json`
+- **用途**: 当击杀产生的掉落物中包含此 tag 内的物品时，额外掉落和双倍掉落概率均减半
+- **默认内容**:
+  - `minecraft:nether_star`
+  - `minecraft:elytra`
+  - `minecraft:totem_of_undying`
+  - `minecraft:dragon_egg`
+  - `minecraft:dragon_breath`
+- **运营说明**: 可通过数据包扩展此 tag，添加更多珍贵物品
+
+### 2. 走私者的暗袋 (smuggler_pouch_leggings)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | UNCOMMON | - |
+| `magnetRadius` | 6.0 | blocks |
+| `magnetDuration` | 100 | ticks (5s) |
+| `magnetScanInterval` | 20 | ticks (1s) |
+| `magnetPullSpeed` | 0.3 | velocity |
+| `magnetPullSpeedY` | 0.1 | velocity (额外向上) |
+| `cooldown` | 700 | ticks (35s) |
+| `affectExpOrbs` | false | - |
+
+### 3. 擦身护胫 (graze_guard_leggings)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | EPIC | - |
+| `triggerChance` | 0.18 | (18%) |
+| `damageReduction` | 0.60 | (减伤 60%, 即 ×0.40) |
+| `cooldown` | 240 | ticks (12s) |
+| `requireLivingAttacker` | true | - |
+
+### 4. 潜行之胫 (stealth_shin_leggings)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | RARE | - |
+| `chargeInterval` | 900 | ticks (45s) |
+| `maxCharges` | 2 | - |
+| `fallReduction` | 0.80 | (减伤 80%, 即 ×0.20) |
+| `minFallDamageToConsume` | 3.0 | HP (1.5♥) |
+| `notifyOnCharge` | true | (ActionBar + 音效) |
+| `checkInterval` | 20 | ticks (1s) |
+
+### 5. 清账步态 (clear_ledger_leggings)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | RARE | - |
+| `speedEffectId` | `minecraft:speed` | - |
+| `speedAmplifier` | 0 | (等级 I) |
+| `initialDuration` | 60 | ticks (3s) |
+| `extendDuration` | 20 | ticks (+1s) |
+| `maxDuration` | 120 | ticks (6s) |
+| `cooldown` | 320 | ticks (16s) |
+| `excludePvp` | true | - |
+
+---
+
 ## 冷却时间汇总
 
 ### 头盔
@@ -243,6 +343,16 @@
 | 商人防风衣 | 低血速度 | 1800 | 90 |
 | 虚空之噬 | 真伤 | 100 | 5 |
 
+### 护腿
+
+| 护腿 | 效果 | 冷却 (ticks) | 冷却 (秒) |
+|------|------|-------------|-----------|
+| 走私者之胫 | 掉落增益 | 800 | 40 |
+| 走私者暗袋 | 磁吸 | 700 | 35 |
+| 擦身护胫 | 减伤 | 240 | 12 |
+| 潜行之胫 | 充能间隔 | 900 | 45 |
+| 清账步态 | 速度 | 320 | 16 |
+
 ---
 
 ## 扫描/更新间隔汇总
@@ -261,6 +371,13 @@
 |------|-------------|-----------|
 | 商人的防风衣（低血检测） | 20 | 1 |
 
+### 护腿
+
+| 护腿 | 间隔 (ticks) | 间隔 (秒) |
+|------|-------------|-----------|
+| 走私者暗袋（磁吸扫描） | 20 | 1 |
+| 潜行之胫（充能检测） | 20 | 1 |
+
 ---
 
 ## 固定 UUID 列表
@@ -278,24 +395,23 @@
 public class ArmorConstants {
     // 耐久度乘数（原版：头11, 胸16, 腿15, 脚13）
     public static final int[] DURABILITY_MULTIPLIER = {11, 16, 15, 13};
-    
+
     // 神秘商人盔甲基础耐久乘数
     public static final int MERCHANT_DURABILITY_BASE = 25;
-    
-    // 头盔护甲值
+
+    // 各槽位护甲值
     public static final int HELMET_PROTECTION = 3;
-    
+    public static final int CHESTPLATE_PROTECTION = 8;
+    public static final int LEGGINGS_PROTECTION = 6;
+
     // 韧性
     public static final float ARMOR_TOUGHNESS = 2.0f;
-    
-    // 击退抗性
-    public static final float KNOCKBACK_RESISTANCE = 0.1f;
-    
-    // 附魔等级
-    public static final int ENCHANTABILITY = 15;
+
+    // 默认击退抗性（头盔）
+    public static final float HELMET_KNOCKBACK_RESISTANCE = 0.1f;
 }
 
-public class EffectConstants {
+public class HelmetEffectConstants {
     // 哨兵瞭望
     public static final float SENTINEL_SCAN_RANGE = 16.0f;
     public static final int SENTINEL_LIGHT_THRESHOLD = 7;
@@ -330,18 +446,113 @@ public class EffectConstants {
     public static final int RETRACER_RESISTANCE_AMPLIFIER = 4;
     public static final int RETRACER_COOLDOWN = 18000;
 }
+
+public class ChestplateEffectConstants {
+    // 旧市护甲
+    public static final float OLD_MARKET_TRADE_XP_CHANCE = 0.5f;
+    public static final float OLD_MARKET_TRADE_XP_MULTIPLIER = 1.5f;
+    public static final int OLD_MARKET_TRADE_XP_COOLDOWN = 1200;
+    public static final float OLD_MARKET_KILL_XP_CHANCE = 0.25f;
+    public static final float OLD_MARKET_KILL_XP_MULTIPLIER = 2.0f;
+    public static final int OLD_MARKET_KILL_XP_COOLDOWN = 600;
+
+    // 流血契约
+    public static final float BLOOD_PACT_CHARGE_CHANCE = 0.5f;
+    public static final float BLOOD_PACT_EXTRA_DAMAGE_RATIO = 0.5f;
+    public static final float BLOOD_PACT_EXTRA_DAMAGE_CAP = 4.0f;
+    public static final float BLOOD_PACT_POOL_CAP = 8.0f;
+    public static final int BLOOD_PACT_POOL_WINDOW = 200;
+
+    // 鬼神之铠
+    public static final float GHOST_GOD_DAMAGE_REDUCTION_CHANCE = 0.30f;
+    public static final float GHOST_GOD_DAMAGE_REDUCTION_CHANCE_BOSS = 0.15f;
+    public static final float GHOST_GOD_DAMAGE_REDUCTION_AMOUNT = 0.15f;
+    public static final float GHOST_GOD_DEBUFF_IMMUNE_CHANCE = 0.50f;
+    public static final float GHOST_GOD_DEBUFF_IMMUNE_CHANCE_BOSS = 0.25f;
+
+    // 商人防风衣
+    public static final float WINDBREAKER_KNOCKBACK_RESISTANCE = 0.3f;
+    public static final UUID WINDBREAKER_KB_UUID = UUID.fromString("b2c3d4e5-f6a7-8901-bcde-f23456789012");
+    public static final float WINDBREAKER_HEALTH_TRIGGER = 0.5f;
+    public static final float WINDBREAKER_HEALTH_REARM = 0.6f;
+    public static final int WINDBREAKER_SPEED_DURATION = 100;
+    public static final int WINDBREAKER_SPEED_COOLDOWN = 1800;
+    public static final int WINDBREAKER_CHECK_INTERVAL = 20;
+
+    // 虚空之噬
+    public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO = 0.04f;
+    public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO_BOSS = 0.02f;
+    public static final int VOID_DEVOURER_COOLDOWN = 100;
+}
+
+public class LeggingsEffectConstants {
+    // 走私者之胫
+    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE = 0.20f;
+    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE_BOSS = 0.10f;
+    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE = 0.10f;
+    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE_BOSS = 0.05f;
+    public static final int SMUGGLER_SHIN_COOLDOWN = 800;
+
+    // 走私者暗袋
+    public static final float SMUGGLER_POUCH_RADIUS = 6.0f;
+    public static final int SMUGGLER_POUCH_DURATION = 100;
+    public static final int SMUGGLER_POUCH_SCAN_INTERVAL = 20;
+    public static final float SMUGGLER_POUCH_PULL_SPEED = 0.3f;
+    public static final float SMUGGLER_POUCH_PULL_SPEED_Y = 0.1f;
+    public static final int SMUGGLER_POUCH_COOLDOWN = 700;
+
+    // 擦身护胫
+    public static final float GRAZE_GUARD_TRIGGER_CHANCE = 0.18f;
+    public static final float GRAZE_GUARD_REDUCTION = 0.60f;
+    public static final int GRAZE_GUARD_COOLDOWN = 240;
+
+    // 潜行之胫
+    public static final int STEALTH_SHIN_CHARGE_INTERVAL = 900;
+    public static final int STEALTH_SHIN_MAX_CHARGES = 2;
+    public static final float STEALTH_SHIN_FALL_REDUCTION = 0.80f;
+    public static final float STEALTH_SHIN_MIN_FALL_DAMAGE = 3.0f;
+    public static final int STEALTH_SHIN_CHECK_INTERVAL = 20;
+
+    // 清账步态
+    public static final int CLEAR_LEDGER_INITIAL_DURATION = 60;
+    public static final int CLEAR_LEDGER_EXTEND_DURATION = 20;
+    public static final int CLEAR_LEDGER_MAX_DURATION = 120;
+    public static final int CLEAR_LEDGER_COOLDOWN = 320;
+}
 ```
 
 ---
 
 ## 交易参数（Phase 4）
 
-> 预留，商人联动时填充
+> 预留，商人联动时填充（字段统一：`cost / weight / minLevel / maxLevel / rarityGate`）
 
-| 头盔 | 交易价格 | 刷新概率 |
-|------|----------|----------|
-| 哨兵的最后瞭望 | TBD | TBD |
-| 沉默之誓约 | TBD | TBD |
-| 流亡者的面甲 | TBD | TBD |
-| 遗世之环 | TBD | TBD |
-| 回溯者的额饰 | TBD | TBD |
+### 头盔
+
+| 头盔 | cost | weight | minLevel | maxLevel | rarityGate |
+|------|------|--------|----------|----------|------------|
+| 哨兵的最后瞭望 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 沉默之誓约 | TBD | TBD | TBD | TBD | RARE |
+| 流亡者的面甲 | TBD | TBD | TBD | TBD | RARE |
+| 遗世之环 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 回溯者的额饰 | TBD | TBD | TBD | TBD | EPIC |
+
+### 胸甲
+
+| 胸甲 | cost | weight | minLevel | maxLevel | rarityGate |
+|------|------|--------|----------|----------|------------|
+| 旧市护甲 | TBD | TBD | TBD | TBD | RARE |
+| 流血契约之胸铠 | TBD | TBD | TBD | TBD | RARE |
+| 鬼神之铠 | TBD | TBD | TBD | TBD | EPIC |
+| 商人的防风衣 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 虚空之噬 | TBD | TBD | TBD | TBD | RARE |
+
+### 护腿
+
+| 护腿 | cost | weight | minLevel | maxLevel | rarityGate |
+|------|------|--------|----------|----------|------------|
+| 走私者之胫 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 走私者的暗袋 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 擦身护胫 | TBD | TBD | TBD | TBD | EPIC |
+| 潜行之胫 | TBD | TBD | TBD | TBD | RARE |
+| 清账步态 | TBD | TBD | TBD | TBD | RARE |

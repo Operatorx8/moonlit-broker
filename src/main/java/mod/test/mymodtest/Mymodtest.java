@@ -1,10 +1,13 @@
 package mod.test.mymodtest;
 
 import mod.test.mymodtest.armor.ArmorInit;
+import mod.test.mymodtest.armor.transitional.TransitionalArmorInit;
 import mod.test.mymodtest.entity.spawn.MysteriousMerchantSpawner;
 import mod.test.mymodtest.katana.KatanaInit;
+import mod.test.mymodtest.weapon.transitional.TransitionalWeaponInit;
 import mod.test.mymodtest.registry.ModBlocks;
 import mod.test.mymodtest.registry.ModEntities;
+import mod.test.mymodtest.registry.ModItemGroups;
 import mod.test.mymodtest.registry.ModItems;
 import mod.test.mymodtest.trade.loot.LootTableInjector;
 import mod.test.mymodtest.trade.loot.MobDropHandler;
@@ -40,6 +43,15 @@ public class Mymodtest implements ModInitializer {
 
         // 初始化 Armor 子系统
         ArmorInit.init();
+
+        // 初始化过渡武器子系统
+        TransitionalWeaponInit.init();
+
+        // 初始化过渡护甲子系统
+        TransitionalArmorInit.init();
+
+        // 注册创造模式物品分组
+        ModItemGroups.init();
 
         // Trade System: 注册网络包
         TradeNetworking.registerServer();

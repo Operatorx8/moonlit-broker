@@ -126,5 +126,27 @@
 
   "item.mymodtest.fatalis": "Fatalis",
   "item.mymodtest.fatalis.effect": "[Heavy Strike]",
-  "item.mymodtest.fatalis.desc": "High damage (10), decisive blows"
+  "item.mymodtest.fatalis.desc": "High damage (10), decisive blows",
+
+  "item.mymodtest.scavenger_goggles": "Scavenger's Goggles",
+  "item.mymodtest.scavenger_goggles.lore": "See through the dust, find what others miss.",
+
+  "item.mymodtest.cast_iron_sallet": "Cast Iron Sallet",
+  "item.mymodtest.cast_iron_sallet.lore": "Heavy iron, heavier resolve.",
+
+  "item.mymodtest.sanctified_hood": "Sanctified Hood",
+  "item.mymodtest.sanctified_hood.lore": "Consecrated cloth that dulls hostile sorcery.",
+  "item.mymodtest.sanctified_hood.effect": "[Holy Ward] Magic damage reduced by 15%",
+
+  "item.mymodtest.reactive_bug_plate": "Reactive Bug Plate",
+  "item.mymodtest.reactive_bug_plate.lore": "A plate that 'patches out' arthropod bites on contact.",
+  "item.mymodtest.reactive_bug_plate.effect": "[Bug Patch] Arthropod melee damage -1.0",
+
+  "item.mymodtest.patchwork_coat": "Patchwork Coat",
+  "item.mymodtest.patchwork_coat.lore": "Stitched from a hundred journeys.",
+
+  "item.mymodtest.ritual_robe": "Ritual Robe",
+  "item.mymodtest.ritual_robe.lore": "Woven for ceremonies, worn for survival.",
+
+  "itemGroup.mymodtest.main": "Mysterious Merchant"
 }

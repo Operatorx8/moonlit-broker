@@ -57,6 +57,16 @@
 | 4 | `windbreaker_chestplate` | 商人的防风衣 | UNCOMMON | 机动/生存 |
 | 5 | `void_devourer_chestplate` | 虚空之噬 | RARE | 进攻/真伤 |
 
+### 护腿（5件）
+
+| # | 内部 ID | 显示名 | 稀有度 | 定位 |
+|---|---------|--------|--------|------|
+| 1 | `smuggler_shin_leggings` | 走私者之胫 | UNCOMMON | 收益/掉落 |
+| 2 | `smuggler_pouch_leggings` | 走私者的暗袋 | UNCOMMON | 效率/拾取 |
+| 3 | `graze_guard_leggings` | 擦身护胫 | EPIC | 防御/保命 |
+| 4 | `stealth_shin_leggings` | 潜行之胫 | RARE | 机动/摔落 |
+| 5 | `clear_ledger_leggings` | 清账步态 | RARE | 机动/击杀 |
+
 ---
 
 ## 头盔详细规格
@@ -551,6 +561,360 @@ CD 就绪
 
 [MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=void_bite boss_modifier=true ctx{p=Steve t=Wither base_dmg=6.0}
 [MoonTrace|Armor|APPLY] action=apply result=OK effect=true_damage final{amount=0.12 ratio=0.02} ctx{p=Steve t=Wither}
+```
+
+---
+
+## 护腿详细规格
+
+### 1. 走私者之胫 (Smuggler's Shin)
+
+**效果**：击杀掉落增益（概率加成 + 双倍掉落）
+
+**机制**：
+- **战利品概率**：+20%（额外一次 loot roll）
+- **双倍掉落**：10% 概率复制一个掉落物
+- 任意一项触发即进入 CD 40s
+- Boss/核心资源：两项概率减半
+
+**Lore**：
+- EN: "A cutpurse's luck—measured, timed, and never free."
+
+**Mixin 入口**：`LivingEntity#dropLoot(DamageSource, boolean)`
+
+**判定逻辑**：
+```java
+// 在 dropLoot mixin 中
+Entity killer = source.getAttacker();
+if (!(killer instanceof PlayerEntity player)) return;
+if (!isWearingLeggings(player, SMUGGLER_SHIN)) return;
+
+// PVP 排除
+if (entity instanceof PlayerEntity) return;
+
+// Boss/核心资源概率减半
+boolean isSpecial = isBoss(entity) || isCoreLootEntity(entity);
+float lootChance = isSpecial ? 0.10f : 0.20f;
+float doubleChance = isSpecial ? 0.05f : 0.10f;
+
+// CD 检查
+if (!cdReady(player, "smuggler_shin_loot")) return;
+
+boolean triggered = false;
+
+// 战利品概率 +20%：额外一次 loot roll
+if (rollChance(lootChance)) {
+    extraLootRoll(entity, source);
+    triggered = true;
+}
+
+// 双倍掉落：复制一个已生成的掉落
+if (rollChance(doubleChance) && !drops.isEmpty()) {
+    ItemStack toCopy = selectRandomCopyable(drops);
+    if (toCopy != null) {
+        drops.add(toCopy.copy());
+        triggered = true;
+    }
+}
+
+if (triggered) {
+    setCooldown(player, "smuggler_shin_loot", 800); // 40s
+}
+```
+
+**核心资源判定**（建议用物品 tag）：
+```java
+boolean isCoreLootEntity(Entity entity) {
+    // 建议用掉落物品 tag 判定，而非实体类型
+    // 如：凋灵骷髅头、末影珍珠等稀有掉落
+    return entity.getType().isIn(ModTags.CORE_LOOT_ENTITIES);
+}
+```
+
+**触发条件**：
+```
+穿戴该护腿 AND 
+击杀 LivingEntity AND 
+非 PVP AND 
+CD 就绪
+```
+
+**日志**：
+```
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=smuggler_loot_bonus rng{roll=0.15 need=0.20 hit=YES} ctx{p=Steve t=Zombie}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=extra_loot_roll ctx{p=Steve}
+
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=smuggler_double_drop rng{roll=0.08 need=0.10 hit=YES} ctx{p=Steve t=Zombie}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=item_duplicated item=rotten_flesh ctx{p=Steve}
+```
+
+---
+
+### 2. 走私者的暗袋 (Smuggler's Pouch)
+
+**效果**：吸附附近掉落物（磁吸拾取）
+
+**机制**：
+- 半径：6 格
+- 持续：5s（100 ticks）
+- 扫描频率：每 20 ticks
+- CD：35s（700 ticks）
+- 仅影响 ItemEntity（不吸经验球）
+
+**Lore**：
+- EN: "Nothing vanishes—everything simply finds its way home."
+
+**实现入口**：ServerTick（每 20 ticks）
+
+**激活状态机**：
+```java
+// per-player 状态
+int magnetActiveTicksRemaining = 0;
+
+void tickCheck(Player player) {
+    if (!isWearingLeggings(player, SMUGGLER_POUCH)) {
+        magnetActiveTicksRemaining = 0;
+        return;
+    }
+    
+    // 激活状态中
+    if (magnetActiveTicksRemaining > 0) {
+        pullNearbyItems(player);
+        magnetActiveTicksRemaining -= 20;
+        return;
+    }
+    
+    // 检查是否可以启动
+    if (!cdReady(player, "smuggler_pouch_magnet")) return;
+    
+    // 检查周围是否有 ItemEntity
+    List<ItemEntity> nearby = scanItems(player, 6.0);
+    if (nearby.isEmpty()) return;
+    
+    // 启动吸附
+    magnetActiveTicksRemaining = 100; // 5s
+    setCooldown(player, "smuggler_pouch_magnet", 700); // 35s
+}
+```
+
+**吸附逻辑**：
+```java
+void pullNearbyItems(Player player) {
+    List<ItemEntity> items = player.getWorld().getEntitiesByClass(
+        ItemEntity.class,
+        player.getBoundingBox().expand(6.0),
+        item -> item.cannotPickup() == false && item.getPickupDelay() <= 0
+    );
+    
+    for (ItemEntity item : items) {
+        Vec3d dir = player.getPos().subtract(item.getPos()).normalize();
+        double speed = 0.3;
+        item.addVelocity(dir.x * speed, dir.y * speed + 0.1, dir.z * speed);
+    }
+}
+```
+
+**触发条件**：
+```
+穿戴该护腿 AND 
+CD 就绪 AND 
+周围有可拾取的 ItemEntity
+```
+
+**日志**：
+```
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=magnet_activate duration=100 ctx{p=Steve items_nearby=5}
+[MoonTrace|Armor|STATE] action=state_change result=OK state=magnet_active remaining=80 items_pulled=3 ctx{p=Steve}
+[MoonTrace|Armor|STATE] action=state_change result=OK state=magnet_expired ctx{p=Steve}
+```
+
+---
+
+### 3. 擦身护胫 (Graze Guard)
+
+**效果**：擦身减伤（高光保命）
+
+**机制**：
+- 触发概率：18%
+- 减伤比例：60%（本次伤害 ×0.40）
+- CD：12s（240 ticks）
+- 仅对 LivingEntity 攻击生效（含箭矢）
+
+**Lore**：
+- EN: "A step aside—paid for in scars you never received."
+
+**Mixin 入口**：`LivingEntity#damage(DamageSource, float)`（玩家受害者）
+
+**判定逻辑**：
+```java
+// 在 damage mixin 中
+if (!(entity instanceof PlayerEntity player)) return amount;
+if (!isWearingLeggings(player, GRAZE_GUARD)) return amount;
+
+Entity attacker = source.getAttacker();
+if (attacker == null || !(attacker instanceof LivingEntity)) return amount;
+
+if (!cdReady(player, "graze_guard")) return amount;
+
+// 18% 概率
+if (!rollChance(0.18f)) return amount;
+
+// 触发！减伤 60%
+setCooldown(player, "graze_guard", 240); // 12s
+return amount * 0.40f;
+```
+
+**触发条件**：
+```
+穿戴该护腿 AND 
+source.getAttacker() instanceof LivingEntity AND 
+RNG 18% AND 
+CD 就绪
+```
+
+**日志**：
+```
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=graze_guard rng{roll=0.12 need=0.18 hit=YES} ctx{p=Steve t=Skeleton}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=damage_reduction final{amount=2.0} src{original=5.0} reduction=60% ctx{p=Steve}
+```
+
+---
+
+### 4. 潜行之胫 (Stealth Shin)
+
+**效果**：垫层充能 → 摔落减伤
+
+**机制**：
+- **充能**：每 45s 获得 1 层，上限 2 层
+- **摔落减伤**：-80%（消耗 1 层）
+- **消耗门槛**：摔落伤害 ≥ 3 点才消耗
+- 充能完成时提示（ActionBar + 音效）
+
+**Lore**：
+- EN: "Two quiet cushions—one for each mistake."
+
+**实现入口**：
+1. 充能：ServerTick（每 20 ticks）
+2. 消耗：Mixin → `LivingEntity#handleFallDamage(float, float, DamageSource)`
+
+**充能逻辑**：
+```java
+// per-player 状态
+int paddingCharges = 0;        // 0..2
+long nextChargeAtTick = 0;
+
+void tickCheck(Player player, long currentTick) {
+    if (!isWearingLeggings(player, STEALTH_SHIN)) return;
+    
+    if (paddingCharges >= 2) return; // 已满
+    
+    if (currentTick >= nextChargeAtTick) {
+        paddingCharges++;
+        nextChargeAtTick = currentTick + 900; // 45s
+        
+        // 提示
+        player.sendMessage(Text.literal("§a垫层充能 +" + paddingCharges + "/2"), true);
+        player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_CHIME, 0.5f, 1.2f);
+    }
+}
+```
+
+**消耗逻辑**：
+```java
+// 在 handleFallDamage mixin 中
+float damage = calculateFallDamage(fallDistance, damageMultiplier);
+
+if (!(entity instanceof PlayerEntity player)) return damage;
+if (!isWearingLeggings(player, STEALTH_SHIN)) return damage;
+
+if (damage < 3.0f) return damage; // 门槛
+if (paddingCharges <= 0) return damage;
+
+// 消耗并减伤
+paddingCharges--;
+return damage * 0.20f; // 减伤 80%
+```
+
+**触发条件**：
+```
+穿戴该护腿 AND 
+摔落伤害 ≥ 3 AND 
+paddingCharges > 0
+```
+
+**日志**：
+```
+[MoonTrace|Armor|STATE] action=state_change result=OK state=padding_charge charges{before=0 after=1 max=2} ctx{p=Steve}
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=fall_cushion charges{before=2 after=1} ctx{p=Steve fall_dmg=8.0}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=fall_reduction final{amount=1.6} src{original=8.0} reduction=80% ctx{p=Steve}
+```
+
+---
+
+### 5. 清账步态 (Clear Ledger Stride)
+
+**效果**：击杀移速爆发
+
+**机制**：
+- **击杀触发**：Speed I 3s
+- **CD**：16s（320 ticks）
+- **连续击杀**：不刷新，只延长 +1s，上限 6s
+- CD 期间击杀：若仍有 buff 则延长，否则不触发
+
+**Lore**：
+- EN: "Settle the debt—then disappear before the echo fades."
+
+**Mixin 入口**：`LivingEntity#onDeath(DamageSource source)`
+
+**判定逻辑**：
+```java
+// 在 onDeath mixin 中（受害者侧）
+Entity killer = source.getAttacker();
+if (!(killer instanceof PlayerEntity player)) return;
+if (!isWearingLeggings(player, CLEAR_LEDGER)) return;
+
+// PVP 排除（可选）
+if (entity instanceof PlayerEntity) return;
+
+if (cdReady(player, "clear_ledger_speed")) {
+    // CD 就绪：给 Speed I 3s
+    applySpeed(player, 0, 60); // amplifier=0, duration=60 ticks
+    setCooldown(player, "clear_ledger_speed", 320); // 16s
+} else {
+    // CD 期间：检查是否可延长
+    StatusEffectInstance existing = player.getStatusEffect(StatusEffects.SPEED);
+    if (existing != null && isClearLedgerSpeed(existing)) {
+        // 延长 +1s，上限 6s (120 ticks)
+        int newDuration = Math.min(existing.getDuration() + 20, 120);
+        applySpeed(player, 0, newDuration);
+    }
+    // 若 buff 已结束，不做任何事
+}
+```
+
+**Speed buff 标记**：
+```java
+// 使用固定 amplifier=0 + ambient=false + showParticles=true 组合识别
+// 或在 player NBT 中记录 "clear_ledger_speed_active" flag
+boolean isClearLedgerSpeed(StatusEffectInstance effect) {
+    return effect.getAmplifier() == 0 && !effect.isAmbient();
+}
+```
+
+**触发条件**：
+```
+穿戴该护腿 AND 
+击杀 LivingEntity AND 
+(CD 就绪 OR (CD 期间 AND 当前有该 buff))
+```
+
+**日志**：
+```
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=clear_ledger_speed mode=initial ctx{p=Steve t=Zombie}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=speed final{dur=60 amp=0} ctx{p=Steve}
+
+[MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=clear_ledger_speed mode=extend ctx{p=Steve t=Skeleton}
+[MoonTrace|Armor|APPLY] action=apply result=OK effect=speed_extend final{dur=80 amp=0} src{previous=60} ctx{p=Steve}
 ```
 
 ---

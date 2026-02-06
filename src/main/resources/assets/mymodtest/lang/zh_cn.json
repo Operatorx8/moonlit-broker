@@ -126,5 +126,27 @@
 
   "item.mymodtest.fatalis": "终结",
   "item.mymodtest.fatalis.effect": "[重击之刃]",
-  "item.mymodtest.fatalis.desc": "高伤害（10），一击定音"
+  "item.mymodtest.fatalis.desc": "高伤害（10），一击定音",
+
+  "item.mymodtest.scavenger_goggles": "拾荒者的风镜",
+  "item.mymodtest.scavenger_goggles.lore": "透过尘埃，发现他人遗漏之物。",
+
+  "item.mymodtest.cast_iron_sallet": "生铁护面盔",
+  "item.mymodtest.cast_iron_sallet.lore": "铁重，决心更重。",
+
+  "item.mymodtest.sanctified_hood": "祝圣兜帽",
+  "item.mymodtest.sanctified_hood.lore": "祝圣的布料，削弱敌意的魔法。",
+  "item.mymodtest.sanctified_hood.effect": "[圣佑] 魔法伤害减免15%",
+
+  "item.mymodtest.reactive_bug_plate": "反应Bug装甲板",
+  "item.mymodtest.reactive_bug_plate.lore": "接触时「修补」节肢生物的咬伤。",
+  "item.mymodtest.reactive_bug_plate.effect": "[Bug补丁] 节肢近战伤害-1.0",
+
+  "item.mymodtest.patchwork_coat": "补丁皮大衣",
+  "item.mymodtest.patchwork_coat.lore": "由百次旅途缝合而成。",
+
+  "item.mymodtest.ritual_robe": "仪式罩袍",
+  "item.mymodtest.ritual_robe.lore": "为仪式而织，为生存而穿。",
+
+  "itemGroup.mymodtest.main": "神秘商人"
 }

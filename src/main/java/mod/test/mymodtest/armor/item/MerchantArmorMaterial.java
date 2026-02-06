@@ -66,7 +66,7 @@ public class MerchantArmorMaterial {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, ArmorConfig.HELMET_PROTECTION,
                 ArmorItem.Type.CHESTPLATE, ArmorConfig.CHESTPLATE_PROTECTION,
-                ArmorItem.Type.LEGGINGS, 0,
+                ArmorItem.Type.LEGGINGS, ArmorConfig.LEGGINGS_PROTECTION,
                 ArmorItem.Type.BOOTS, 0
         );
 

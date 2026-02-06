@@ -36,11 +36,11 @@
 
 | 文件 | 内容 |
 |------|------|
-| [features/armor/ARMOR_SPEC.md](./features/armor/ARMOR_SPEC.md) | 定位、设计约束、效果规则 |
-| [features/armor/ARMOR_PARAMS.md](./features/armor/ARMOR_PARAMS.md) | 纯数值表（护甲值、触发参数） |
+| [features/armor/ARMOR_SPEC.md](./features/armor/ARMOR_SPEC.md) | 定位、设计约束、Helmet/Chestplate/Leggings 效果规则 |
+| [features/armor/ARMOR_PARAMS.md](./features/armor/ARMOR_PARAMS.md) | 纯数值表（护甲值、触发参数、CD/扫描汇总） |
 | [features/armor/ARMOR_CHANGELOG.md](./features/armor/ARMOR_CHANGELOG.md) | 盔甲系统变更记录 |
 | [features/armor/ARMOR_TESTPLAN.md](./features/armor/ARMOR_TESTPLAN.md) | 盔甲专属测试清单 |
-| [features/armor/ARMOR_TODO.md](./features/armor/ARMOR_TODO.md) | 盔甲专属待办 |
+| [features/armor/ARMOR_TODO.md](./features/armor/ARMOR_TODO.md) | 盔甲专属待办（资源缺口与抽样验收） |
 
 ---
 

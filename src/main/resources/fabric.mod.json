@@ -19,7 +19,8 @@
   "mixins": [
     "mymodtest.mixins.json",
     "mymodtest.katana.mixins.json",
-    "mymodtest.armor.mixins.json"
+    "mymodtest.armor.mixins.json",
+    "mymodtest.transitional.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

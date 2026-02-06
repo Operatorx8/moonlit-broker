@@ -2,6 +2,7 @@ package mod.test.mymodtest.armor.mixin;
 
 import mod.test.mymodtest.armor.effect.OldMarketHandler;
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
+import mod.test.mymodtest.katana.item.KatanaItems;
 import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
@@ -9,6 +10,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.slot.TradeOutputSlot;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.village.Merchant;
 import net.minecraft.village.MerchantInventory;
 import net.minecraft.village.TradeOffer;
@@ -20,6 +23,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 交易输出槽 Mixin
@@ -58,6 +62,10 @@ public class TradeOutputSlotMixin {
         // 仅当商人是 MysteriousMerchantEntity 时增加声望
         if (merchant instanceof MysteriousMerchantEntity mysteriousMerchant) {
             incrementReputation(serverPlayer, mysteriousMerchant);
+            
+            // ========== 3.2 FIX: Secret sale enforcement ==========
+            // Check if this is the epic katana offer and mark as sold
+            checkAndMarkSecretSold(serverPlayer, mysteriousMerchant, offer, stack);
         }
 
         // 获取交易经验
@@ -112,6 +120,36 @@ public class TradeOutputSlotMixin {
         if (newRep == TradeConfig.SECRET_REP_THRESHOLD) {
             LOGGER.info("[MoonTrade] REP_THRESHOLD_REACHED player={} rep={}", 
                 player.getName().getString(), newRep);
+        }
+    }
+
+    /**
+     * 3.2 FIX: Check if this is the epic katana purchase and mark as sold
+     * This prevents the katana from appearing again for this merchant
+     */
+    private void checkAndMarkSecretSold(ServerPlayerEntity player, MysteriousMerchantEntity merchant, 
+                                         TradeOffer offer, ItemStack outputStack) {
+        // Check if the output is the epic katana (MOON_GLOW_KATANA)
+        if (!outputStack.isOf(KatanaItems.MOON_GLOW_KATANA)) {
+            return;
+        }
+        
+        // Atomically mark as sold - if already sold, this returns false
+        boolean marked = merchant.tryMarkSecretSold();
+        
+        if (marked) {
+            LOGGER.info("[MoonTrade] SECRET_KATANA_PURCHASED player={} merchant={}", 
+                player.getName().getString(), merchant.getUuid().toString().substring(0, 8));
+            
+            player.sendMessage(
+                Text.literal("[神秘商人] 你获得了珍贵的月华刀！")
+                    .formatted(Formatting.GOLD, Formatting.BOLD),
+                false
+            );
+        } else {
+            // This shouldn't happen if offer generation is correct, but log it
+            LOGGER.warn("[MoonTrade] SECRET_ALREADY_SOLD_ON_PURCHASE player={} merchant={}", 
+                player.getName().getString(), merchant.getUuid().toString().substring(0, 8));
         }
     }
 
