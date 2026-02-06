@@ -1,5 +1,7 @@
 package mod.test.mymodtest.weapon.transitional;
 
+import org.apache.commons.codec.StringDecoder;
+
 /**
  * 过渡武器常量定义
  * 定位：铁剑 → Katana 之间的过渡层
@@ -32,5 +34,5 @@ public final class TransitionalWeaponConstants {
     public static final int SWORD_ENCHANTABILITY = 14;   // 原版铁剑附魔系数
 
     // === Debug ===
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
 }
