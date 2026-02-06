@@ -41,7 +41,7 @@ public class ArmorInit {
             if (!(world instanceof ServerWorld serverWorld)) return;
 
             MinecraftServer server = serverWorld.getServer();
-            long currentTick = world.getTime();
+            long currentTick = world.getServer().getTicks();
 
             // ===== 头盔效果 =====
             // 哨兵的最后瞭望 - 黑暗侦测
