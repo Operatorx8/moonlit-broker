@@ -194,4 +194,80 @@ public final class ArmorConfig {
     public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO_BOSS = 0.02f;
     /** 冷却时间 (ticks) */
     public static final int VOID_DEVOURER_COOLDOWN = 100;
+
+    // ==================== 护腿基础属性 ====================
+    /** 护腿护甲值 */
+    public static final int LEGGINGS_PROTECTION = 6;
+
+    // ==================== 稀有度分档（护腿） ====================
+    public static final Rarity SMUGGLER_SHIN_LEGGINGS_RARITY = Rarity.UNCOMMON;
+    public static final Rarity SMUGGLER_POUCH_LEGGINGS_RARITY = Rarity.UNCOMMON;
+    public static final Rarity GRAZE_GUARD_LEGGINGS_RARITY = Rarity.EPIC;
+    public static final Rarity STEALTH_SHIN_LEGGINGS_RARITY = Rarity.RARE;
+    public static final Rarity CLEAR_LEDGER_LEGGINGS_RARITY = Rarity.RARE;
+
+    // ==================== 护腿效果参数 ====================
+
+    // ==================== 走私者之胫 (smuggler_shin_leggings) ====================
+    public static final String SMUGGLER_SHIN_EFFECT_ID = "smuggler_loot_bonus";
+    /** 额外掉落概率（普通） */
+    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE = 0.20f;
+    /** 额外掉落概率（Boss/核心资源） */
+    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE_BOSS = 0.10f;
+    /** 双倍掉落概率（普通） */
+    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE = 0.10f;
+    /** 双倍掉落概率（Boss/核心资源） */
+    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE_BOSS = 0.05f;
+    /** 冷却时间 (ticks) */
+    public static final int SMUGGLER_SHIN_COOLDOWN = 800;
+
+    // ==================== 走私者的暗袋 (smuggler_pouch_leggings) ====================
+    public static final String SMUGGLER_POUCH_EFFECT_ID = "magnet_activate";
+    /** 吸附半径 */
+    public static final float SMUGGLER_POUCH_RADIUS = 6.0f;
+    /** 吸附持续时间 (ticks) */
+    public static final int SMUGGLER_POUCH_DURATION = 100;
+    /** 扫描间隔 (ticks) */
+    public static final int SMUGGLER_POUCH_SCAN_INTERVAL = 20;
+    /** 牵引速度 */
+    public static final float SMUGGLER_POUCH_PULL_SPEED = 0.3f;
+    /** 牵引速度Y（向上） */
+    public static final float SMUGGLER_POUCH_PULL_SPEED_Y = 0.1f;
+    /** 冷却时间 (ticks) */
+    public static final int SMUGGLER_POUCH_COOLDOWN = 700;
+
+    // ==================== 擦身护胫 (graze_guard_leggings) ====================
+    public static final String GRAZE_GUARD_EFFECT_ID = "graze_guard";
+    /** 触发概率 */
+    public static final float GRAZE_GUARD_TRIGGER_CHANCE = 0.18f;
+    /** 减伤比例（减伤60%，即×0.40） */
+    public static final float GRAZE_GUARD_REDUCTION = 0.60f;
+    /** 冷却时间 (ticks) */
+    public static final int GRAZE_GUARD_COOLDOWN = 240;
+
+    // ==================== 潜行之胫 (stealth_shin_leggings) ====================
+    public static final String STEALTH_SHIN_EFFECT_ID = "stealth_shin_charge";
+    /** 充能间隔 (ticks, 45s) */
+    public static final int STEALTH_SHIN_CHARGE_INTERVAL = 900;
+    /** 最大层数 */
+    public static final int STEALTH_SHIN_MAX_CHARGES = 2;
+    /** 摔落减伤比例（减伤80%，即×0.20） */
+    public static final float STEALTH_SHIN_FALL_REDUCTION = 0.80f;
+    /** 最小摔落伤害门槛 (HP) */
+    public static final float STEALTH_SHIN_MIN_FALL_DAMAGE = 3.0f;
+    /** 检查间隔 (ticks) */
+    public static final int STEALTH_SHIN_CHECK_INTERVAL = 20;
+
+    // ==================== 清账步态 (clear_ledger_leggings) ====================
+    public static final String CLEAR_LEDGER_EFFECT_ID = "clear_ledger_speed";
+    /** 初始速度持续时间 (ticks, 3s) */
+    public static final int CLEAR_LEDGER_INITIAL_DURATION = 60;
+    /** 延长时间 (ticks, +1s) */
+    public static final int CLEAR_LEDGER_EXTEND_DURATION = 20;
+    /** 最大持续时间 (ticks, 6s) */
+    public static final int CLEAR_LEDGER_MAX_DURATION = 120;
+    /** 冷却时间 (ticks, 16s) */
+    public static final int CLEAR_LEDGER_COOLDOWN = 320;
+    /** 速度效果等级 (0 = I级) */
+    public static final int CLEAR_LEDGER_SPEED_AMPLIFIER = 0;
 }

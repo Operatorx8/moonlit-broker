@@ -74,5 +74,45 @@
 
   "item.mymodtest.void_devourer_chestplate": "虚空之噬",
   "item.mymodtest.void_devourer_chestplate.lore": "Every five seconds, the void takes its bite.",
-  "item.mymodtest.void_devourer_chestplate.effect": "[虚空咬合] 攻击时：追加4%真实伤害（Boss 2%）。冷却：5秒"
+  "item.mymodtest.void_devourer_chestplate.effect": "[虚空咬合] 攻击时：追加4%真实伤害（Boss 2%）。冷却：5秒",
+
+  "item.mymodtest.smuggler_shin_leggings": "走私者之胫",
+  "item.mymodtest.smuggler_shin_leggings.lore": "A cutpurse's luck—measured, timed, and never free.",
+  "item.mymodtest.smuggler_shin_leggings.effect": "[掉落增益] 击杀时：20%额外掉落+10%双倍掉落（Boss：10%/5%）。冷却：40秒。PVP不触发",
+
+  "item.mymodtest.smuggler_pouch_leggings": "走私者的暗袋",
+  "item.mymodtest.smuggler_pouch_leggings.lore": "Nothing vanishes—everything simply finds its way home.",
+  "item.mymodtest.smuggler_pouch_leggings.effect": "[磁吸] 自动牵引6格内掉落物，持续5秒。冷却：35秒。仅物品（不含经验球）",
+
+  "item.mymodtest.graze_guard_leggings": "擦身护胫",
+  "item.mymodtest.graze_guard_leggings.lore": "A step aside—paid for in scars you never received.",
+  "item.mymodtest.graze_guard_leggings.effect": "[擦身] 18%概率：减伤60%。冷却：12秒。仅生物攻击",
+
+  "item.mymodtest.stealth_shin_leggings": "潜行之胫",
+  "item.mymodtest.stealth_shin_leggings.lore": "The street remembers every fall—and teaches you which ones to ignore.",
+  "item.mymodtest.stealth_shin_leggings.effect": "[摔落垫层] 每45秒充能1层（上限2层）。摔落>=1.5心：消耗1层，减伤80%",
+
+  "item.mymodtest.clear_ledger_leggings": "清账步态",
+  "item.mymodtest.clear_ledger_leggings.lore": "Every settled debt lightens the stride.",
+  "item.mymodtest.clear_ledger_leggings.effect": "[速度步态] 击杀：速度I持续3秒。CD内击杀：+1秒（上限6秒）。冷却：16秒。PVP不触发",
+
+  "item.mymodtest.untraceable_treads_boots": "无追索步履",
+  "item.mymodtest.untraceable_treads_boots.lore": "你走过之处，不留痕迹。",
+  "item.mymodtest.untraceable_treads_boots.effect": "[消隐] 12秒脱战后：隐身3秒（无粒子）。冷却：45秒",
+
+  "item.mymodtest.boundary_walker_boots": "边界行走",
+  "item.mymodtest.boundary_walker_boots.lore": "在世界之间，道路升起。",
+  "item.mymodtest.boundary_walker_boots.effect": "[边界跃迁] 主世界露天 + 雨/雷/雪/夜晚：跳跃提升I。条件满足时持续刷新",
+
+  "item.mymodtest.ghost_step_boots": "幽灵步伐",
+  "item.mymodtest.ghost_step_boots.lore": "生者穿过你，如同穿过风。",
+  "item.mymodtest.ghost_step_boots.effect": "[幻影] 非战斗：实体无法推挤你。战斗中：恢复推挤。1秒内被打2次：1秒应急免推（冷却15秒）",
+
+  "item.mymodtest.marching_boots": "急行之靴",
+  "item.mymodtest.marching_boots.lore": "步伐稳健，心神安定——直到刀刃落下。",
+  "item.mymodtest.marching_boots.effect": "[急行] 8秒未攻击 + 4秒未受伤：速度II（最长15秒）。攻击立即取消 + 12秒冷却",
+
+  "item.mymodtest.gossamer_boots": "轻灵之靴",
+  "item.mymodtest.gossamer_boots.lore": "丝线无法束缚丝线所造之物。",
+  "item.mymodtest.gossamer_boots.effect": "[蛛行] 在蛛网中：减速降低70%。缓慢II降为I。离开蛛网后效果消退"
 }

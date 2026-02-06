@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:nether_star",
+    "minecraft:elytra",
+    "minecraft:totem_of_undying",
+    "minecraft:dragon_egg",
+    "minecraft:dragon_breath"
+  ]
+}

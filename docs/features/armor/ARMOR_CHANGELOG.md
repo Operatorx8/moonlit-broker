@@ -2,6 +2,130 @@
 
 ---
 
+## [0.11.2] - 护腿二轮审计修复
+
+### Fixed
+
+- **tick 源统一**：护腿 handler 全部改用 `server.getTicks()` 作为时钟源，不再混用 `world.getTime()`
+- **ClearLedger 自然过期**：移除 `removeStatusEffect(SPEED)` 调用，只维护 `speedExpiresTick` Map；Speed 由游戏自然衰减或被新效果覆盖
+- **脱装清理增强**：`SmugglerPouchHandler` / `StealthShinHandler` / `ClearLedgerHandler` tick 方法检测未穿戴时立即清理全部状态；Pouch 额外清理冷却
+
+### Technical
+
+- `ArmorInit:60` 新增 `long serverTick = server.getTicks()` 供护腿 handler 使用
+- `ClearLedgerHandler:45-68` 新增 `tick()` 方法用于 expiresTick 清理和脱装检测
+- `LivingEntityDeathMixin:91-96,135-140` 改用 `server.getTicks()` 替代 `world.getTime()`
+
+---
+
+## [0.11.1] - 护腿 P0/P1 修复
+
+### Fixed
+
+- **P0: 走私者之胫掉落采集为空**
+  - `LivingEntityDeathMixin` 重写：在 `dropLoot` HEAD 记录周围 ItemEntity 快照，TAIL 对比筛选新生成的掉落物
+  - `SmugglerShinHandler.onEntityDeath()` 现在能正确接收真实掉落列表
+
+- **P1: 核心资源减半未实现**
+  - 新增 `ModTags.Items.CORE_LOOT` 物品 tag（路径 `data/mymodtest/tags/item/core_loot.json`）
+  - 默认包含：`nether_star`, `elytra`, `totem_of_undying`, `dragon_egg`, `dragon_breath`
+  - `SmugglerShinHandler` 判断 `isSpecial = isBoss || containsCoreLoot(drops)`，两项概率均减半
+
+- **P1: 走私者暗袋激活期每 tick 拉取**
+  - `SmugglerPouchHandler` 激活期现在也受 20 ticks 扫描间隔限制，不再每 tick 拉取
+  - 新增 `lastPullTick` 追踪最后拉取时间
+
+- **P1: Map key 用 player.getId() 导致死亡/重登漂移**
+  - `SmugglerPouchHandler`, `StealthShinHandler`, `ClearLedgerHandler` 所有 Map key 改为 UUID
+  - 新增 `onPlayerRespawn()` 方法用于死亡/重生时清理状态
+  - `ArmorInit` 注册 `ServerPlayerEvents.AFTER_RESPAWN` 调用清理
+
+- **P1: ClearLedger Speed 来源识别不稳**
+  - 不再依赖 `amplifier + ambient` 判断
+  - 新增 `speedExpiresTick` Map 记录效果到期 tick
+  - `isOurSpeedActive()` 通过比较 tick 判断是否为本效果
+
+### Added
+
+- `ModTags.java` - 自定义 Tag 定义（`CORE_LOOT`）
+- `data/mymodtest/tags/item/core_loot.json` - 核心战利品 tag
+
+### Technical
+
+- 所有护腿 handler 状态清理统一走 UUID key
+- 死亡后冷却重置：`ServerPlayerEvents.AFTER_RESPAWN` → `CooldownManager.clearAllCooldowns()`
+- 日志新增 `boss` / `core` 字段标注特殊掉落
+
+---
+
+## [0.11.0] - 5 件护腿实现
+
+### Added
+
+- 5 件神秘商人护腿
+  - `smuggler_shin_leggings` - 走私者之胫（击杀掉落增益：20% 额外掉落 + 10% 双倍掉落）
+  - `smuggler_pouch_leggings` - 走私者的暗袋（磁吸掉落物：6 格范围，5s 持续，35s CD）
+  - `graze_guard_leggings` - 擦身护胫（18% 概率减伤 60%，12s CD）
+  - `stealth_shin_leggings` - 潜行之胫（45s 充能 1 层，最多 2 层，摔落 >=3HP 消耗减伤 80%）
+  - `clear_ledger_leggings` - 清账步态（击杀给 Speed I 3s，CD 内 +1s，上限 6s，CD 16s）
+
+### Technical
+
+- 新增护腿效果处理器：
+  - `SmugglerShinHandler` - 击杀掉落增益（额外 loot roll + 双倍掉落）
+  - `SmugglerPouchHandler` - 磁吸掉落物（ServerTick 低频扫描 + 持续牵引）
+  - `GrazeGuardHandler` - 概率减伤（RNG + CD 判定）
+  - `StealthShinHandler` - 充能型摔落减伤（层数管理 + 门槛判定）
+  - `ClearLedgerHandler` - 击杀速度加成（初始触发 + CD 内延长）
+- 新增 Mixin：
+  - `LivingEntityDeathMixin` - 死亡事件处理（走私者掉落 + 清账步态）
+- 更新 `ArmorDamageMixin` - 扩展支持擦身护胫和潜行之胫
+- 更新 `ArmorInit` - 注册护腿 tick 事件和玩家下线清理
+- 更新 `MerchantArmorMaterial` - 护腿护甲值（6 armor）
+- 更新 `ArmorConfig` - 护腿效果参数常量
+- 更新 `ArmorItems` - 护腿物品注册
+
+### Assets
+
+- 新增 5 个护腿物品模型 JSON
+- 更新 `en_us.json` / `zh_cn.json` 语言文件
+
+### Notes
+
+- 护腿 enchantability 沿用全局稀有度分档：UNCOMMON→IRON(9), RARE→CHAIN(12), EPIC→NETHERITE(15)
+- 护腿耐久 = 25 × 15 = 375
+- 所有效果 server-side 判定，冷却统一走 CooldownManager
+- 走私者之胫与清账步态 PVP 排除
+- 贴图暂缺，使用占位模型
+
+---
+
+## [0.10.1] - Leggings 文档收尾（5 件护腿）
+
+### Added
+
+- 在 `ARMOR_SPEC.md` 新增 5 件护腿完整规格：
+  - `smuggler_shin_leggings` - 走私者之胫（掉落增益 + 双倍掉落，PVP 排除，Boss/核心减半）
+  - `smuggler_pouch_leggings` - 走私者的暗袋（6 格吸附，5s 持续，35s CD，仅 ItemEntity）
+  - `graze_guard_leggings` - 擦身护胫（18% 概率，减伤 60%，12s CD）
+  - `stealth_shin_leggings` - 潜行之胫（45s 充能，最多 2 层，>=3 伤害门槛才消耗）
+  - `clear_ledger_leggings` - 清账步态（3s 初始，CD 内击杀 +1s，上限 6s，CD 16s）
+- 在 `ARMOR_PARAMS.md` 新增护腿通用属性、稀有度分档、LeggingsEffectParams、LeggingsEffectConstants。
+- 在 `ARMOR_TESTPLAN.md` 新增护腿 5 组测试用例（正向、CD、边界、叠加、多人/服务端一致性）。
+
+### Changed
+
+- `ARMOR_PARAMS.md` 交易参数分块统一为 `cost / weight / minLevel / maxLevel / rarityGate` 字段，并补齐头盔/胸甲/护腿三类占位参数。
+- 冷却时间汇总与扫描间隔汇总表补入护腿条目。
+- `ARMOR_SPEC.md` 明确引用全局约定：`CooldownManager`、server-side 判定、低频扫描、固定 UUID Modifier。
+
+### Notes
+
+- 本次仅文档收尾，不涉及代码逻辑改动。
+- 根目录旧路径 `docs/ARMOR_*.md` 与 `docs/features/armor/*.md` 仍存在并行文档，后续建议统一单一权威路径。
+
+---
+
 ## [0.10.0] - 5 件胸甲实现 + 附魔分档全局化
 
 ### Added

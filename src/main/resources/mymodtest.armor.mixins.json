@@ -8,7 +8,10 @@
     "PlayerAttackMixin",
     "StatusEffectMixin",
     "LivingEntityDropXpMixin",
-    "TradeOutputSlotMixin"
+    "TradeOutputSlotMixin",
+    "LivingEntityDeathMixin",
+    "GhostStepPushMixin",
+    "GossamerSlowMovementMixin"
   ],
   "injectors": {
     "defaultRequire": 1

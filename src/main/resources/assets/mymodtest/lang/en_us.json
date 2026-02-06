@@ -74,5 +74,45 @@
 
   "item.mymodtest.void_devourer_chestplate": "Void Devourer",
   "item.mymodtest.void_devourer_chestplate.lore": "Every five seconds, the void takes its bite.",
-  "item.mymodtest.void_devourer_chestplate.effect": "[Void Bite] On attack: +4% true damage (Boss 2%). CD: 5s"
+  "item.mymodtest.void_devourer_chestplate.effect": "[Void Bite] On attack: +4% true damage (Boss 2%). CD: 5s",
+
+  "item.mymodtest.smuggler_shin_leggings": "Smuggler's Shin",
+  "item.mymodtest.smuggler_shin_leggings.lore": "A cutpurse's luck—measured, timed, and never free.",
+  "item.mymodtest.smuggler_shin_leggings.effect": "[Loot Bonus] On kill: 20% extra loot roll + 10% double drop (Boss: 10%/5%). CD: 40s. No PVP",
+
+  "item.mymodtest.smuggler_pouch_leggings": "Smuggler's Pouch",
+  "item.mymodtest.smuggler_pouch_leggings.lore": "Nothing vanishes—everything simply finds its way home.",
+  "item.mymodtest.smuggler_pouch_leggings.effect": "[Magnet] Auto-pull items within 6 blocks for 5s. CD: 35s. Items only (no XP orbs)",
+
+  "item.mymodtest.graze_guard_leggings": "Graze Guard",
+  "item.mymodtest.graze_guard_leggings.lore": "A step aside—paid for in scars you never received.",
+  "item.mymodtest.graze_guard_leggings.effect": "[Graze] 18% chance: reduce damage by 60%. CD: 12s. Living attackers only",
+
+  "item.mymodtest.stealth_shin_leggings": "Stealth Shin",
+  "item.mymodtest.stealth_shin_leggings.lore": "The street remembers every fall—and teaches you which ones to ignore.",
+  "item.mymodtest.stealth_shin_leggings.effect": "[Fall Pad] Charge 1 layer per 45s (max 2). Fall >=1.5HP: consume 1 layer, reduce 80%",
+
+  "item.mymodtest.clear_ledger_leggings": "Clear Ledger Gait",
+  "item.mymodtest.clear_ledger_leggings.lore": "Every settled debt lightens the stride.",
+  "item.mymodtest.clear_ledger_leggings.effect": "[Speed Stride] Kill: Speed I 3s. Kill during CD: +1s (max 6s). CD: 16s. No PVP",
+
+  "item.mymodtest.untraceable_treads_boots": "Untraceable Treads",
+  "item.mymodtest.untraceable_treads_boots.lore": "Where you walk, no trail remains.",
+  "item.mymodtest.untraceable_treads_boots.effect": "[Vanish] 12s out of combat: Invisibility 3s (no particles). CD: 45s",
+
+  "item.mymodtest.boundary_walker_boots": "Boundary Walker",
+  "item.mymodtest.boundary_walker_boots.lore": "Between worlds, the path rises.",
+  "item.mymodtest.boundary_walker_boots.effect": "[Boundary Leap] Overworld outdoor + rain/thunder/snow/night: Jump Boost I. Refreshes while conditions met",
+
+  "item.mymodtest.ghost_step_boots": "Ghost Step",
+  "item.mymodtest.ghost_step_boots.lore": "The living pass through you like wind.",
+  "item.mymodtest.ghost_step_boots.effect": "[Phantom] Out of combat: entities cannot push you. In combat: push returns. Hit 2x in 1s: 1s emergency no-push (CD 15s)",
+
+  "item.mymodtest.marching_boots": "Marching Boots",
+  "item.mymodtest.marching_boots.lore": "Steady pace, steady mind—until the blade falls.",
+  "item.mymodtest.marching_boots.effect": "[March] 8s no attack + 4s no damage: Speed II (max 15s). Attack to cancel + 12s CD",
+
+  "item.mymodtest.gossamer_boots": "Gossamer Boots",
+  "item.mymodtest.gossamer_boots.lore": "Silk cannot bind what silk has made.",
+  "item.mymodtest.gossamer_boots.effect": "[Web Walk] In cobweb: 70% less slowdown. Slowness II downgraded to I. Effect fades on exit"
 }
