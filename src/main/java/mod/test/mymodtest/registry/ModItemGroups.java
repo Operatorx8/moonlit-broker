@@ -82,12 +82,22 @@ public final class ModItemGroups {
                         addIfPresent(entries, ArmorItems.STEALTH_SHIN_LEGGINGS);
                         addIfPresent(entries, ArmorItems.CLEAR_LEDGER_LEGGINGS);
 
+                        // Transitional Armor - leggings (UNCOMMON -> RARE)
+                        addIfPresent(entries, TransitionalArmorItems.WRAPPED_LEGGINGS);
+                        addIfPresent(entries, TransitionalArmorItems.REINFORCED_GREAVES);
+                        addIfPresent(entries, TransitionalArmorItems.CARGO_PANTS);
+
                         // Armor - boots
                         addIfPresent(entries, ArmorItems.UNTRACEABLE_TREADS_BOOTS);
                         addIfPresent(entries, ArmorItems.BOUNDARY_WALKER_BOOTS);
                         addIfPresent(entries, ArmorItems.GHOST_STEP_BOOTS);
                         addIfPresent(entries, ArmorItems.MARCHING_BOOTS);
                         addIfPresent(entries, ArmorItems.GOSSAMER_BOOTS);
+
+                        // Transitional Armor - boots (UNCOMMON -> RARE)
+                        addIfPresent(entries, TransitionalArmorItems.PENITENT_BOOTS);
+                        addIfPresent(entries, TransitionalArmorItems.STANDARD_IRON_BOOTS);
+                        addIfPresent(entries, TransitionalArmorItems.CUSHION_HIKING_BOOTS);
                     })
                     .build()
     );

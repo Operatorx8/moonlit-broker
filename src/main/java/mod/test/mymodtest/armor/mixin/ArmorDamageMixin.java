@@ -8,6 +8,7 @@ import mod.test.mymodtest.armor.effect.SilentOathHandler;
 import mod.test.mymodtest.armor.effect.StealthShinHandler;
 import mod.test.mymodtest.armor.effect.boots.BootsPlayerState;
 import mod.test.mymodtest.armor.effect.boots.BootsTickHandler;
+import mod.test.mymodtest.armor.transitional.effect.CushionHikingBootsHandler;
 import mod.test.mymodtest.armor.transitional.effect.ReactiveBugPlateHandler;
 import mod.test.mymodtest.armor.transitional.effect.SanctifiedHoodHandler;
 import net.minecraft.entity.Entity;
@@ -26,14 +27,19 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
  * - 护腿：擦身护胫（减伤）、潜行之胫（摔落减伤）
  * - 靴子：更新 lastHurtByLivingTick，Ghost Step 受击计数
  */
-@Mixin(LivingEntity.class)
+@Mixin(value = LivingEntity.class, priority = 900)
 public class ArmorDamageMixin {
 
     /**
      * 修改伤害值
      * 在伤害计算早期介入，处理减伤、保命和储能逻辑
      */
-    @ModifyVariable(method = "damage", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    @ModifyVariable(
+            method = "damage(Lnet/minecraft/entity/damage/DamageSource;F)Z",
+            at = @At("HEAD"),
+            argsOnly = true,
+            index = 2
+    )
     private float armor$modifyDamage(float amount, DamageSource source) {
         LivingEntity self = (LivingEntity)(Object)this;
 
@@ -53,17 +59,11 @@ public class ArmorDamageMixin {
         // 2. 沉默之誓约 - 首次受伤减伤（头盔）
         float afterSilentOath = SilentOathHandler.onDamage(player, source, afterRetracer, currentTick);
 
-        // 2.5 祝圣兜帽 - 魔法减伤 15%（过渡头盔）
-        float afterSanctifiedHood = SanctifiedHoodHandler.onDamage(player, source, afterSilentOath);
-
         // 3. 鬼神之铠 - 亡灵伤害减免（胸甲）
-        float afterGhostGod = GhostGodHandler.onDamage(player, source, afterSanctifiedHood, currentTick);
-
-        // 3.5 反应Bug装甲板 - 节肢近战减伤 -1.0（过渡胸甲）
-        float afterReactiveBugPlate = ReactiveBugPlateHandler.onDamage(player, source, afterGhostGod);
+        float afterGhostGod = GhostGodHandler.onDamage(player, source, afterSilentOath, currentTick);
 
         // 4. 流血契约 - 受击储能（胸甲，可能增加伤害）
-        float afterBloodPact = BloodPactHandler.onDamage(player, source, afterReactiveBugPlate, currentTick);
+        float afterBloodPact = BloodPactHandler.onDamage(player, source, afterGhostGod, currentTick);
 
         // 5. 擦身护胫 - 概率减伤（护腿）
         float afterGrazeGuard = GrazeGuardHandler.onDamage(player, source, afterBloodPact, currentTick);
@@ -87,5 +87,29 @@ public class ArmorDamageMixin {
         }
 
         return finalAmount;
+    }
+
+    /**
+     * 过渡护甲减伤在 applyDamage() 入口处理，口径对齐"最终伤害"。
+     * 顺序：
+     * 1. SanctifiedHood(magic ×0.85)
+     * 2. ReactiveBugPlate(arthropod -1.0)
+     * 3. CushionHikingBoots(fall -2.0)
+     */
+    @ModifyVariable(
+            method = "applyDamage(Lnet/minecraft/entity/damage/DamageSource;F)V",
+            at = @At("HEAD"),
+            argsOnly = true,
+            index = 2
+    )
+    private float armor$modifyTransitionalFinalDamage(float amount, DamageSource source) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (!(self instanceof ServerPlayerEntity player)) {
+            return amount;
+        }
+
+        float afterSanctifiedHood = SanctifiedHoodHandler.onDamage(player, source, amount);
+        float afterReactiveBugPlate = ReactiveBugPlateHandler.onDamage(player, source, afterSanctifiedHood);
+        return CushionHikingBootsHandler.onDamage(player, source, afterReactiveBugPlate);
     }
 }

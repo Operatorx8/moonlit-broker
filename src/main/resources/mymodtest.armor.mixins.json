@@ -11,7 +11,8 @@
     "TradeOutputSlotMixin",
     "LivingEntityDeathMixin",
     "GhostStepPushMixin",
-    "GossamerSlowMovementMixin"
+    "GossamerSlowMovementMixin",
+    "BlockItemPlaceMixin"
   ],
   "injectors": {
     "defaultRequire": 1

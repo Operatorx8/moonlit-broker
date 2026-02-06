@@ -148,5 +148,25 @@
   "item.mymodtest.ritual_robe": "仪式罩袍",
   "item.mymodtest.ritual_robe.lore": "为仪式而织，为生存而穿。",
 
+  "item.mymodtest.wrapped_leggings": "缠布护腿",
+  "item.mymodtest.wrapped_leggings.lore": "皮革上覆布料——灵活，虽不优雅。",
+
+  "item.mymodtest.reinforced_greaves": "加固护膝",
+  "item.mymodtest.reinforced_greaves.lore": "从腰到膝的重甲——为前线而造。",
+
+  "item.mymodtest.cargo_pants": "多袋工装裤",
+  "item.mymodtest.cargo_pants.lore": "深口袋，幸运发现——让光明延续。",
+  "item.mymodtest.cargo_pants.effect": "[幸运口袋] 放置火把时15%概率返还。冷却：10秒",
+
+  "item.mymodtest.penitent_boots": "苦行者之靴",
+  "item.mymodtest.penitent_boots.lore": "谦卑而行；道路不宽恕任何人。",
+
+  "item.mymodtest.standard_iron_boots": "制式铁靴",
+  "item.mymodtest.standard_iron_boots.lore": "标准配备——不多，不少。",
+
+  "item.mymodtest.cushion_hiking_boots": "缓冲登山靴",
+  "item.mymodtest.cushion_hiking_boots.lore": "减震鞋底——落地更柔和。",
+  "item.mymodtest.cushion_hiking_boots.effect": "[缓冲] 摔落伤害减少2.0（固定值）",
+
   "itemGroup.mymodtest.main": "神秘商人"
 }

@@ -148,5 +148,25 @@
   "item.mymodtest.ritual_robe": "Ritual Robe",
   "item.mymodtest.ritual_robe.lore": "Woven for ceremonies, worn for survival.",
 
+  "item.mymodtest.wrapped_leggings": "Wrapped Leggings",
+  "item.mymodtest.wrapped_leggings.lore": "Layered cloth over leather—mobile, if not elegant.",
+
+  "item.mymodtest.reinforced_greaves": "Reinforced Greaves",
+  "item.mymodtest.reinforced_greaves.lore": "Heavy plate from hip to knee—built for the front line.",
+
+  "item.mymodtest.cargo_pants": "Cargo Pants",
+  "item.mymodtest.cargo_pants.lore": "Deep pockets, lucky finds—keep the lights burning.",
+  "item.mymodtest.cargo_pants.effect": "[Lucky Pocket] 15% chance to return a torch when placed. CD: 10s",
+
+  "item.mymodtest.penitent_boots": "Penitent Boots",
+  "item.mymodtest.penitent_boots.lore": "Walk in humility; the road forgives no one.",
+
+  "item.mymodtest.standard_iron_boots": "Standard Iron Boots",
+  "item.mymodtest.standard_iron_boots.lore": "Standard issue—nothing more, nothing less.",
+
+  "item.mymodtest.cushion_hiking_boots": "Cushion Hiking Boots",
+  "item.mymodtest.cushion_hiking_boots.lore": "Shock-absorbent soles—the ground hits softer.",
+  "item.mymodtest.cushion_hiking_boots.effect": "[Cushion] Fall damage reduced by 2.0 (flat)",
+
   "itemGroup.mymodtest.main": "Mysterious Merchant"
 }
