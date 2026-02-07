@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "mymodtest:item/gossamer_boots"
-  }
+  "parent": "minecraft:item/iron_boots"
 }

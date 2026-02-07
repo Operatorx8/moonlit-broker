@@ -75,7 +75,8 @@ public class MerchantArmorMaterial {
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_CHAIN,
                 () -> Ingredient.EMPTY,
-                List.of(new ArmorMaterial.Layer(Identifier.of(MOD_ID, "merchant"))),
+                // Temporary fallback to vanilla iron armor layer to avoid missing-texture purple/black.
+                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", "iron"))),
                 ArmorConfig.TOUGHNESS,
                 knockbackResistance
         );

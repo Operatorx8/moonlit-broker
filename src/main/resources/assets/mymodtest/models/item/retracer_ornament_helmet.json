@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "mymodtest:item/retracer_ornament_helmet"
-  }
+  "parent": "minecraft:item/iron_helmet"
 }

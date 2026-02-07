@@ -17,6 +17,20 @@
 
 ### Changed
 
+- Katana 审计与文案对齐（代码为准）
+  - 新增 `docs/AUDIT_KATANA.md`，逐把列出真实触发条件、冷却、伤害/Debuff计算与来源文件
+  - 统一 katana/过渡武器 tooltip key（`tooltip.mymodtest.<item>.subtitle/line1/line2/line3/params`）
+  - 修正过期文案（例如 Regret/Eclipse/Oblivion 的穿透与冷却描述）
+
+- Tooltip 集中化（客户端）
+  - 新增 `TooltipHelper`，统一读取结构化多行 tooltip key
+  - `ModTooltips` 改为集中注入，不再按物品类散落手写
+
+- 特效盔甲紫黑占位修复（最小资源改动）
+  - `MerchantArmorMaterial` 与 `BootsArmorMaterial` 贴图 layer 临时对齐 `minecraft:iron`
+  - 20 件特效盔甲 item model 统一回退到原版盔甲 parent，避免缺失纹理导致紫黑方块
+  - 不改动任何盔甲特效逻辑与数值
+
 - Katana 横扫行为修复（1.21.1）
   - 新增 `mymodtest:katana` 物品标签，统一标记 5 把神器 katana
   - 对 `PlayerEntity#attack` 的横扫分支做 katana 定向阻断：移除横扫 AOE、横扫音效、横扫粒子
