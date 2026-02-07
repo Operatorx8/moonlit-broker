@@ -22,6 +22,15 @@ public final class ModTags {
                 Identifier.of(ArmorConfig.MOD_ID, "core_loot")
         );
 
+        /**
+         * 神器 katana 统一标签
+         * Tag 路径: data/mymodtest/tags/item/katana.json
+         */
+        public static final TagKey<Item> KATANA = TagKey.of(
+                RegistryKeys.ITEM,
+                Identifier.of(ArmorConfig.MOD_ID, "katana")
+        );
+
         private Items() {}
     }
 }

@@ -5,12 +5,7 @@ import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.NbtComponent;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
-import java.util.List;
 
 /**
  * 交易卷轴物品
@@ -99,15 +94,4 @@ public class TradeScrollItem extends Item {
         return new NbtCompound();
     }
 
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        super.appendTooltip(stack, context, tooltip, type);
-        
-        String grade = getGrade(stack);
-        int uses = getUses(stack);
-        
-        Formatting gradeColor = TradeConfig.GRADE_SEALED.equals(grade) ? Formatting.LIGHT_PURPLE : Formatting.GRAY;
-        tooltip.add(Text.literal("等级: " + grade).formatted(gradeColor));
-        tooltip.add(Text.literal("剩余次数: " + uses).formatted(uses > 0 ? Formatting.GREEN : Formatting.RED));
-    }
 }

@@ -4,6 +4,7 @@ import mod.test.mymodtest.armor.BootsEffectConstants;
 import mod.test.mymodtest.armor.effect.boots.BootsPlayerState;
 import mod.test.mymodtest.armor.effect.boots.BootsTickHandler;
 import mod.test.mymodtest.armor.item.ArmorItems;
+import mod.test.mymodtest.util.ModLog;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
@@ -30,7 +31,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(Entity.class)
 public class GossamerSlowMovementMixin {
-    private static final Logger LOGGER = LoggerFactory.getLogger("MoonTrace");
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModLog.MOD_TAG);
 
     @Inject(method = "slowMovement(Lnet/minecraft/block/BlockState;Lnet/minecraft/util/math/Vec3d;)V", at = @At("HEAD"), cancellable = true)
     private void boots$onSlowMovement(BlockState state, Vec3d multiplier, CallbackInfo ci) {
@@ -55,7 +56,7 @@ public class GossamerSlowMovementMixin {
         String bootId = Registries.ITEM.getId(ArmorItems.GOSSAMER_BOOTS).toString();
 
         if (bootsState.webAssistExpiresTick <= now) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=enter player={} bootId={} nowTick={} expiresTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=enter player={} bootId={} nowTick={} expiresTick={}",
                     player.getName().getString(),
                     bootId,
                     now,
@@ -77,7 +78,7 @@ public class GossamerSlowMovementMixin {
                     slowness.shouldShowIcon()
             ));
         } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=no_slowness_or_low_level player={} bootId={} nowTick={}",
+            LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=no_slowness_or_low_level player={} bootId={} nowTick={}",
                     player.getName().getString(),
                     bootId,
                     now);

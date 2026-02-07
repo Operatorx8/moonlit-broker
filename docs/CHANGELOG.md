@@ -17,6 +17,12 @@
 
 ### Changed
 
+- Katana 横扫行为修复（1.21.1）
+  - 新增 `mymodtest:katana` 物品标签，统一标记 5 把神器 katana
+  - 对 `PlayerEntity#attack` 的横扫分支做 katana 定向阻断：移除横扫 AOE、横扫音效、横扫粒子
+  - 保留剑类附魔生态与附魔系数，仅禁止 `Sweeping Edge` 对 katana 生效
+  - 即使通过 NBT/指令强行写入 Sweeping，katana 攻击也不会触发横扫
+
 - Moon Glow（月之光芒）平衡调整
   - 保留原有月光触发路径（夜晚 + 露天 + 天空光照阈值）
   - 新增光照触发路径：当月光条件不满足时，可按总光照（`max(blockLight, skyLight)`）触发 LIGHT_MARK

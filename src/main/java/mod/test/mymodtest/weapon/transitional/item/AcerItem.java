@@ -1,18 +1,12 @@
 package mod.test.mymodtest.weapon.transitional.item;
 
 import mod.test.mymodtest.weapon.transitional.TransitionalWeaponConstants;
-import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SwordItem;
 import net.minecraft.item.ToolMaterials;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Rarity;
-
-import java.util.List;
 
 /**
  * Acer - 暴击强化剑
@@ -50,10 +44,4 @@ public class AcerItem extends SwordItem {
         return TransitionalWeaponConstants.KATANA_ENCHANTABILITY;
     }
 
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.translatable("item.mymodtest.acer.effect").formatted(Formatting.GOLD));
-        tooltip.add(Text.translatable("item.mymodtest.acer.desc").formatted(Formatting.GRAY));
-        super.appendTooltip(stack, context, tooltip, type);
-    }
 }

@@ -7,6 +7,7 @@ import mod.test.mymodtest.katana.item.KatanaItems;
 import mod.test.mymodtest.registry.ModItems;
 import mod.test.mymodtest.world.MerchantSpawnerState;
 import mod.test.mymodtest.world.MerchantUnlockState;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -39,11 +40,30 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Random;
 import java.util.Optional;
 
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final Logger LOGGER = LoggerFactory.getLogger(MysteriousMerchantEntity.class);
+
+    public enum OfferBuildSource {
+        OPEN_NORMAL,
+        REFRESH_NORMAL,
+        OPEN_SECRET,
+        REFRESH_SECRET,
+        ROLLBACK_NO_CHANGE,
+        ROLLBACK_CONSUME_FAIL,
+        INTERACT_PREOPEN,
+        UNKNOWN;
+
+        public boolean isRefreshFlow() {
+            return this == REFRESH_NORMAL
+                || this == REFRESH_SECRET
+                || this == ROLLBACK_NO_CHANGE
+                || this == ROLLBACK_CONSUME_FAIL;
+        }
+    }
 
     // ========== 调试开关 ==========
     /** 发布版默认关闭；开启后启用 AI 行为调试日志 */
@@ -85,9 +105,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // Phase 4: Despawn 数据
     private long spawnTick = -1;
     private boolean isInWarningPhase = false;
+    /** P0-1: 是否已通知 SpawnerState 清除（防 discard 重入） */
+    private boolean stateClearNotified = false;
 
     // Phase 8: 解封系统交易
     private TradeOfferList katanaHiddenOffers = null;
+    private String katanaHiddenOffersCacheId = "";
     private String merchantName = "";
 
     // ========== Trade System: 隐藏交易限制 ==========
@@ -95,6 +118,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private boolean secretSold = false;
     /** 隐藏物品ID（每个商人实体唯一） */
     private String secretKatanaId = "";
+
+    // P0-A FIX: entity-level sigil seed DEPRECATED - seed is now derived per-(merchant,player)
+    // Kept only for NBT backward-compat read; never written to new saves.
+    @SuppressWarnings("unused")
+    private long sigilRollSeed_DEPRECATED = 0;
+    @SuppressWarnings("unused")
+    private boolean sigilRollInitialized_DEPRECATED = false;
 
     private static final int ELIGIBLE_TRADE_COUNT = 15;
     private static final int REFRESH_GUARANTEE_COUNT = 3;
@@ -167,6 +197,29 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                     0.02  // speed
             );
         }
+    }
+
+    // ========== P0-1: 禁用原版 despawn，确保清理 ==========
+
+    /**
+     * P0-1: 钳死原版 WanderingTrader 的 despawnDelay 计时器。
+     * 使用自定义 spawnTick-based 逻辑替代。
+     */
+    @Override
+    public void setDespawnDelay(int delay) {
+        super.setDespawnDelay(Integer.MAX_VALUE);
+    }
+
+    /**
+     * P0-1: 终极清理保险 - 不管谁调的 remove（discard/kill/unload 等），
+     * 都确保 SpawnerState 被清理。discard() 是 final，改为覆写 remove()。
+     */
+    @Override
+    public void remove(Entity.RemovalReason reason) {
+        if (!stateClearNotified && this.getEntityWorld() instanceof ServerWorld serverWorld) {
+            notifySpawnerStateClear(serverWorld, reason.name());
+        }
+        super.remove(reason);
     }
 
     /**
@@ -246,13 +299,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * @param reason 清除原因（DESPAWN / DEATH）
      */
     private void notifySpawnerStateClear(ServerWorld serverWorld, String reason) {
+        this.stateClearNotified = true;
         try {
             MerchantSpawnerState state = MerchantSpawnerState.getServerState(serverWorld);
             boolean cleared = state.clearActiveMerchantIfMatch(this.getUuid());
-            if (DEBUG_DESPAWN) {
-                LOGGER.debug("[Merchant] NOTIFY_STATE_CLEAR reason={} uuid={}... cleared={}",
-                    reason, this.getUuid().toString().substring(0, 8), cleared);
-            }
+            LOGGER.info("[MerchantSpawn] cleanup reason={} merchantUuid={} cleared={} entityId={} spawnTick={}",
+                reason, this.getUuid().toString().substring(0, 8), cleared, this.getId(), this.spawnTick);
         } catch (Exception e) {
             // 异常性日志，始终保留
             LOGGER.error("[Merchant] Failed to notify SpawnerState: {}", e.getMessage());
@@ -278,6 +330,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * 施加攻击惩罚：失明 + 反胃
      */
     private void applyAttackPunishment(PlayerEntity player) {
+        // P1-1: 创造模式不受惩罚
+        if (player.isCreative()) return;
+
         // 失明效果
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.BLINDNESS,
@@ -337,6 +392,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * 施加击杀惩罚：效果翻倍 + 不幸 + 警告消息
      */
     private void applyKillPunishment(PlayerEntity player) {
+        // P1-1: 创造模式不受惩罚
+        if (player.isCreative()) return;
+
         // 失明效果（翻倍时长）
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.BLINDNESS,
@@ -437,7 +495,19 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             // 初始化隐藏物品ID
             initSecretKatanaIdIfNeeded();
             // 重建交易列表
-            rebuildOffersForPlayer(serverPlayer);
+            rebuildOffersForPlayer(serverPlayer, OfferBuildSource.INTERACT_PREOPEN);
+            if (LOGGER.isDebugEnabled()) {
+                TradeOfferList offersSnapshot = this.getOffers();
+                boolean hasSigilOffer = false;
+                for (TradeOffer offer : offersSnapshot) {
+                    if (offer.getSellItem().getItem() == ModItems.SIGIL) {
+                        hasSigilOffer = true;
+                        break;
+                    }
+                }
+                LOGGER.debug("[MoonTrade] INTERACT_PREOPEN_REBUILD player={} merchant={} source={} offersSize={} hasSigilOffer={}",
+                    serverPlayer.getUuid(), this.getUuid(), OfferBuildSource.INTERACT_PREOPEN.name(), offersSnapshot.size(), hasSigilOffer ? 1 : 0);
+            }
         }
 
         // 默认交互（打开交易界面）
@@ -673,7 +743,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     @Override
     protected void fillRecipes() {
         TradeOfferList offers = this.getOffers();
+        int offersBefore = offers.size();
         addBaseOffers(offers);
+        LOGGER.debug("[MoonTrade] FILL_RECIPES_CALLED merchant={} offersBefore={} offersAfter={}",
+            this.getUuid(), offersBefore, offers.size());
     }
 
     private void addBaseOffers(TradeOfferList offers) {
@@ -714,10 +787,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         ));
     }
 
-    /**
-     * Rebuild normal page offers for player (public for TradeActionHandler)
-     */
-    public void rebuildOffersForPlayer(ServerPlayerEntity player) {
+    public void rebuildOffersForPlayer(ServerPlayerEntity player, OfferBuildSource source) {
         TradeOfferList offers = this.getOffers();
         offers.clear();
         addBaseOffers(offers);
@@ -735,10 +805,34 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         if (eligible && !progress.isUnlockedKatanaHidden()) {
-            progress.setRefreshSeenCount(progress.getRefreshSeenCount() + 1);
-            state.markDirty();
+            // P0-A FIX: seed derived per-(merchant,player) from per-merchant refreshSeenCount
+            // Invariant: per player isolation - same (merchant,player,refreshSeenCountForThatMerchant) always yields same seed
+            MerchantUnlockState.Progress.RefreshCountReadResult refreshRead = progress.readSigilRefreshSeen(this.getUuid());
+            int refreshForThisMerchant = refreshRead.count();
+            if (!source.isRefreshFlow()) {
+                LOGGER.debug("[MoonTrade] REFRESH_COUNT_READ playerUuid={} merchantUuid={} page=NORMAL before={} after={} source={} costApplied={} requestSource={}",
+                    player.getUuid(), this.getUuid(), refreshForThisMerchant, refreshForThisMerchant, refreshRead.source(), 0, source.name());
+            }
+            long seed = deriveSigilSeed(this.getUuid(), player.getUuid(), refreshForThisMerchant);
             offers.add(createUnsealOffer());
-            addSigilOffers(offers, progress);
+            addSigilOffers(offers, seed, refreshForThisMerchant);
+
+            // P0-A FIX: compute offers hash for cache HIT/MISS detection
+            int offersHash = computeOffersHash(offers);
+            int lastHash = progress.getLastSigilOffersHash(this.getUuid());
+            String cacheResult = (lastHash == offersHash && lastHash != 0) ? "HIT" : "MISS";
+            if (lastHash != offersHash) {
+                progress.setLastSigilOffersHash(this.getUuid(), offersHash);
+                state.markDirty();
+            }
+
+            if ("MISS".equals(cacheResult)) {
+                LOGGER.info("[MoonTrade] OPEN_NORMAL_SIGIL player={} merchant={} cache={} offersHash={} seed={} refreshSeenCount={} source={}",
+                    player.getUuid(), this.getUuid(), cacheResult, Integer.toHexString(offersHash), seed, refreshForThisMerchant, source.name());
+            } else {
+                LOGGER.debug("[MoonTrade] OPEN_NORMAL_SIGIL player={} merchant={} cache={} offersHash={} seed={} refreshSeenCount={} source={}",
+                    player.getUuid(), this.getUuid(), cacheResult, Integer.toHexString(offersHash), seed, refreshForThisMerchant, source.name());
+            }
         }
         // AUDIT FIX: Hidden katana offers removed from normal page rebuild.
         // Hidden offers must ONLY be generated via rebuildSecretOffersForPlayer().
@@ -765,6 +859,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             LOGGER.info("[MoonTrade] SECRET_ALREADY_SOLD merchant={} player={}", 
                 this.getUuid().toString().substring(0, 8), player.getName().getString());
         }
+
+        // P0-C FIX: Structured HIDDEN_BUILD log
+        String resolvedItem = "EMPTY";
+        if (!offers.isEmpty()) {
+            resolvedItem = Registries.ITEM.getId(offers.get(0).getSellItem().getItem()).toString();
+        }
+        String skip = this.secretSold ? "sold" : (offers.isEmpty() ? "empty_or_resolve_failed" : "none");
+        LOGGER.info("[MoonTrade] HIDDEN_BUILD player={} merchant={} secretSold={} katanaId={} resolved={} offersCount={} skip={}",
+            player.getUuid(), this.getUuid(), this.secretSold ? 1 : 0,
+            this.secretKatanaId, resolvedItem, offers.size(), skip);
     }
 
     private TradeOffer createSealedLedgerOffer() {
@@ -788,7 +892,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         );
     }
 
-    private void addSigilOffers(TradeOfferList offers, MerchantUnlockState.Progress progress) {
+    private void addSigilOffers(TradeOfferList offers, long seed, int refreshSeenCount) {
+        Random rollRng = new Random(seed);
         ArrayList<SigilOfferEntry> pool = createSigilOfferPool();
         ArrayList<SigilOfferEntry> aList = new ArrayList<>();
         ArrayList<SigilOfferEntry> bList = new ArrayList<>();
@@ -802,8 +907,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             }
         }
 
-        int targetCount = 3 + this.random.nextInt(3);
-        boolean guaranteeB1 = progress.getRefreshSeenCount() >= REFRESH_GUARANTEE_COUNT;
+        int targetCount = 3 + rollRng.nextInt(3);
+        boolean guaranteeB1 = refreshSeenCount >= REFRESH_GUARANTEE_COUNT;
         int maxA = guaranteeB1 ? 0 : 1;
 
         ArrayList<SigilOfferEntry> chosen = new ArrayList<>();
@@ -814,14 +919,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 chosen.add(b1);
             }
         } else {
-            SigilOfferEntry firstBc = extractRandomFrom(bList, cList);
+            SigilOfferEntry firstBc = extractRandomFrom(bList, cList, rollRng);
             if (firstBc != null) {
                 chosen.add(firstBc);
             }
         }
 
-        if (maxA > 0 && !aList.isEmpty() && this.random.nextBoolean() && chosen.size() < targetCount) {
-            chosen.add(pickRandomEntry(aList));
+        if (maxA > 0 && !aList.isEmpty() && rollRng.nextBoolean() && chosen.size() < targetCount) {
+            chosen.add(pickRandomEntry(aList, rollRng));
         }
 
         ArrayList<SigilOfferEntry> remaining = new ArrayList<>();
@@ -830,7 +935,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (maxA > 0) {
             remaining.addAll(aList);
         }
-        Collections.shuffle(remaining, new Random(this.random.nextLong()));
+        Collections.shuffle(remaining, new Random(rollRng.nextLong()));
 
         for (SigilOfferEntry entry : remaining) {
             if (chosen.size() >= targetCount) {
@@ -845,9 +950,33 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     private void addKatanaHiddenOffers(TradeOfferList offers) {
-        if (katanaHiddenOffers == null) {
-            katanaHiddenOffers = createKatanaHiddenOffers();
+        // P0-3: 确保 ID 已初始化
+        initSecretKatanaIdIfNeeded();
+
+        // secretKatanaId changed => invalidate cached offers to avoid stale output.
+        if (katanaHiddenOffers != null && !this.secretKatanaId.equals(katanaHiddenOffersCacheId)) {
+            katanaHiddenOffers = null;
+            katanaHiddenOffersCacheId = "";
         }
+
+        // P0-3: 仅在 ID 有效时生成并缓存；无效 ID 不缓存（允许后续重试）
+        if (katanaHiddenOffers == null) {
+            if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
+                LOGGER.warn("[MoonTrade] KATANA_CACHE_SKIP player={} merchant={} secretKatanaId={} reason=id_still_empty",
+                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
+                return;
+            }
+            katanaHiddenOffers = createKatanaHiddenOffers();
+            // 如果 resolve 失败返回空列表，不缓存（允许下次重试）
+            if (katanaHiddenOffers.isEmpty()) {
+                LOGGER.warn("[MoonTrade] KATANA_CACHE_SKIP player={} merchant={} secretKatanaId={} reason=resolve_failed",
+                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
+                katanaHiddenOffers = null;
+                return;
+            }
+            katanaHiddenOffersCacheId = this.secretKatanaId;
+        }
+
         for (TradeOffer offer : katanaHiddenOffers) {
             offers.add(offer);
         }
@@ -873,33 +1002,81 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     /**
-     * AUDIT FIX: Resolve secretKatanaId to actual item.
-     * Fail-safe: if id unknown/invalid, return empty stack and log warning.
+     * P0-C FIX: Whitelist of valid katana IDs -> Item mappings.
+     * Only IDs in this map can be resolved to actual items.
+     * Invariant: id must be live - unknown/invalid IDs produce EMPTY.
+     */
+    private static final Map<String, net.minecraft.item.Item> KATANA_WHITELIST = Map.of(
+        "moon_glow_katana", KatanaItems.MOON_GLOW_KATANA,
+        "regret_blade", KatanaItems.REGRET_BLADE,
+        "eclipse_blade", KatanaItems.ECLIPSE_BLADE,
+        "oblivion_edge", KatanaItems.OBLIVION_EDGE,
+        "nmap_katana", KatanaItems.NMAP_KATANA
+    );
+
+    /**
+     * P0-C FIX: Resolve secretKatanaId to actual item via whitelist.
+     * Fail-safe: if id unknown/invalid, return EMPTY and log warning.
      */
     private ItemStack resolveKatanaStack() {
         // Validate secretKatanaId is initialized
         if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
-            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} reason=empty_id",
-                this.getUuid().toString().substring(0, 8));
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL player={} merchant={} secretKatanaId={} reason=empty_id",
+                getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
             return ItemStack.EMPTY;
         }
-        
-        // Currently only one katana type supported; validate prefix
-        if (!this.secretKatanaId.startsWith("katana_")) {
-            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} secretKatanaId={} reason=invalid_prefix",
-                this.getUuid().toString().substring(0, 8), this.secretKatanaId);
+
+        // P0-C: Strip "katana_" prefix + UUID suffix to get the base katana type
+        // secretKatanaId format: "katana_<uuid8>" - we need to map this to actual katana
+        // Since the ID doesn't encode which katana type, derive from merchant UUID deterministically
+        String katanaType = resolveKatanaType();
+        if (katanaType == null) {
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL player={} merchant={} secretKatanaId={} reason=unknown_or_legacy_id",
+                getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
             return ItemStack.EMPTY;
         }
-        
-        // Resolve to actual item - currently hardcoded to MOON_GLOW_KATANA
-        // Future: could use registry lookup based on secretKatanaId suffix
-        try {
-            return new ItemStack(KatanaItems.MOON_GLOW_KATANA, 1);
-        } catch (Exception e) {
-            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL merchant={} secretKatanaId={} error={}",
-                this.getUuid().toString().substring(0, 8), this.secretKatanaId, e.getMessage());
+
+        net.minecraft.item.Item item = KATANA_WHITELIST.get(katanaType);
+        if (item == null) {
+            LOGGER.warn("[MoonTrade] KATANA_RESOLVE_FAIL player={} merchant={} secretKatanaId={} katanaType={} reason=not_in_whitelist",
+                getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId, katanaType);
             return ItemStack.EMPTY;
         }
+
+        return new ItemStack(item, 1);
+    }
+
+    /**
+     * P0-C: Derive which katana type this merchant offers, based on merchant UUID.
+     * Deterministic: same merchant always offers the same katana type.
+     */
+    private String resolveKatanaType() {
+        if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
+            return null;
+        }
+        // New format: katana:<type>:<merchant8>
+        if (this.secretKatanaId.startsWith("katana:")) {
+            String[] parts = this.secretKatanaId.split(":");
+            if (parts.length >= 2) {
+                String type = parts[1];
+                if (KATANA_WHITELIST.containsKey(type)) {
+                    return type;
+                }
+            }
+            return null;
+        }
+        // Compatible format: katana_<type>
+        if (this.secretKatanaId.startsWith("katana_")) {
+            // Legacy format "katana_<uuid8>" must never be parsed as type name.
+            if (isLegacyKatanaId(this.secretKatanaId)) {
+                return pickKatanaTypeForMerchant();
+            }
+            String maybeType = this.secretKatanaId.substring("katana_".length());
+            if (KATANA_WHITELIST.containsKey(maybeType)) {
+                return maybeType;
+            }
+        }
+        return null;
     }
 
     private ArrayList<SigilOfferEntry> createSigilOfferPool() {
@@ -972,22 +1149,75 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         return null;
     }
 
-    private SigilOfferEntry extractRandomFrom(ArrayList<SigilOfferEntry> first, ArrayList<SigilOfferEntry> second) {
+    private SigilOfferEntry extractRandomFrom(ArrayList<SigilOfferEntry> first, ArrayList<SigilOfferEntry> second, Random rng) {
         ArrayList<SigilOfferEntry> combined = new ArrayList<>();
         combined.addAll(first);
         combined.addAll(second);
         if (combined.isEmpty()) {
             return null;
         }
-        SigilOfferEntry pick = combined.get(this.random.nextInt(combined.size()));
+        SigilOfferEntry pick = combined.get(rng.nextInt(combined.size()));
         first.remove(pick);
         second.remove(pick);
         return pick;
     }
 
-    private SigilOfferEntry pickRandomEntry(ArrayList<SigilOfferEntry> list) {
-        SigilOfferEntry entry = list.remove(this.random.nextInt(list.size()));
+    private SigilOfferEntry pickRandomEntry(ArrayList<SigilOfferEntry> list, Random rng) {
+        SigilOfferEntry entry = list.remove(rng.nextInt(list.size()));
         return entry;
+    }
+
+    /**
+     * P0-A FIX: Derive sigil seed deterministically from (merchant, player, refreshSeenCount).
+     * Invariant: same inputs always produce same seed -> per player isolation.
+     */
+    private static long deriveSigilSeed(java.util.UUID merchantUuid, java.util.UUID playerUuid, int refreshSeenCount) {
+        if (merchantUuid == null || playerUuid == null) {
+            LOGGER.warn("[MoonTrade] SIGIL_SEED_FALLBACK merchant={} player={} refreshSeenCount={} reason=null_uuid",
+                merchantUuid, playerUuid, refreshSeenCount);
+            long safeMerchant = merchantUuid == null ? 0L : merchantUuid.getLeastSignificantBits();
+            long safePlayer = playerUuid == null ? 0L : playerUuid.getMostSignificantBits();
+            return (safeMerchant ^ safePlayer) * 31L + refreshSeenCount * 6364136223846793005L;
+        }
+        long base = merchantUuid.getLeastSignificantBits() ^ playerUuid.getMostSignificantBits();
+        // Mix in refreshSeenCount to change seed on each refresh
+        return base * 31L + refreshSeenCount * 6364136223846793005L;
+    }
+
+    /**
+     * P0-A/P0-B FIX: Compute a fingerprint hash of the current offers list.
+     * Used for cache HIT/MISS detection and refresh-change verification.
+     */
+    private static int computeOffersHash(TradeOfferList offers) {
+        int hash = 1;
+        for (TradeOffer offer : offers) {
+            // Include both buy slots, output slot and key trade metadata.
+            ItemStack first = offer.getOriginalFirstBuyItem();
+            ItemStack sell = offer.getSellItem();
+            ItemStack second = offer.getSecondBuyItem().map(TradedItem::itemStack).orElse(ItemStack.EMPTY);
+            hash = 31 * hash + hashItemStack(first);
+            hash = 31 * hash + hashItemStack(second);
+            hash = 31 * hash + hashItemStack(sell);
+            hash = 31 * hash + offer.getUses();
+            hash = 31 * hash + offer.getMaxUses();
+            hash = 31 * hash + offer.getMerchantExperience();
+        }
+        return hash;
+    }
+
+    public int snapshotOffersHash() {
+        return computeOffersHash(this.getOffers());
+    }
+
+    private static int hashItemStack(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return 0;
+        }
+        int hash = 1;
+        hash = 31 * hash + Registries.ITEM.getId(stack.getItem()).hashCode();
+        hash = 31 * hash + stack.getCount();
+        hash = 31 * hash + stack.getComponents().hashCode();
+        return hash;
     }
 
     private boolean isUnsealOffer(TradeOffer offer) {
@@ -1053,6 +1283,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // Trade System NBT 键
     private static final String NBT_SECRET_SOLD = "SecretSold";
     private static final String NBT_SECRET_KATANA_ID = "SecretKatanaId";
+    // P0-2: Sigil seed NBT 键
+    private static final String NBT_SIGIL_ROLL_SEED = "SigilRollSeed";
+    private static final String NBT_SIGIL_ROLL_INIT = "SigilRollInitialized";
 
     @Override
     public void writeCustomDataToNbt(NbtCompound nbt) {
@@ -1072,6 +1305,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putBoolean(NBT_SECRET_SOLD, this.secretSold);
         nbt.putString(NBT_SECRET_KATANA_ID, this.secretKatanaId);
 
+        // P0-A FIX: sigil seed no longer stored on entity (deprecated, write zeros for compat)
+        nbt.putLong(NBT_SIGIL_ROLL_SEED, 0L);
+        nbt.putBoolean(NBT_SIGIL_ROLL_INIT, false);
+
         if (DEBUG_DESPAWN) {
             LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
                 spawnTick, isInWarningPhase, hasEverTraded, secretSold);
@@ -1085,9 +1322,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 读取 hasEverTraded
         this.hasEverTraded = nbt.getBoolean(NBT_HAS_EVER_TRADED);
 
-        // Phase 4: 读取 spawnTick
-        this.spawnTick = nbt.getLong(NBT_SPAWN_TICK);
-        if (this.spawnTick == 0) this.spawnTick = -1;  // 兼容旧数据
+        // P1-2: Phase 4: 读取 spawnTick（修复 spawnTick==0 边界）
+        if (nbt.contains(NBT_SPAWN_TICK)) {
+            this.spawnTick = nbt.getLong(NBT_SPAWN_TICK);
+        } else {
+            this.spawnTick = -1;  // 兼容旧数据：无此 key 视为未初始化
+        }
         this.isInWarningPhase = nbt.getBoolean(NBT_IN_WARNING_PHASE);
 
         // Phase 6: 读取商人名称
@@ -1100,6 +1340,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // Trade System: 读取隐藏交易状态
         this.secretSold = nbt.getBoolean(NBT_SECRET_SOLD);
         this.secretKatanaId = nbt.getString(NBT_SECRET_KATANA_ID);
+
+        // P0-A FIX: sigil seed no longer stored on entity; ignore legacy NBT values
+        // (old saves may have SigilRollSeed/SigilRollInitialized - just skip them)
 
         if (DEBUG_DESPAWN) {
             LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
@@ -1130,7 +1373,17 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      */
     public void initSecretKatanaIdIfNeeded() {
         if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
-            this.secretKatanaId = "katana_" + this.getUuid().toString().substring(0, 8);
+            String type = pickKatanaTypeForMerchant();
+            this.secretKatanaId = "katana:" + type + ":" + this.getUuid().toString().substring(0, 8);
+            return;
+        }
+        // Migrate legacy id "katana_<uuid8>" -> "katana:<type>:<uuid8>"
+        if (isLegacyKatanaId(this.secretKatanaId)) {
+            String type = pickKatanaTypeForMerchant();
+            String suffix = this.secretKatanaId.substring("katana_".length());
+            this.secretKatanaId = "katana:" + type + ":" + suffix;
+            LOGGER.warn("[MoonTrade] KATANA_ID_MIGRATE merchant={} legacyId={} newId={}",
+                this.getUuid(), "katana_" + suffix, this.secretKatanaId);
         }
     }
 
@@ -1146,5 +1399,38 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         LOGGER.info("[MoonTrade] SECRET_SOLD merchant={} katanaId={}",
             this.getUuid().toString().substring(0, 8), this.secretKatanaId);
         return true;
+    }
+
+    /**
+     * P0-A FIX: refreshSigilOffers is now a no-op on entity level.
+     * Seed is derived from (merchantUuid, playerUuid, refreshSeenCount).
+     * The caller (TradeActionHandler) increments refreshSeenCount which changes the derived seed.
+     * Kept as public method to avoid breaking TradeActionHandler call site.
+     */
+    public void refreshSigilOffers() {
+        // P0-A: No entity-level state to update; seed derived per-(merchant,player,refreshSeenCount)
+        LOGGER.debug("[MoonTrade] SIGIL_REFRESH player={} merchant={} note=seed_now_derived_per_player",
+            getCurrentPlayerForLog(), this.getUuid());
+    }
+
+    private String pickKatanaTypeForMerchant() {
+        String[] katanaTypes = KATANA_WHITELIST.keySet().toArray(new String[0]);
+        java.util.Arrays.sort(katanaTypes);
+        int index = Math.floorMod((int) this.getUuid().getMostSignificantBits(), katanaTypes.length);
+        return katanaTypes[index];
+    }
+
+    private static boolean isLegacyKatanaId(String id) {
+        if (id == null || !id.startsWith("katana_")) {
+            return false;
+        }
+        String suffix = id.substring("katana_".length());
+        return suffix.length() == 8 && suffix.chars().allMatch(ch ->
+            (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'));
+    }
+
+    private String getCurrentPlayerForLog() {
+        PlayerEntity customer = this.getCustomer();
+        return customer == null ? "none" : customer.getUuid().toString();
     }
 }

@@ -6,12 +6,7 @@ import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SwordItem;
 import net.minecraft.item.ToolMaterials;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Rarity;
-
-import java.util.List;
 
 /**
  * 窃念之黯 - 能窃取思维、翻转因果的诅咒之刃
@@ -43,36 +38,6 @@ public class OblivionEdgeItem extends SwordItem {
     @Override
     public boolean canRepair(ItemStack stack, ItemStack ingredient) {
         return false;
-    }
-
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.empty());
-
-        // 特效名称 - 深紫色
-        tooltip.add(Text.translatable("item.mymodtest.oblivion_edge.effect_name")
-            .formatted(Formatting.DARK_PURPLE, Formatting.BOLD));
-
-        // ReadWrite 说明
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.oblivion_edge.effect_readwrite"))
-            .formatted(Formatting.GRAY));
-
-        // 倒因噬果说明
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.oblivion_edge.effect_causality"))
-            .formatted(Formatting.RED));
-
-        // 护甲穿透
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.oblivion_edge.effect_penetration"))
-            .formatted(Formatting.GOLD));
-
-        // 风味文字
-        tooltip.add(Text.empty());
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.oblivion_edge.effect_lore"))
-            .formatted(Formatting.DARK_GRAY, Formatting.ITALIC));
     }
 
     @Override

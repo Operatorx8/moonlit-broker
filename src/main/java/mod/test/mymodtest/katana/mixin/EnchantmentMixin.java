@@ -1,6 +1,6 @@
 package mod.test.mymodtest.katana.mixin;
 
-import mod.test.mymodtest.katana.item.KatanaItems;
+import mod.test.mymodtest.registry.ModTags;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.ItemStack;
@@ -31,7 +31,7 @@ public class EnchantmentMixin {
     }
 
     private boolean shouldBlockForKatana(ItemStack stack) {
-        if (!KatanaItems.isKatana(stack)) {
+        if (!stack.isIn(ModTags.Items.KATANA)) {
             return false;
         }
         @SuppressWarnings("unchecked")

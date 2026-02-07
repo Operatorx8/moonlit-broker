@@ -5,6 +5,7 @@ import mod.test.mymodtest.armor.effect.VoidDevourerHandler;
 import mod.test.mymodtest.armor.effect.boots.BootsPlayerState;
 import mod.test.mymodtest.armor.effect.boots.BootsTickHandler;
 import mod.test.mymodtest.armor.item.ArmorItems;
+import mod.test.mymodtest.util.ModLog;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
@@ -71,8 +72,8 @@ public class PlayerAttackMixin {
         if (bootsState.marchActive
                 && player.getEquippedStack(EquipmentSlot.FEET).getItem() == ArmorItems.MARCHING_BOOTS) {
             long exitCdUntil = currentTick + mod.test.mymodtest.armor.BootsEffectConstants.MARCH_CD_TICKS;
-            org.slf4j.LoggerFactory.getLogger("MoonTrace").info(
-                    "[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
+            org.slf4j.LoggerFactory.getLogger(ModLog.MOD_TAG).info(
+                    ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
                     player.getName().getString(),
                     net.minecraft.registry.Registries.ITEM.getId(ArmorItems.MARCHING_BOOTS),
                     currentTick,

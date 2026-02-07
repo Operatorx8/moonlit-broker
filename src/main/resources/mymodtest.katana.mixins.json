@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "EnchantmentMixin",
-    "LivingEntityMixin"
+    "LivingEntityMixin",
+    "PlayerEntitySweepMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -2,6 +2,7 @@ package mod.test.mymodtest.armor.effect.boots;
 
 import mod.test.mymodtest.armor.BootsEffectConstants;
 import mod.test.mymodtest.armor.item.ArmorItems;
+import mod.test.mymodtest.util.ModLog;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -27,7 +28,7 @@ import java.util.UUID;
  * 每 tick 遍历所有在线玩家，每 20t 执行一次靴子扫描
  */
 public class BootsTickHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger("MoonTrace");
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModLog.MOD_TAG);
 
     /** per-player 状态 */
     private static final HashMap<UUID, BootsPlayerState> STATE_MAP = new HashMap<>();
@@ -122,7 +123,7 @@ public class BootsTickHandler {
 
     private static void tickUntraceable(ServerPlayerEntity player, BootsPlayerState state, long now) {
         if (state.invisExpiresTick > 0 && now >= state.invisExpiresTick) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={}",
                     player.getName().getString(),
                     Registries.ITEM.getId(ArmorItems.UNTRACEABLE_TREADS_BOOTS),
                     now,
@@ -147,14 +148,14 @@ public class BootsTickHandler {
 
             state.invisExpiresTick = now + BootsEffectConstants.UNTRACEABLE_INVIS_TICKS;
             state.untraceableCdReadyTick = now + BootsEffectConstants.UNTRACEABLE_CD_TICKS;
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
                     player.getName().getString(),
                     Registries.ITEM.getId(ArmorItems.UNTRACEABLE_TREADS_BOOTS),
                     now,
                     state.invisExpiresTick,
                     state.untraceableCdReadyTick);
         } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=recent_hit_or_hurt_or_cd player={} bootId={} nowTick={} cdUntil={} lastHitTick={} lastHurtTick={}",
+            LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=recent_hit_or_hurt_or_cd player={} bootId={} nowTick={} cdUntil={} lastHitTick={} lastHurtTick={}",
                     player.getName().getString(),
                     Registries.ITEM.getId(ArmorItems.UNTRACEABLE_TREADS_BOOTS),
                     now,
@@ -172,7 +173,7 @@ public class BootsTickHandler {
         // 仅主世界
         if (world.getRegistryKey() != World.OVERWORLD) {
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=not_overworld player={} bootId={} nowTick={}",
+                LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=not_overworld player={} bootId={} nowTick={}",
                         player.getName().getString(), bootId, now);
             }
             return;
@@ -183,7 +184,7 @@ public class BootsTickHandler {
         // 必须露天
         if (!world.isSkyVisible(pos)) {
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=no_sky_visible player={} bootId={} nowTick={}",
+                LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=no_sky_visible player={} bootId={} nowTick={}",
                         player.getName().getString(), bootId, now);
             }
             return;
@@ -210,11 +211,11 @@ public class BootsTickHandler {
 
         if (!condition) {
             if (state.jumpExpiresTick > 0 && now >= state.jumpExpiresTick) {
-                LOGGER.info("[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={}",
+                LOGGER.info(ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={}",
                         player.getName().getString(), bootId, now, state.jumpExpiresTick);
                 state.jumpExpiresTick = 0;
             } else if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=weather_or_night_required player={} bootId={} nowTick={}",
+                LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=weather_or_night_required player={} bootId={} nowTick={}",
                         player.getName().getString(), bootId, now);
             }
             return;
@@ -222,7 +223,7 @@ public class BootsTickHandler {
 
         // 给予 Jump Boost
         if (now >= state.jumpExpiresTick) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=enter player={} bootId={} nowTick={} expiresTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=enter player={} bootId={} nowTick={} expiresTick={}",
                     player.getName().getString(), bootId, now, now + BootsEffectConstants.BOUNDARY_REFRESH_TICKS);
         }
         player.addStatusEffect(new StatusEffectInstance(
@@ -247,13 +248,13 @@ public class BootsTickHandler {
         boolean prevActive = state.ghostStateA_active;
         state.ghostStateA_active = !inCombat;
         if (state.ghostStateA_active != prevActive) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action={} player={} bootId={} nowTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action={} player={} bootId={} nowTick={}",
                     state.ghostStateA_active ? "enter" : "exit",
                     player.getName().getString(),
                     bootId,
                     now);
         } else if (inCombat && LOGGER.isDebugEnabled()) {
-            LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=in_combat player={} bootId={} nowTick={} lastHitTick={}",
+            LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=in_combat player={} bootId={} nowTick={} lastHitTick={}",
                     player.getName().getString(), bootId, now, state.lastHitLivingTick);
         }
 
@@ -262,14 +263,14 @@ public class BootsTickHandler {
                 && now >= state.ghostBurstCdReadyTick) {
             state.ghostBurstExpiresTick = now + BootsEffectConstants.GHOST_BURST_TICKS;
             state.ghostBurstCdReadyTick = now + BootsEffectConstants.GHOST_BURST_CD_TICKS;
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
                     player.getName().getString(),
                     bootId,
                     now,
                     state.ghostBurstExpiresTick,
                     state.ghostBurstCdReadyTick);
         } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=hit_window_or_cd player={} bootId={} nowTick={} hitCount={} cdUntil={}",
+            LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=hit_window_or_cd player={} bootId={} nowTick={} hitCount={} cdUntil={}",
                     player.getName().getString(),
                     bootId,
                     now,
@@ -278,7 +279,7 @@ public class BootsTickHandler {
         }
 
         if (state.ghostBurstExpiresTick > 0 && now >= state.ghostBurstExpiresTick) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={}",
                     player.getName().getString(),
                     bootId,
                     now,
@@ -302,7 +303,7 @@ public class BootsTickHandler {
 
                 state.marchActive = true;
                 state.marchStartTick = now;
-                LOGGER.info("[MoonTrace|Armor|BOOT] action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
+                LOGGER.info(ModLog.armorBootPrefix() + " action=enter player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
                         player.getName().getString(),
                         bootId,
                         now,
@@ -318,7 +319,7 @@ public class BootsTickHandler {
                 ));
                 state.speedExpiresTick = now + BootsEffectConstants.BOUNDARY_REFRESH_TICKS;
             } else if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[MoonTrace|Armor|BOOT] action=blocked reason=recent_hit_or_hurt_or_cd player={} bootId={} nowTick={} lastHitTick={} lastHurtTick={} cdUntil={}",
+                LOGGER.debug(ModLog.armorBootPrefix() + " action=blocked reason=recent_hit_or_hurt_or_cd player={} bootId={} nowTick={} lastHitTick={} lastHurtTick={} cdUntil={}",
                         player.getName().getString(),
                         bootId,
                         now,
@@ -336,7 +337,7 @@ public class BootsTickHandler {
 
             if (!stillValid || expired) {
                 // 退出急行
-                LOGGER.info("[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
+                LOGGER.info(ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={} cdUntil={}",
                         player.getName().getString(),
                         bootId,
                         now,
@@ -367,7 +368,7 @@ public class BootsTickHandler {
     private static void tickGossamerBoots(ServerPlayerEntity player, BootsPlayerState state, long now, String bootId) {
         // 禁用扫描路线：仅由 slowMovement mixin 触发进入
         if (state.webAssistExpiresTick > 0 && now >= state.webAssistExpiresTick) {
-            LOGGER.info("[MoonTrace|Armor|BOOT] action=exit player={} bootId={} nowTick={} expiresTick={}",
+            LOGGER.info(ModLog.armorBootPrefix() + " action=exit player={} bootId={} nowTick={} expiresTick={}",
                     player.getName().getString(),
                     bootId,
                     now,

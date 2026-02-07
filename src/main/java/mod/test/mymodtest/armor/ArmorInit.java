@@ -12,6 +12,7 @@ import mod.test.mymodtest.armor.effect.WindbreakerHandler;
 import mod.test.mymodtest.armor.effect.boots.BootsTickHandler;
 import mod.test.mymodtest.armor.item.ArmorItems;
 import mod.test.mymodtest.armor.util.CooldownManager;
+import mod.test.mymodtest.util.ModLog;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -25,13 +26,13 @@ import org.slf4j.LoggerFactory;
  * 负责注册所有盔甲物品、效果处理器和 tick 事件
  */
 public class ArmorInit {
-    private static final Logger LOGGER = LoggerFactory.getLogger("MoonTrace");
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModLog.MOD_TAG);
 
     /** tick 计数器，用于低频清理 */
     private static long tickCounter = 0;
 
     public static void init() {
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=init_start");
+        LOGGER.info(ModLog.armorBootPrefix() + " action=init_start");
 
         // 注册盔甲物品
         ArmorItems.register();
@@ -117,6 +118,6 @@ public class ArmorInit {
             }
         });
 
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=init_complete result=OK debug={}", ArmorConfig.DEBUG);
+        LOGGER.info(ModLog.armorBootPrefix() + " action=init_complete result=OK debug={}", ArmorConfig.DEBUG);
     }
 }

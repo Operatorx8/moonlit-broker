@@ -2,6 +2,7 @@ package mod.test.mymodtest.armor.item;
 
 import mod.test.mymodtest.armor.ArmorConfig;
 import mod.test.mymodtest.armor.BootsEffectConstants;
+import mod.test.mymodtest.util.ModLog;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
@@ -22,7 +23,7 @@ public final class ArmorItems {
     private ArmorItems() {}
 
     public static final String MOD_ID = "mymodtest";
-    private static final Logger LOGGER = LoggerFactory.getLogger("MoonTrace");
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModLog.MOD_TAG);
 
     // ==================== 头盔物品 ====================
 
@@ -109,7 +110,7 @@ public final class ArmorItems {
                 BootsEffectConstants.GOSSAMER_BOOTS_DURABILITY,
                 BootsEffectConstants.GOSSAMER_BOOTS_PROTECTION);
 
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=register result=OK helmets=5 chestplates=5 leggings=5 boots=5");
+        LOGGER.info(ModLog.armorBootPrefix() + " action=register result=OK helmets=5 chestplates=5 leggings=5 boots=5");
     }
 
     /**
@@ -128,7 +129,7 @@ public final class ArmorItems {
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), helmet);
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=register result=OK item={}", name);
+        LOGGER.info(ModLog.armorBootPrefix() + " action=register result=OK item={}", name);
 
         return helmet;
     }
@@ -150,7 +151,7 @@ public final class ArmorItems {
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), chestplate);
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=register result=OK item={}", name);
+        LOGGER.info(ModLog.armorBootPrefix() + " action=register result=OK item={}", name);
 
         return chestplate;
     }
@@ -172,7 +173,7 @@ public final class ArmorItems {
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), leggings);
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=register result=OK item={}", name);
+        LOGGER.info(ModLog.armorBootPrefix() + " action=register result=OK item={}", name);
 
         return leggings;
     }
@@ -196,7 +197,7 @@ public final class ArmorItems {
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), boots);
-        LOGGER.info("[MoonTrace|Armor|BOOT] action=register result=OK item={}", name);
+        LOGGER.info(ModLog.armorBootPrefix() + " action=register result=OK item={}", name);
 
         return boots;
     }

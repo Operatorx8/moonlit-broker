@@ -5,12 +5,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SwordItem;
 import net.minecraft.item.ToolMaterials;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Rarity;
-
-import java.util.List;
 
 /**
  * Fatalis - 重击剑
@@ -49,10 +44,4 @@ public class FatalisItem extends SwordItem {
         return TransitionalWeaponConstants.KATANA_ENCHANTABILITY;
     }
 
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.translatable("item.mymodtest.fatalis.effect").formatted(Formatting.DARK_RED));
-        tooltip.add(Text.translatable("item.mymodtest.fatalis.desc").formatted(Formatting.GRAY));
-        super.appendTooltip(stack, context, tooltip, type);
-    }
 }

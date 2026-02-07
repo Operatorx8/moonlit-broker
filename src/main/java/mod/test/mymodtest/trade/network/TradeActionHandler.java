@@ -7,6 +7,7 @@ import mod.test.mymodtest.trade.TradeAction;
 import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.trade.item.TradeScrollItem;
 import mod.test.mymodtest.trade.loot.BountyHandler;
+import mod.test.mymodtest.world.MerchantUnlockState;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
@@ -179,7 +180,7 @@ public class TradeActionHandler {
         }
         
         // 2 FIX: Actually rebuild offers
-        merchant.rebuildOffersForPlayer(player);
+        merchant.rebuildOffersForPlayer(player, MysteriousMerchantEntity.OfferBuildSource.OPEN_NORMAL);
         
         // Now consume scroll uses AFTER successful rebuild
         TradeScrollItem.tryConsume(scroll, TradeConfig.COST_OPEN_NORMAL);
@@ -202,8 +203,8 @@ public class TradeActionHandler {
         
         if (!result.passed()) {
             player.sendMessage(Text.literal("无法进入隐藏交易: " + result.reason()).formatted(Formatting.RED), false);
-            LOGGER.info("[MoonTrade] SWITCH_SECRET_DENIED player={} reason={}", 
-                player.getName().getString(), result.reason());
+            LOGGER.info("[MoonTrade] SWITCH_SECRET player={} merchant={} secretSold={} blocked=1 allowed=0 reason={} cost={}",
+                player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, result.reason(), 0);
             return;
         }
         
@@ -213,6 +214,8 @@ public class TradeActionHandler {
         // Check scroll has enough uses BEFORE rebuilding
         if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_SWITCH_SECRET) {
             player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
+            LOGGER.info("[MoonTrade] SWITCH_SECRET player={} merchant={} secretSold={} blocked=1 allowed=0 reason=scroll_uses_low cost={}",
+                player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, 0);
             return;
         }
         
@@ -228,8 +231,8 @@ public class TradeActionHandler {
         // Sync offers to client
         merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
         
-        LOGGER.info("[MoonTrade] SWITCH_SECRET_SUCCESS player={} cost={}", 
-            player.getName().getString(), TradeConfig.COST_SWITCH_SECRET);
+        LOGGER.info("[MoonTrade] SWITCH_SECRET player={} merchant={} secretSold={} blocked=0 allowed=1 reason=OK cost={}",
+            player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, TradeConfig.COST_SWITCH_SECRET);
         
         player.sendMessage(Text.literal("已进入隐藏交易页").formatted(Formatting.LIGHT_PURPLE), false);
     }
@@ -248,24 +251,92 @@ public class TradeActionHandler {
             return;
         }
         
-        // 2 FIX: Actually refresh offers based on current page
+        // P0-B FIX: Capture beforeHash to detect "refresh without change"
+        int beforeHash = merchant.snapshotOffersHash();
+        
+        // P0-2: Refresh offers based on current page
         boolean onSecret = isOnSecretPage(player, merchant);
+        String page = onSecret ? "SECRET" : "NORMAL";
+        int refreshSeenBefore = -1;
+        int refreshSeenAfter = -1;
+        String refreshReadSource = "n/a";
+        MerchantUnlockState state = null;
+        MerchantUnlockState.Progress progress = null;
+        java.util.UUID merchantUuid = merchant.getUuid();
+        if (merchantUuid == null) {
+            LOGGER.warn("[MoonTrade] REFRESH_COUNT_INVALID_UUID playerUuid={} merchantUuid=null page={} source=handler_precheck costApplied=0",
+                player.getUuid(), page);
+            player.sendMessage(Text.literal("刷新失败：商人标识异常").formatted(Formatting.RED), true);
+            return;
+        }
         if (onSecret) {
             merchant.rebuildSecretOffersForPlayer(player);
         } else {
-            merchant.rebuildOffersForPlayer(player);
+            // P0-A: refreshSigilOffers is now a no-op on entity; seed changes via refreshSeenCount
+            merchant.refreshSigilOffers();
+            if (player.getServerWorld() != null) {
+                state = MerchantUnlockState.getServerState(player.getServerWorld());
+                progress = state.getOrCreateProgress(player.getUuid());
+                MerchantUnlockState.Progress.RefreshCountReadResult readResult = progress.readSigilRefreshSeen(merchantUuid);
+                refreshSeenBefore = readResult.count();
+                refreshReadSource = readResult.source();
+                refreshSeenAfter = refreshSeenBefore + 1;
+                LOGGER.debug("[MoonTrade] REFRESH_COUNT_READ playerUuid={} merchantUuid={} page=NORMAL before={} after={} source={} costApplied={}",
+                    player.getUuid(), merchantUuid, refreshSeenBefore, refreshSeenBefore, refreshReadSource, 0);
+                progress.setSigilRefreshSeen(merchantUuid, refreshSeenAfter);
+                state.markDirty();
+            }
+            merchant.rebuildOffersForPlayer(player, MysteriousMerchantEntity.OfferBuildSource.REFRESH_NORMAL);
         }
         
-        // Now consume scroll uses AFTER successful rebuild
-        TradeScrollItem.tryConsume(scroll, TradeConfig.COST_REFRESH);
+        // P0-B FIX: Compute afterHash and only charge if offers actually changed
+        int afterHash = merchant.snapshotOffersHash();
+        boolean changed = (beforeHash != afterHash);
+        boolean costApplied = false;
+        
+        if (changed) {
+            // Offers changed - consume scroll uses
+            costApplied = TradeScrollItem.tryConsume(scroll, TradeConfig.COST_REFRESH);
+            if (!costApplied && !onSecret && progress != null && state != null && refreshSeenBefore >= 0) {
+                progress.setSigilRefreshSeen(merchantUuid, refreshSeenBefore);
+                refreshSeenAfter = refreshSeenBefore;
+                state.markDirty();
+                merchant.rebuildOffersForPlayer(player, MysteriousMerchantEntity.OfferBuildSource.ROLLBACK_CONSUME_FAIL);
+                afterHash = merchant.snapshotOffersHash();
+                player.sendMessage(Text.literal("刷新扣费失败，已回滚").formatted(Formatting.YELLOW), true);
+            }
+        } else {
+            // P0-B: Offers unchanged - do NOT charge; notify player
+            if (!onSecret && progress != null && state != null && refreshSeenBefore >= 0) {
+                progress.setSigilRefreshSeen(merchantUuid, refreshSeenBefore);
+                refreshSeenAfter = refreshSeenBefore;
+                state.markDirty();
+                merchant.rebuildOffersForPlayer(player, MysteriousMerchantEntity.OfferBuildSource.ROLLBACK_NO_CHANGE);
+                afterHash = merchant.snapshotOffersHash();
+            }
+            player.sendMessage(Text.literal("刷新未产生变化，未扣费").formatted(Formatting.YELLOW), true);
+        }
+
+        if (!onSecret && progress != null && state != null && refreshSeenBefore >= 0) {
+            LOGGER.debug("[MoonTrade] REFRESH_COUNT_WRITE playerUuid={} merchantUuid={} page=NORMAL before={} after={} source={} costApplied={}",
+                player.getUuid(), merchantUuid, refreshSeenBefore, refreshSeenAfter, refreshReadSource, costApplied ? 1 : 0);
+        }
         
         // Sync offers to client
         merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
         
-        LOGGER.info("[MoonTrade] REFRESH player={} cost={} page={}", 
-            player.getName().getString(), TradeConfig.COST_REFRESH, onSecret ? "SECRET" : "NORMAL");
+        // P0-B FIX: Structured audit log with per-merchant refreshSeenCount
+        LOGGER.info("[MoonTrade] REFRESH_RESULT player={} merchant={} page={} beforeHash={} afterHash={} changed={} costApplied={} refreshSeenCount={} source={}",
+            player.getUuid(), merchantUuid,
+            page,
+            Integer.toHexString(beforeHash), Integer.toHexString(afterHash),
+            changed ? 1 : 0, costApplied ? 1 : 0,
+            refreshSeenBefore + "->" + refreshSeenAfter,
+            refreshReadSource);
         
-        player.sendMessage(Text.literal("交易已刷新").formatted(Formatting.GREEN), true);
+        if (changed) {
+            player.sendMessage(Text.literal("交易已刷新").formatted(Formatting.GREEN), true);
+        }
     }
     
     private static void handlePageNav(ServerPlayerEntity player, MysteriousMerchantEntity merchant, TradeAction action) {

@@ -6,12 +6,7 @@ import net.minecraft.component.type.NbtComponent;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -90,16 +85,4 @@ public class MerchantMarkItem extends Item {
         return new NbtCompound();
     }
 
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        super.appendTooltip(stack, context, tooltip, type);
-        
-        UUID owner = getOwnerUUID(stack);
-        if (owner != null) {
-            tooltip.add(Text.literal("已绑定").formatted(Formatting.GREEN));
-            tooltip.add(Text.literal("UUID: " + owner.toString().substring(0, 8) + "...").formatted(Formatting.DARK_GRAY));
-        } else {
-            tooltip.add(Text.literal("未绑定 - 右键商人绑定").formatted(Formatting.YELLOW));
-        }
-    }
 }

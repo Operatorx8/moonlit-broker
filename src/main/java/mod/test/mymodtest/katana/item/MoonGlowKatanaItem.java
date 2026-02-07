@@ -6,12 +6,7 @@ import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SwordItem;
 import net.minecraft.item.ToolMaterials;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Rarity;
-
-import java.util.List;
 
 public class MoonGlowKatanaItem extends SwordItem {
 
@@ -43,21 +38,4 @@ public class MoonGlowKatanaItem extends SwordItem {
         return 1.0f;
     }
 
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        // 空行分隔
-        tooltip.add(Text.empty());
-
-        // 特效名称 - 蓝色
-        tooltip.add(Text.translatable("item.mymodtest.moon_glow_katana.effect_name")
-            .formatted(Formatting.BLUE));
-
-        // 特效说明 - 灰色，带缩进
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.moon_glow_katana.effect_desc1"))
-            .formatted(Formatting.GRAY));
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.moon_glow_katana.effect_desc2"))
-            .formatted(Formatting.GRAY));
-    }
 }

@@ -6,12 +6,7 @@ import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SwordItem;
 import net.minecraft.item.ToolMaterials;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Rarity;
-
-import java.util.List;
 
 /**
  * 暗月之蚀（Eclipse Blade）
@@ -45,33 +40,6 @@ public class EclipseBladeItem extends SwordItem {
     @Override
     public boolean canRepair(ItemStack stack, ItemStack ingredient) {
         return false;
-    }
-
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.empty());
-
-        // 特效名称 - 深紫色
-        tooltip.add(Text.translatable("item.mymodtest.eclipse_blade.effect_name")
-            .formatted(Formatting.DARK_PURPLE));
-
-        // 护甲穿透说明
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.eclipse_blade.effect_penetration"))
-            .formatted(Formatting.RED));
-
-        // Debuff 说明
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.eclipse_blade.effect_desc1"))
-            .formatted(Formatting.GRAY));
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.eclipse_blade.effect_desc2"))
-            .formatted(Formatting.GRAY));
-
-        // 风味文字
-        tooltip.add(Text.literal("  ")
-            .append(Text.translatable("item.mymodtest.eclipse_blade.effect_lore"))
-            .formatted(Formatting.DARK_GRAY, Formatting.ITALIC));
     }
 
     @Override
