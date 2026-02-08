@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "#mymodtest:katana",
+    "mymodtest:velox"
+  ]
+}

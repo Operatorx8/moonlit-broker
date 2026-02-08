@@ -4,6 +4,7 @@ import mod.test.mymodtest.armor.ArmorConfig;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.ArmorMaterials;
+import net.minecraft.item.Items;
 import net.minecraft.recipe.Ingredient;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -36,20 +37,26 @@ public class MerchantArmorMaterial {
      * 必须在物品注册前调用
      */
     public static void register() {
+        if (MERCHANT_UNCOMMON_ARMOR != null) {
+            return;
+        }
         MERCHANT_UNCOMMON_ARMOR = registerMaterial(
                 "merchant_uncommon",
                 ArmorMaterials.IRON.value().enchantability(),
-                ArmorConfig.KNOCKBACK_RESISTANCE
+                ArmorConfig.KNOCKBACK_RESISTANCE,
+                Ingredient.ofItems(Items.IRON_INGOT)
         );
         MERCHANT_RARE_ARMOR = registerMaterial(
                 "merchant_rare",
                 ArmorMaterials.CHAIN.value().enchantability(),
-                ArmorConfig.KNOCKBACK_RESISTANCE
+                ArmorConfig.KNOCKBACK_RESISTANCE,
+                Ingredient.ofItems(Items.GOLD_INGOT)
         );
         MERCHANT_EPIC_ARMOR = registerMaterial(
                 "merchant_epic",
                 ArmorMaterials.NETHERITE.value().enchantability(),
-                ArmorConfig.KNOCKBACK_RESISTANCE
+                ArmorConfig.KNOCKBACK_RESISTANCE,
+                Ingredient.ofItems(Items.NETHERITE_INGOT)
         );
     }
 
@@ -62,7 +69,11 @@ public class MerchantArmorMaterial {
         };
     }
 
-    private static RegistryEntry<ArmorMaterial> registerMaterial(String id, int enchantability, float knockbackResistance) {
+    private static RegistryEntry<ArmorMaterial> registerMaterial(
+            String id,
+            int enchantability,
+            float knockbackResistance,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, ArmorConfig.HELMET_PROTECTION,
                 ArmorItem.Type.CHESTPLATE, ArmorConfig.CHESTPLATE_PROTECTION,
@@ -74,9 +85,8 @@ public class MerchantArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_CHAIN,
-                () -> Ingredient.EMPTY,
-                // Temporary fallback to vanilla iron armor layer to avoid missing-texture purple/black.
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", "iron"))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 ArmorConfig.TOUGHNESS,
                 knockbackResistance
         );
@@ -85,6 +95,13 @@ public class MerchantArmorMaterial {
                 Registries.ARMOR_MATERIAL,
                 Identifier.of(MOD_ID, id),
                 material
+        );
+    }
+
+    private static List<ArmorMaterial.Layer> dyedLeatherLayers() {
+        return List.of(
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "", true),
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "_overlay", false)
         );
     }
 }

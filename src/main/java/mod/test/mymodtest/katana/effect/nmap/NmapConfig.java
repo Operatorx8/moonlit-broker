@@ -5,14 +5,16 @@ public class NmapConfig {
     public static boolean DEBUG = true;
 
     // ========== Host Discovery ==========
-    public static final int SCAN_RADIUS = 50;
-    public static final int SCAN_INTERVAL_TICKS = 60;            // 3 seconds
-    public static final int RESISTANCE_DURATION_TICKS = 60;     // 3 seconds
+    public static final double SCAN_RADIUS = 24.0;
+    public static final double ABS_DY_MAX = 10.0;
+    public static final int SCAN_INTERVAL_TICKS = 80;            // 4 seconds
+    public static final int RESISTANCE_DURATION_TICKS = 40;      // 2 seconds
     public static final int RESISTANCE_AMPLIFIER = 4;            // Level V
-
-    public static final int COOLDOWN_HOSTILE_HIT_TICKS = 1200;   // 60 seconds
-    public static final int COOLDOWN_OTHER_DAMAGE_TICKS = 3600;  // 180 seconds
-    public static final int COOLDOWN_SCAN_INTERVAL_TICKS = 40;   // 2 seconds
+    public static final int MAX_CHAIN_REFRESHES = 3;
+    public static final int COOLDOWN_TICKS = 240;                // 12 seconds
+    public static final double THREAT_FALLBACK_DISTANCE = 12.0;
+    public static final double THREAT_MOVE_SPEED_SQ = 0.0025;    // ~0.05 blocks/tick
+    public static final double THREAT_MOVE_DOT_MIN = 0.01;
 
     // ========== Port Enumeration ==========
     public static final int ENUM_WINDOW_TICKS = 200;             // 10 seconds

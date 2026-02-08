@@ -2,7 +2,6 @@ package mod.test.mymodtest.armor.mixin;
 
 import mod.test.mymodtest.armor.effect.OldMarketHandler;
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
-import mod.test.mymodtest.katana.item.KatanaItems;
 import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
@@ -129,27 +128,34 @@ public class TradeOutputSlotMixin {
      */
     private void checkAndMarkSecretSold(ServerPlayerEntity player, MysteriousMerchantEntity merchant, 
                                          TradeOffer offer, ItemStack outputStack) {
-        // Check if the output is the epic katana (MOON_GLOW_KATANA)
-        if (!outputStack.isOf(KatanaItems.MOON_GLOW_KATANA)) {
+        // Marked secret outputs are tagged when the hidden offer is built.
+        if (!MysteriousMerchantEntity.isSecretTradeOutput(outputStack)) {
+            return;
+        }
+        String secretId = MysteriousMerchantEntity.getSecretTradeMarkerId(outputStack);
+        if (secretId == null || secretId.isEmpty()) {
+            LOGGER.warn("[MoonTrade] SECRET_MARKER_MISSING player={} merchant={} output={} action=skip_mark_sold",
+                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), outputStack.getItem());
             return;
         }
         
         // Atomically mark as sold - if already sold, this returns false
-        boolean marked = merchant.tryMarkSecretSold();
+        boolean marked = merchant.tryMarkSecretSold(secretId);
         
         if (marked) {
-            LOGGER.info("[MoonTrade] SECRET_KATANA_PURCHASED player={} merchant={}", 
-                player.getName().getString(), merchant.getUuid().toString().substring(0, 8));
+            MysteriousMerchantEntity.clearSecretTradeMarker(outputStack);
+            LOGGER.info("[MoonTrade] SECRET_KATANA_PURCHASED player={} merchant={} secretId={}", 
+                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
             
             player.sendMessage(
-                Text.literal("[神秘商人] 你获得了珍贵的月华刀！")
+                Text.literal("[神秘商人] 你获得了珍贵的隐藏神器！")
                     .formatted(Formatting.GOLD, Formatting.BOLD),
                 false
             );
         } else {
             // This shouldn't happen if offer generation is correct, but log it
-            LOGGER.warn("[MoonTrade] SECRET_ALREADY_SOLD_ON_PURCHASE player={} merchant={}", 
-                player.getName().getString(), merchant.getUuid().toString().substring(0, 8));
+            LOGGER.warn("[MoonTrade] SECRET_ALREADY_SOLD_ON_PURCHASE player={} merchant={} secretId={}", 
+                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
         }
     }
 

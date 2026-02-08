@@ -16,24 +16,31 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Enchantment.class)
 public class EnchantmentMixin {
 
-    @Inject(method = "isPrimaryItem", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isPrimaryItem", at = @At("RETURN"), cancellable = true)
     private void katana$blockSweepingEdgeAsPrimary(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
-        if (shouldBlockForKatana(stack)) {
+        if (shouldForceDisableSweeping(stack, cir.getReturnValue())) {
             cir.setReturnValue(false);
         }
     }
 
-    @Inject(method = "isAcceptableItem", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isAcceptableItem", at = @At("RETURN"), cancellable = true)
     private void katana$blockSweepingEdgeAsAcceptable(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
-        if (shouldBlockForKatana(stack)) {
+        if (shouldForceDisableSweeping(stack, cir.getReturnValue())) {
             cir.setReturnValue(false);
         }
     }
 
-    private boolean shouldBlockForKatana(ItemStack stack) {
+    private boolean shouldForceDisableSweeping(ItemStack stack, boolean originalResult) {
+        if (!originalResult) {
+            return false;
+        }
         if (!stack.isIn(ModTags.Items.KATANA)) {
             return false;
         }
+        return isSweepingEdge();
+    }
+
+    private boolean isSweepingEdge() {
         @SuppressWarnings("unchecked")
         Registry<Enchantment> enchantmentRegistry =
             (Registry<Enchantment>) Registries.REGISTRIES.get(RegistryKeys.ENCHANTMENT.getValue());

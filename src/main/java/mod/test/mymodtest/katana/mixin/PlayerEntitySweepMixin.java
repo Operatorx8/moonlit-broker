@@ -53,16 +53,20 @@ public abstract class PlayerEntitySweepMixin {
             ),
             require = 1
     )
-    private void katana$skipSweepSound(World world, PlayerEntity player, double x, double y, double z,
+    private void katana$skipSweepSound(World world, PlayerEntity soundPlayer, double x, double y, double z,
                                        SoundEvent sound, SoundCategory category, float volume, float pitch) {
-        if (katana$isKatanaMainHand() && sound == SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP) {
-            SoundEvent replacement = player.getAttackCooldownProgress(0.5F) > 0.9F
-                    ? SoundEvents.ENTITY_PLAYER_ATTACK_STRONG
-                    : SoundEvents.ENTITY_PLAYER_ATTACK_WEAK;
-            world.playSound(player, x, y, z, replacement, category, volume, pitch);
+        PlayerEntity instance = (PlayerEntity) (Object) this;
+        if (instance == null) {
             return;
         }
-        world.playSound(player, x, y, z, sound, category, volume, pitch);
+        if (katana$isKatanaMainHand() && sound == SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP) {
+            SoundEvent replacement = instance.getAttackCooldownProgress(0.5F) > 0.9F
+                    ? SoundEvents.ENTITY_PLAYER_ATTACK_STRONG
+                    : SoundEvents.ENTITY_PLAYER_ATTACK_WEAK;
+            world.playSound(soundPlayer, x, y, z, replacement, category, volume, pitch);
+            return;
+        }
+        world.playSound(soundPlayer, x, y, z, sound, category, volume, pitch);
     }
 
     @Redirect(

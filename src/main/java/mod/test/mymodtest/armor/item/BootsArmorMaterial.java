@@ -4,6 +4,7 @@ import mod.test.mymodtest.armor.BootsEffectConstants;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.ArmorMaterials;
+import net.minecraft.item.Items;
 import net.minecraft.recipe.Ingredient;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -31,25 +32,32 @@ public class BootsArmorMaterial {
     public static RegistryEntry<ArmorMaterial> BOOTS_RARE_2;       // Gossamer Boots
 
     public static void register() {
+        if (BOOTS_UNCOMMON_2 != null) {
+            return;
+        }
         BOOTS_EPIC_3 = registerBootsMaterial(
                 "boots_epic_3",
                 ArmorMaterials.NETHERITE.value().enchantability(),
-                3
+                3,
+                Ingredient.ofItems(Items.NETHERITE_INGOT)
         );
         BOOTS_UNCOMMON_2 = registerBootsMaterial(
                 "boots_uncommon_2",
                 ArmorMaterials.IRON.value().enchantability(),
-                2
+                2,
+                Ingredient.ofItems(Items.IRON_INGOT)
         );
         BOOTS_RARE_1 = registerBootsMaterial(
                 "boots_rare_1",
                 ArmorMaterials.CHAIN.value().enchantability(),
-                1
+                1,
+                Ingredient.ofItems(Items.GOLD_INGOT)
         );
         BOOTS_RARE_2 = registerBootsMaterial(
                 "boots_rare_2",
                 ArmorMaterials.CHAIN.value().enchantability(),
-                2
+                2,
+                Ingredient.ofItems(Items.GOLD_INGOT)
         );
     }
 
@@ -66,7 +74,10 @@ public class BootsArmorMaterial {
     }
 
     private static RegistryEntry<ArmorMaterial> registerBootsMaterial(
-            String id, int enchantability, int bootsProtection) {
+            String id,
+            int enchantability,
+            int bootsProtection,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, 0,
                 ArmorItem.Type.CHESTPLATE, 0,
@@ -78,9 +89,8 @@ public class BootsArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_CHAIN,
-                () -> Ingredient.EMPTY,
-                // Temporary fallback to vanilla iron armor layer to avoid missing-texture purple/black.
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", "iron"))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 BootsEffectConstants.BOOTS_TOUGHNESS,
                 BootsEffectConstants.BOOTS_KNOCKBACK_RESISTANCE
         );
@@ -89,6 +99,13 @@ public class BootsArmorMaterial {
                 Registries.ARMOR_MATERIAL,
                 Identifier.of(MOD_ID, id),
                 material
+        );
+    }
+
+    private static List<ArmorMaterial.Layer> dyedLeatherLayers() {
+        return List.of(
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "", true),
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "_overlay", false)
         );
     }
 }

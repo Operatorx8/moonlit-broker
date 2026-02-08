@@ -3,6 +3,7 @@ package mod.test.mymodtest.armor.transitional;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.ArmorMaterials;
+import net.minecraft.item.Items;
 import net.minecraft.recipe.Ingredient;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -44,27 +45,30 @@ public final class TransitionalArmorMaterial {
     public static RegistryEntry<ArmorMaterial> CUSHION_HIKING_BOOTS;  // def=3, tough=0.5, RARE
 
     public static void register() {
+        if (SCAVENGER_GOGGLES != null) {
+            return;
+        }
         // HEAD
         SCAVENGER_GOGGLES = registerHelmetMaterial(
                 "trans_scavenger_goggles",
                 getEnchantabilityByRarity(TransitionalArmorConstants.SCAVENGER_GOGGLES_RARITY),
                 TransitionalArmorConstants.SCAVENGER_GOGGLES_DEFENSE,
                 TransitionalArmorConstants.SCAVENGER_GOGGLES_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.SCAVENGER_GOGGLES_RARITY)
         );
         CAST_IRON_SALLET = registerHelmetMaterial(
                 "trans_cast_iron_sallet",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CAST_IRON_SALLET_RARITY),
                 TransitionalArmorConstants.CAST_IRON_SALLET_DEFENSE,
                 TransitionalArmorConstants.CAST_IRON_SALLET_TOUGHNESS,
-                "iron"
+                getRepairIngredientByRarity(TransitionalArmorConstants.CAST_IRON_SALLET_RARITY)
         );
         SANCTIFIED_HOOD = registerHelmetMaterial(
                 "trans_sanctified_hood",
                 getEnchantabilityByRarity(TransitionalArmorConstants.SANCTIFIED_HOOD_RARITY),
                 TransitionalArmorConstants.SANCTIFIED_HOOD_DEFENSE,
                 TransitionalArmorConstants.SANCTIFIED_HOOD_TOUGHNESS,
-                "chainmail"
+                getRepairIngredientByRarity(TransitionalArmorConstants.SANCTIFIED_HOOD_RARITY)
         );
 
         // CHEST
@@ -73,21 +77,21 @@ public final class TransitionalArmorMaterial {
                 getEnchantabilityByRarity(TransitionalArmorConstants.REACTIVE_BUG_PLATE_RARITY),
                 TransitionalArmorConstants.REACTIVE_BUG_PLATE_DEFENSE,
                 TransitionalArmorConstants.REACTIVE_BUG_PLATE_TOUGHNESS,
-                "chainmail"
+                getRepairIngredientByRarity(TransitionalArmorConstants.REACTIVE_BUG_PLATE_RARITY)
         );
         PATCHWORK_COAT = registerChestplateMaterial(
                 "trans_patchwork_coat",
                 getEnchantabilityByRarity(TransitionalArmorConstants.PATCHWORK_COAT_RARITY),
                 TransitionalArmorConstants.PATCHWORK_COAT_DEFENSE,
                 TransitionalArmorConstants.PATCHWORK_COAT_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.PATCHWORK_COAT_RARITY)
         );
         RITUAL_ROBE = registerChestplateMaterial(
                 "trans_ritual_robe",
                 getEnchantabilityByRarity(TransitionalArmorConstants.RITUAL_ROBE_RARITY),
                 TransitionalArmorConstants.RITUAL_ROBE_DEFENSE,
                 TransitionalArmorConstants.RITUAL_ROBE_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.RITUAL_ROBE_RARITY)
         );
 
         // LEGS
@@ -96,21 +100,21 @@ public final class TransitionalArmorMaterial {
                 getEnchantabilityByRarity(TransitionalArmorConstants.WRAPPED_LEGGINGS_RARITY),
                 TransitionalArmorConstants.WRAPPED_LEGGINGS_DEFENSE,
                 TransitionalArmorConstants.WRAPPED_LEGGINGS_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.WRAPPED_LEGGINGS_RARITY)
         );
         REINFORCED_GREAVES = registerLeggingsMaterial(
                 "trans_reinforced_greaves",
                 getEnchantabilityByRarity(TransitionalArmorConstants.REINFORCED_GREAVES_RARITY),
                 TransitionalArmorConstants.REINFORCED_GREAVES_DEFENSE,
                 TransitionalArmorConstants.REINFORCED_GREAVES_TOUGHNESS,
-                "iron"
+                getRepairIngredientByRarity(TransitionalArmorConstants.REINFORCED_GREAVES_RARITY)
         );
         CARGO_PANTS = registerLeggingsMaterial(
                 "trans_cargo_pants",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CARGO_PANTS_RARITY),
                 TransitionalArmorConstants.CARGO_PANTS_DEFENSE,
                 TransitionalArmorConstants.CARGO_PANTS_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.CARGO_PANTS_RARITY)
         );
 
         // FEET
@@ -119,21 +123,21 @@ public final class TransitionalArmorMaterial {
                 getEnchantabilityByRarity(TransitionalArmorConstants.PENITENT_BOOTS_RARITY),
                 TransitionalArmorConstants.PENITENT_BOOTS_DEFENSE,
                 TransitionalArmorConstants.PENITENT_BOOTS_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.PENITENT_BOOTS_RARITY)
         );
         STANDARD_IRON_BOOTS = registerBootsMaterial(
                 "trans_standard_iron_boots",
                 getEnchantabilityByRarity(TransitionalArmorConstants.STANDARD_IRON_BOOTS_RARITY),
                 TransitionalArmorConstants.STANDARD_IRON_BOOTS_DEFENSE,
                 TransitionalArmorConstants.STANDARD_IRON_BOOTS_TOUGHNESS,
-                "iron"
+                getRepairIngredientByRarity(TransitionalArmorConstants.STANDARD_IRON_BOOTS_RARITY)
         );
         CUSHION_HIKING_BOOTS = registerBootsMaterial(
                 "trans_cushion_hiking_boots",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CUSHION_HIKING_BOOTS_RARITY),
                 TransitionalArmorConstants.CUSHION_HIKING_BOOTS_DEFENSE,
                 TransitionalArmorConstants.CUSHION_HIKING_BOOTS_TOUGHNESS,
-                "leather"
+                getRepairIngredientByRarity(TransitionalArmorConstants.CUSHION_HIKING_BOOTS_RARITY)
         );
     }
 
@@ -150,8 +154,21 @@ public final class TransitionalArmorMaterial {
         };
     }
 
+    private static Ingredient getRepairIngredientByRarity(net.minecraft.util.Rarity rarity) {
+        return switch (rarity) {
+            case UNCOMMON -> Ingredient.ofItems(Items.IRON_INGOT);
+            case RARE -> Ingredient.ofItems(Items.GOLD_INGOT);
+            case EPIC -> Ingredient.ofItems(Items.NETHERITE_INGOT);
+            default -> Ingredient.ofItems(Items.IRON_INGOT);
+        };
+    }
+
     private static RegistryEntry<ArmorMaterial> registerHelmetMaterial(
-            String id, int enchantability, int helmetDefense, float toughness, String vanillaLayer) {
+            String id,
+            int enchantability,
+            int helmetDefense,
+            float toughness,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, helmetDefense,
                 ArmorItem.Type.CHESTPLATE, 0,
@@ -163,9 +180,8 @@ public final class TransitionalArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_LEATHER,
-                () -> Ingredient.EMPTY,  // 不可修复
-                // 使用 vanilla layer，避免缺失 mymodtest:transitional_layer_1/2 导致紫黑贴图
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", vanillaLayer))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 toughness,
                 TransitionalArmorConstants.KNOCKBACK_RESISTANCE
         );
@@ -178,7 +194,11 @@ public final class TransitionalArmorMaterial {
     }
 
     private static RegistryEntry<ArmorMaterial> registerChestplateMaterial(
-            String id, int enchantability, int chestplateDefense, float toughness, String vanillaLayer) {
+            String id,
+            int enchantability,
+            int chestplateDefense,
+            float toughness,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, 0,
                 ArmorItem.Type.CHESTPLATE, chestplateDefense,
@@ -190,9 +210,8 @@ public final class TransitionalArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_LEATHER,
-                () -> Ingredient.EMPTY,  // 不可修复
-                // 使用 vanilla layer，避免缺失 mymodtest:transitional_layer_1/2 导致紫黑贴图
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", vanillaLayer))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 toughness,
                 TransitionalArmorConstants.KNOCKBACK_RESISTANCE
         );
@@ -205,7 +224,11 @@ public final class TransitionalArmorMaterial {
     }
 
     private static RegistryEntry<ArmorMaterial> registerLeggingsMaterial(
-            String id, int enchantability, int leggingsDefense, float toughness, String vanillaLayer) {
+            String id,
+            int enchantability,
+            int leggingsDefense,
+            float toughness,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, 0,
                 ArmorItem.Type.CHESTPLATE, 0,
@@ -217,8 +240,8 @@ public final class TransitionalArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_LEATHER,
-                () -> Ingredient.EMPTY,  // 不可修复
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", vanillaLayer))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 toughness,
                 TransitionalArmorConstants.KNOCKBACK_RESISTANCE
         );
@@ -231,7 +254,11 @@ public final class TransitionalArmorMaterial {
     }
 
     private static RegistryEntry<ArmorMaterial> registerBootsMaterial(
-            String id, int enchantability, int bootsDefense, float toughness, String vanillaLayer) {
+            String id,
+            int enchantability,
+            int bootsDefense,
+            float toughness,
+            Ingredient repairIngredient) {
         Map<ArmorItem.Type, Integer> defenseMap = Map.of(
                 ArmorItem.Type.HELMET, 0,
                 ArmorItem.Type.CHESTPLATE, 0,
@@ -243,8 +270,8 @@ public final class TransitionalArmorMaterial {
                 defenseMap,
                 enchantability,
                 SoundEvents.ITEM_ARMOR_EQUIP_LEATHER,
-                () -> Ingredient.EMPTY,  // 不可修复
-                List.of(new ArmorMaterial.Layer(Identifier.of("minecraft", vanillaLayer))),
+                () -> repairIngredient,
+                dyedLeatherLayers(),
                 toughness,
                 TransitionalArmorConstants.KNOCKBACK_RESISTANCE
         );
@@ -253,6 +280,13 @@ public final class TransitionalArmorMaterial {
                 Registries.ARMOR_MATERIAL,
                 Identifier.of(MOD_ID, id),
                 material
+        );
+    }
+
+    private static List<ArmorMaterial.Layer> dyedLeatherLayers() {
+        return List.of(
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "", true),
+                new ArmorMaterial.Layer(Identifier.of("minecraft", "leather"), "_overlay", false)
         );
     }
 }

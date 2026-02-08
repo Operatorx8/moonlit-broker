@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "mymodtest:sentinel_helmet",
+    "mymodtest:silent_oath_helmet",
+    "mymodtest:exile_mask_helmet",
+    "mymodtest:relic_circlet_helmet",
+    "mymodtest:retracer_ornament_helmet",
+    "mymodtest:scavenger_goggles",
+    "mymodtest:cast_iron_sallet",
+    "mymodtest:sanctified_hood"
+  ]
+}

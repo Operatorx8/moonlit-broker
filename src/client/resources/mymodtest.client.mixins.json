@@ -1,9 +1,10 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "mod.test.mymodtest.mixin.client",
+  "package": "mod.test.mymodtest.trade.client",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "MerchantScreenRefreshMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -14,9 +14,11 @@ public class NmapManager {
 
     public static class NmapPlayerState {
         // Host Discovery
-        public long scanCooldownUntil = 0;
+        public long nextScanTick = 0;
+        public long cooldownUntilTick = 0;
+        public int chainCount = 0;
+        public long buffActiveUntilTick = 0;
         public boolean shieldActive = false;
-        public long lastScanTick = 0;
 
         // Port Enumeration
         public Set<UUID> scannedHostiles = new HashSet<>();
@@ -38,25 +40,50 @@ public class NmapManager {
     // ========== Host Discovery ==========
 
     public static boolean isScanOnCooldown(PlayerEntity player, long currentTick) {
-        return currentTick < getOrCreate(player).scanCooldownUntil;
+        return currentTick < getOrCreate(player).cooldownUntilTick;
     }
 
     public static void setScanCooldown(PlayerEntity player, int cooldownTicks, long currentTick) {
         NmapPlayerState state = getOrCreate(player);
-        state.scanCooldownUntil = currentTick + cooldownTicks;
+        state.cooldownUntilTick = currentTick + cooldownTicks;
+        state.chainCount = 0;
+        state.buffActiveUntilTick = 0;
         state.shieldActive = false;
-
-        if (NmapConfig.DEBUG) {
-            LOGGER.info("[Nmap] Shield DOWN - cooldown: {}s", cooldownTicks / 20);
-        }
     }
 
-    public static void activateShield(PlayerEntity player) {
-        getOrCreate(player).shieldActive = true;
+    public static void activateShield(PlayerEntity player, long currentTick) {
+        NmapPlayerState state = getOrCreate(player);
+        state.shieldActive = true;
+        state.buffActiveUntilTick = currentTick + NmapConfig.RESISTANCE_DURATION_TICKS;
     }
 
-    public static boolean isShieldActive(PlayerEntity player) {
-        return getOrCreate(player).shieldActive;
+    public static boolean isShieldActive(PlayerEntity player, long currentTick) {
+        NmapPlayerState state = getOrCreate(player);
+        return state.shieldActive && currentTick <= state.buffActiveUntilTick;
+    }
+
+    public static void setNextScanTick(PlayerEntity player, long nextScanTick) {
+        getOrCreate(player).nextScanTick = nextScanTick;
+    }
+
+    public static long getNextScanTick(PlayerEntity player) {
+        return getOrCreate(player).nextScanTick;
+    }
+
+    public static void incrementChain(PlayerEntity player) {
+        getOrCreate(player).chainCount++;
+    }
+
+    public static int getChainCount(PlayerEntity player) {
+        return getOrCreate(player).chainCount;
+    }
+
+    public static long getBuffActiveUntilTick(PlayerEntity player) {
+        return getOrCreate(player).buffActiveUntilTick;
+    }
+
+    public static void cancelShieldAndEnterCooldown(PlayerEntity player, long currentTick) {
+        setScanCooldown(player, NmapConfig.COOLDOWN_TICKS, currentTick);
     }
 
     // ========== Port Enumeration ==========
@@ -137,8 +164,8 @@ public class NmapManager {
             playerStates.entrySet().removeIf(entry -> {
                 NmapPlayerState state = entry.getValue();
                 // Remove if all cooldowns expired and no active state
-                return !state.shieldActive
-                    && currentTick > state.scanCooldownUntil + 1200
+                return currentTick > state.cooldownUntilTick + 1200
+                    && currentTick > state.buffActiveUntilTick + 1200
                     && state.scannedHostiles.isEmpty();
             });
         }

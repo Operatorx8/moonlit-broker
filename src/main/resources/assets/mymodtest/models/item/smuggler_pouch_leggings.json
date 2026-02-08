@@ -1,3 +1,6 @@
 {
-  "parent": "minecraft:item/iron_leggings"
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "mymodtest:item/smuggler_pouch_leggings"
+  }
 }

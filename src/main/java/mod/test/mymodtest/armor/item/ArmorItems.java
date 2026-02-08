@@ -4,11 +4,11 @@ import mod.test.mymodtest.armor.ArmorConfig;
 import mod.test.mymodtest.armor.BootsEffectConstants;
 import mod.test.mymodtest.util.ModLog;
 import net.minecraft.item.ArmorItem;
+import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.item.ArmorMaterial;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Rarity;
 import org.slf4j.Logger;
@@ -16,8 +16,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * 盔甲物品注册
- * 附魔系数按稀有度分档：
- * UNCOMMON -> IRON (9), RARE -> CHAIN (12), EPIC -> NETHERITE (15)
+ * 数值由自定义材质提供，外观走可染色皮革层；默认颜色见 ArmorColorPalette。
  */
 public final class ArmorItems {
     private ArmorItems() {}
@@ -61,34 +60,30 @@ public final class ArmorItems {
      * 注册所有盔甲物品
      */
     public static void register() {
-        // 先注册材质
-        MerchantArmorMaterial.register();
+        MMArmorMaterials.register();
 
-        // 注册 5 个头盔（按稀有度映射附魔系数）
+        // 注册 5 个头盔（自定义材质 + 染色）
         SENTINEL_HELMET = registerHelmet("sentinel_helmet", ArmorConfig.SENTINEL_HELMET_RARITY);
         SILENT_OATH_HELMET = registerHelmet("silent_oath_helmet", ArmorConfig.SILENT_OATH_HELMET_RARITY);
         EXILE_MASK_HELMET = registerHelmet("exile_mask_helmet", ArmorConfig.EXILE_MASK_HELMET_RARITY);
         RELIC_CIRCLET_HELMET = registerHelmet("relic_circlet_helmet", ArmorConfig.RELIC_CIRCLET_HELMET_RARITY);
         RETRACER_ORNAMENT_HELMET = registerHelmet("retracer_ornament_helmet", ArmorConfig.RETRACER_ORNAMENT_HELMET_RARITY);
 
-        // 注册 5 个胸甲（按稀有度映射附魔系数）
+        // 注册 5 个胸甲（自定义材质 + 染色）
         OLD_MARKET_CHESTPLATE = registerChestplate("old_market_chestplate", ArmorConfig.OLD_MARKET_CHESTPLATE_RARITY);
         BLOOD_PACT_CHESTPLATE = registerChestplate("blood_pact_chestplate", ArmorConfig.BLOOD_PACT_CHESTPLATE_RARITY);
         GHOST_GOD_CHESTPLATE = registerChestplate("ghost_god_chestplate", ArmorConfig.GHOST_GOD_CHESTPLATE_RARITY);
         WINDBREAKER_CHESTPLATE = registerChestplate("windbreaker_chestplate", ArmorConfig.WINDBREAKER_CHESTPLATE_RARITY);
         VOID_DEVOURER_CHESTPLATE = registerChestplate("void_devourer_chestplate", ArmorConfig.VOID_DEVOURER_CHESTPLATE_RARITY);
 
-        // 注册 5 个护腿（按稀有度映射附魔系数）
+        // 注册 5 个护腿（自定义材质 + 染色）
         SMUGGLER_SHIN_LEGGINGS = registerLeggings("smuggler_shin_leggings", ArmorConfig.SMUGGLER_SHIN_LEGGINGS_RARITY);
         SMUGGLER_POUCH_LEGGINGS = registerLeggings("smuggler_pouch_leggings", ArmorConfig.SMUGGLER_POUCH_LEGGINGS_RARITY);
         GRAZE_GUARD_LEGGINGS = registerLeggings("graze_guard_leggings", ArmorConfig.GRAZE_GUARD_LEGGINGS_RARITY);
         STEALTH_SHIN_LEGGINGS = registerLeggings("stealth_shin_leggings", ArmorConfig.STEALTH_SHIN_LEGGINGS_RARITY);
         CLEAR_LEDGER_LEGGINGS = registerLeggings("clear_ledger_leggings", ArmorConfig.CLEAR_LEDGER_LEGGINGS_RARITY);
 
-        // 注册靴子材质
-        BootsArmorMaterial.register();
-
-        // 注册 5 个靴子（每个靴子有独立耐久和护甲值）
+        // 注册 5 个靴子（自定义材质 + 染色）
         UNTRACEABLE_TREADS_BOOTS = registerBoots("untraceable_treads_boots",
                 BootsEffectConstants.UNTRACEABLE_TREADS_RARITY,
                 BootsEffectConstants.UNTRACEABLE_TREADS_DURABILITY,
@@ -117,15 +112,18 @@ public final class ArmorItems {
      * 注册单个头盔
      */
     private static Item registerHelmet(String name, Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(ArmorConfig.DURABILITY_BASE * 11)
                 .rarity(rarity)
                 .fireproof();
 
-        Item helmet = new ArmorItem(
-                MerchantArmorMaterial.byRarity(rarity),
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        Item helmet = new DefaultDyedLeatherArmorItem(
+                material,
                 ArmorItem.Type.HELMET,
-                settings
+                settings,
+                defaultColor
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), helmet);
@@ -139,15 +137,18 @@ public final class ArmorItems {
      * 胸甲耐久 = 25 × 16 = 400
      */
     private static Item registerChestplate(String name, Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(ArmorConfig.DURABILITY_BASE * 16)
                 .rarity(rarity)
                 .fireproof();
 
-        Item chestplate = new ArmorItem(
-                MerchantArmorMaterial.byRarity(rarity),
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        Item chestplate = new DefaultDyedLeatherArmorItem(
+                material,
                 ArmorItem.Type.CHESTPLATE,
-                settings
+                settings,
+                defaultColor
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), chestplate);
@@ -161,15 +162,18 @@ public final class ArmorItems {
      * 护腿耐久 = 25 × 15 = 375
      */
     private static Item registerLeggings(String name, Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(ArmorConfig.DURABILITY_BASE * 15)
                 .rarity(rarity)
                 .fireproof();
 
-        Item leggings = new ArmorItem(
-                MerchantArmorMaterial.byRarity(rarity),
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        Item leggings = new DefaultDyedLeatherArmorItem(
+                material,
                 ArmorItem.Type.LEGGINGS,
-                settings
+                settings,
+                defaultColor
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), leggings);
@@ -180,20 +184,21 @@ public final class ArmorItems {
 
     /**
      * 注册单个靴子
-     * 靴子有独立耐久和护甲值，使用 BootsArmorMaterial
+     * 靴子有独立耐久与护甲值（通过自定义材质）
      */
     private static Item registerBoots(String name, Rarity rarity, int durability, int protection) {
-        RegistryEntry<ArmorMaterial> material = BootsArmorMaterial.byRarityAndProtection(rarity, protection);
-
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(durability)
                 .rarity(rarity)
                 .fireproof();
 
-        Item boots = new ArmorItem(
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.bootsByRarityAndProtection(rarity, protection);
+        Item boots = new DefaultDyedLeatherArmorItem(
                 material,
                 ArmorItem.Type.BOOTS,
-                settings
+                settings,
+                defaultColor
         );
 
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), boots);

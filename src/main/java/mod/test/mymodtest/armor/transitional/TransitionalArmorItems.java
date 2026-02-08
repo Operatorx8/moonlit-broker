@@ -1,14 +1,18 @@
 package mod.test.mymodtest.armor.transitional;
 
+import mod.test.mymodtest.armor.item.ArmorColorPalette;
+import mod.test.mymodtest.armor.item.DefaultDyedLeatherArmorItem;
+import mod.test.mymodtest.armor.item.MMArmorMaterials;
 import net.minecraft.item.ArmorItem;
+import net.minecraft.item.ArmorMaterial;
 import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Rarity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Objects;
 
 /**
  * 过渡护甲物品注册
@@ -44,25 +48,21 @@ public final class TransitionalArmorItems {
      * 注册所有过渡护甲物品
      */
     public static void register() {
-        // 先注册材质
-        TransitionalArmorMaterial.register();
+        MMArmorMaterials.register();
 
         // 头盔
         SCAVENGER_GOGGLES = registerHelmet(
                 "scavenger_goggles",
-                TransitionalArmorMaterial.SCAVENGER_GOGGLES,
                 TransitionalArmorConstants.SCAVENGER_GOGGLES_DURABILITY,
                 TransitionalArmorConstants.SCAVENGER_GOGGLES_RARITY
         );
         CAST_IRON_SALLET = registerHelmet(
                 "cast_iron_sallet",
-                TransitionalArmorMaterial.CAST_IRON_SALLET,
                 TransitionalArmorConstants.CAST_IRON_SALLET_DURABILITY,
                 TransitionalArmorConstants.CAST_IRON_SALLET_RARITY
         );
         SANCTIFIED_HOOD = registerHelmet(
                 "sanctified_hood",
-                TransitionalArmorMaterial.SANCTIFIED_HOOD,
                 TransitionalArmorConstants.SANCTIFIED_HOOD_DURABILITY,
                 TransitionalArmorConstants.SANCTIFIED_HOOD_RARITY
         );
@@ -70,19 +70,16 @@ public final class TransitionalArmorItems {
         // 胸甲
         REACTIVE_BUG_PLATE = registerChestplate(
                 "reactive_bug_plate",
-                TransitionalArmorMaterial.REACTIVE_BUG_PLATE,
                 TransitionalArmorConstants.REACTIVE_BUG_PLATE_DURABILITY,
                 TransitionalArmorConstants.REACTIVE_BUG_PLATE_RARITY
         );
         PATCHWORK_COAT = registerChestplate(
                 "patchwork_coat",
-                TransitionalArmorMaterial.PATCHWORK_COAT,
                 TransitionalArmorConstants.PATCHWORK_COAT_DURABILITY,
                 TransitionalArmorConstants.PATCHWORK_COAT_RARITY
         );
         RITUAL_ROBE = registerChestplate(
                 "ritual_robe",
-                TransitionalArmorMaterial.RITUAL_ROBE,
                 TransitionalArmorConstants.RITUAL_ROBE_DURABILITY,
                 TransitionalArmorConstants.RITUAL_ROBE_RARITY
         );
@@ -90,19 +87,16 @@ public final class TransitionalArmorItems {
         // 护腿
         WRAPPED_LEGGINGS = registerLeggings(
                 "wrapped_leggings",
-                TransitionalArmorMaterial.WRAPPED_LEGGINGS,
                 TransitionalArmorConstants.WRAPPED_LEGGINGS_DURABILITY,
                 TransitionalArmorConstants.WRAPPED_LEGGINGS_RARITY
         );
         REINFORCED_GREAVES = registerLeggings(
                 "reinforced_greaves",
-                TransitionalArmorMaterial.REINFORCED_GREAVES,
                 TransitionalArmorConstants.REINFORCED_GREAVES_DURABILITY,
                 TransitionalArmorConstants.REINFORCED_GREAVES_RARITY
         );
         CARGO_PANTS = registerLeggings(
                 "cargo_pants",
-                TransitionalArmorMaterial.CARGO_PANTS,
                 TransitionalArmorConstants.CARGO_PANTS_DURABILITY,
                 TransitionalArmorConstants.CARGO_PANTS_RARITY
         );
@@ -110,19 +104,16 @@ public final class TransitionalArmorItems {
         // 靴子
         PENITENT_BOOTS = registerBoots(
                 "penitent_boots",
-                TransitionalArmorMaterial.PENITENT_BOOTS,
                 TransitionalArmorConstants.PENITENT_BOOTS_DURABILITY,
                 TransitionalArmorConstants.PENITENT_BOOTS_RARITY
         );
         STANDARD_IRON_BOOTS = registerBoots(
                 "standard_iron_boots",
-                TransitionalArmorMaterial.STANDARD_IRON_BOOTS,
                 TransitionalArmorConstants.STANDARD_IRON_BOOTS_DURABILITY,
                 TransitionalArmorConstants.STANDARD_IRON_BOOTS_RARITY
         );
         CUSHION_HIKING_BOOTS = registerBoots(
                 "cushion_hiking_boots",
-                TransitionalArmorMaterial.CUSHION_HIKING_BOOTS,
                 TransitionalArmorConstants.CUSHION_HIKING_BOOTS_DURABILITY,
                 TransitionalArmorConstants.CUSHION_HIKING_BOOTS_RARITY
         );
@@ -132,17 +123,16 @@ public final class TransitionalArmorItems {
 
     private static Item registerHelmet(
             String name,
-            net.minecraft.registry.entry.RegistryEntry<net.minecraft.item.ArmorMaterial> material,
             int durability,
-            net.minecraft.util.Rarity rarity) {
-        Objects.requireNonNull(material, "Helmet material must be registered before item: " + name);
-
+            Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(durability)
                 .rarity(rarity)
                 .fireproof();
 
-        Item helmet = new ArmorItem(material, ArmorItem.Type.HELMET, settings);
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.transitionalByItemId(name);
+        Item helmet = new DefaultDyedLeatherArmorItem(material, ArmorItem.Type.HELMET, settings, defaultColor);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), helmet);
         LOGGER.info("[MoonTrace|TransArmor|BOOT] action=register result=OK item={}", name);
         return helmet;
@@ -150,17 +140,16 @@ public final class TransitionalArmorItems {
 
     private static Item registerChestplate(
             String name,
-            net.minecraft.registry.entry.RegistryEntry<net.minecraft.item.ArmorMaterial> material,
             int durability,
-            net.minecraft.util.Rarity rarity) {
-        Objects.requireNonNull(material, "Chestplate material must be registered before item: " + name);
-
+            Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(durability)
                 .rarity(rarity)
                 .fireproof();
 
-        Item chestplate = new ArmorItem(material, ArmorItem.Type.CHESTPLATE, settings);
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.transitionalByItemId(name);
+        Item chestplate = new DefaultDyedLeatherArmorItem(material, ArmorItem.Type.CHESTPLATE, settings, defaultColor);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), chestplate);
         LOGGER.info("[MoonTrace|TransArmor|BOOT] action=register result=OK item={}", name);
         return chestplate;
@@ -168,17 +157,16 @@ public final class TransitionalArmorItems {
 
     private static Item registerLeggings(
             String name,
-            net.minecraft.registry.entry.RegistryEntry<net.minecraft.item.ArmorMaterial> material,
             int durability,
-            net.minecraft.util.Rarity rarity) {
-        Objects.requireNonNull(material, "Leggings material must be registered before item: " + name);
-
+            Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(durability)
                 .rarity(rarity)
                 .fireproof();
 
-        Item leggings = new ArmorItem(material, ArmorItem.Type.LEGGINGS, settings);
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.transitionalByItemId(name);
+        Item leggings = new DefaultDyedLeatherArmorItem(material, ArmorItem.Type.LEGGINGS, settings, defaultColor);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), leggings);
         LOGGER.info("[MoonTrace|TransArmor|BOOT] action=register result=OK item={}", name);
         return leggings;
@@ -186,17 +174,16 @@ public final class TransitionalArmorItems {
 
     private static Item registerBoots(
             String name,
-            net.minecraft.registry.entry.RegistryEntry<net.minecraft.item.ArmorMaterial> material,
             int durability,
-            net.minecraft.util.Rarity rarity) {
-        Objects.requireNonNull(material, "Boots material must be registered before item: " + name);
-
+            Rarity rarity) {
+        int defaultColor = ArmorColorPalette.colorFor(name);
         Item.Settings settings = new Item.Settings()
                 .maxDamage(durability)
                 .rarity(rarity)
                 .fireproof();
 
-        Item boots = new ArmorItem(material, ArmorItem.Type.BOOTS, settings);
+        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.transitionalByItemId(name);
+        Item boots = new DefaultDyedLeatherArmorItem(material, ArmorItem.Type.BOOTS, settings, defaultColor);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), boots);
         LOGGER.info("[MoonTrace|TransArmor|BOOT] action=register result=OK item={}", name);
         return boots;

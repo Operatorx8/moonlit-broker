@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "mymodtest:old_market_chestplate",
+    "mymodtest:blood_pact_chestplate",
+    "mymodtest:ghost_god_chestplate",
+    "mymodtest:windbreaker_chestplate",
+    "mymodtest:void_devourer_chestplate",
+    "mymodtest:reactive_bug_plate",
+    "mymodtest:patchwork_coat",
+    "mymodtest:ritual_robe"
+  ]
+}

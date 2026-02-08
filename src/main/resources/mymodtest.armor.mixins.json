@@ -12,7 +12,8 @@
     "LivingEntityDeathMixin",
     "GhostStepPushMixin",
     "GossamerSlowMovementMixin",
-    "BlockItemPlaceMixin"
+    "BlockItemPlaceMixin",
+    "ItemStackDyedColorDebugMixin"
   ],
   "injectors": {
     "defaultRequire": 1
