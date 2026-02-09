@@ -224,6 +224,16 @@ public class TradeActionHandler {
     }
     
     private static void handleSwitchSecret(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
+        String variantKey = merchant.getVariantKey();
+        MerchantUnlockState state = MerchantUnlockState.getServerState(player.getServerWorld());
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), variantKey);
+        if (!progress.isUnlockedKatanaHidden(variantKey)) {
+            player.sendMessage(Text.literal("该商人变体的隐藏页尚未解锁").formatted(Formatting.RED), false);
+            LOGGER.info("[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=1 allowed=0 reason=variant_not_unlocked variant={}",
+                player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, variantKey);
+            return;
+        }
+
         // 验证门槛
         SecretGateValidator.ValidationResult result = SecretGateValidator.validate(player, merchant);
         
@@ -437,11 +447,12 @@ public class TradeActionHandler {
             return "UNKNOWN";
         }
         MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
-        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-        if (progress.isUnlockedKatanaHidden()) {
+        String variantKey = merchant.getVariantKey();
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), variantKey);
+        if (progress.isUnlockedKatanaHidden(variantKey)) {
             return "UNLOCKED";
         }
-        return progress.getTradeCount() >= ELIGIBLE_TRADE_COUNT ? "ELIGIBLE" : "LOCKED";
+        return progress.getTradeCount(variantKey) >= ELIGIBLE_TRADE_COUNT ? "ELIGIBLE" : "LOCKED";
     }
     
     /**

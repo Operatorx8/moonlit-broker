@@ -1,5 +1,7 @@
 package mod.test.mymodtest.trade;
 
+import net.fabricmc.loader.api.FabricLoader;
+
 /**
  * 交易系统配置常量
  * 集中管理所有可调参数
@@ -8,7 +10,16 @@ public final class TradeConfig {
     private TradeConfig() {}
 
     // ========== 调试开关 ==========
-    public static final boolean TRADE_DEBUG = false;
+    // 总开关：开发环境自动 true；发布环境默认 false
+    public static final boolean MASTER_DEBUG =
+            FabricLoader.getInstance().isDevelopmentEnvironment()
+            || Boolean.getBoolean("mm.debug"); // 允许 -Dmm.debug=true 强制开
+
+    // 现有验证项开关全部从这里派生（默认跟随总开关）
+    public static final boolean TRADE_DEBUG = MASTER_DEBUG;
+    public static final boolean AI_DEBUG = MASTER_DEBUG;
+    public static final boolean SPAWN_DEBUG = MASTER_DEBUG;
+    public static final boolean SCROLL_DEBUG = MASTER_DEBUG;
 
     // ========== 门槛阈值 ==========
     /** 进入隐藏页所需声望 */

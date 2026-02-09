@@ -38,6 +38,11 @@ public final class ModItemGroups {
                         entries.add(ModItems.SILVER_NOTE);
                         entries.add(ModItems.GUIDE_SCROLL);
                         entries.add(ModBlocks.MYSTERIOUS_ANVIL_ITEM);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_SPAWN_EGG);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_WET_SPAWN_EGG);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG);
 
                         // Katanas
                         entries.add(KatanaItems.MOON_GLOW_KATANA);

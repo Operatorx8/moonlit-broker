@@ -11,9 +11,13 @@ import org.slf4j.LoggerFactory;
 
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtString;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -48,6 +52,12 @@ public class MerchantUnlockState extends PersistentState {
         return progressByPlayer.computeIfAbsent(playerUuid, key -> new Progress());
     }
 
+    public Progress getOrCreateProgress(UUID playerUuid, String variantKey) {
+        Progress progress = getOrCreateProgress(playerUuid);
+        progress.ensureVariantUnlockScope(variantKey);
+        return progress;
+    }
+
     @Override
     public NbtCompound writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registryLookup) {
         NbtCompound playersNbt = new NbtCompound();
@@ -80,9 +90,13 @@ public class MerchantUnlockState extends PersistentState {
         private static final String NBT_REFRESH_MAP = "SigilRefreshByMerchant";
         private static final String NBT_LAST_SIGIL_HASH_LEGACY = "LastSigilOffersHash";
         private static final String NBT_LAST_SIGIL_HASH_MAP = "LastSigilOffersHashByMerchant";
+        private static final String NBT_VARIANT_UNLOCK_MAP = "VariantUnlockByKey";
+        private static final String NBT_PURCHASED_SECRET_IDS = "PurchasedSecretKatanaIds";
         // Cap is intentionally bounded to avoid unbounded save growth.
         // When exceeded, oldest UUID-ordered tail entries are truncated by design.
         private static final int MAX_PER_MERCHANT_ENTRIES = 2048;
+        private static final int MAX_VARIANT_ENTRIES = 16;
+        private static final int MAX_PURCHASED_SECRET_IDS = 1024;
         // Global de-noise: deprecated API warning should emit once per JVM lifetime.
         private static boolean deprecatedRefreshApiWarned = false;
 
@@ -90,6 +104,8 @@ public class MerchantUnlockState extends PersistentState {
         private boolean eligibleNotified;
         private boolean unlockedKatanaHidden;
         private boolean unlockedNotified;
+        /** Variant-scoped unlock state: key=(playerUuid,variantKey). */
+        private final Map<String, VariantUnlockProgress> unlockByVariant = new HashMap<>();
         // ========== Per-merchant refresh count (replaces global refreshSeenCount) ==========
         /** Per-(player,merchant) refresh seen count map. Key = merchantUuid */
         private final Map<UUID, Integer> sigilRefreshSeenByMerchant = new HashMap<>();
@@ -111,10 +127,123 @@ public class MerchantUnlockState extends PersistentState {
         private final Map<UUID, Integer> lastSigilOffersHashByMerchant = new HashMap<>();
         /** Legacy global hash fallback for migration */
         private int legacyLastSigilOffersHash = 0;
+        /** Per-player purchased secret IDs; used to render global sold-out across merchants. */
+        private final Set<String> purchasedSecretKatanaIds = new HashSet<>();
         private boolean invalidRefreshUuidWarned = false;
         private boolean invalidHashUuidWarned = false;
         private boolean refreshCapWarned = false;
         private boolean hashCapWarned = false;
+        private boolean variantCapWarned = false;
+        private boolean purchasedCapWarned = false;
+
+        private static final class VariantUnlockProgress {
+            private int tradeCount;
+            private boolean eligibleNotified;
+            private boolean unlockedKatanaHidden;
+            private boolean unlockedNotified;
+        }
+
+        private static String normalizeVariantKey(String variantKey) {
+            if (variantKey == null) {
+                return "STANDARD";
+            }
+            String key = variantKey.trim();
+            if (key.isEmpty()) {
+                return "STANDARD";
+            }
+            return key.toUpperCase(Locale.ROOT);
+        }
+
+        private boolean hasLegacyUnlockState() {
+            return this.tradeCount > 0
+                || this.eligibleNotified
+                || this.unlockedKatanaHidden
+                || this.unlockedNotified;
+        }
+
+        private VariantUnlockProgress toVariantSnapshot() {
+            VariantUnlockProgress snapshot = new VariantUnlockProgress();
+            snapshot.tradeCount = this.tradeCount;
+            snapshot.eligibleNotified = this.eligibleNotified;
+            snapshot.unlockedKatanaHidden = this.unlockedKatanaHidden;
+            snapshot.unlockedNotified = this.unlockedNotified;
+            return snapshot;
+        }
+
+        private VariantUnlockProgress getVariantUnlockView(String variantKey) {
+            String key = normalizeVariantKey(variantKey);
+            VariantUnlockProgress scoped = this.unlockByVariant.get(key);
+            if (scoped != null) {
+                return scoped;
+            }
+            if (this.unlockByVariant.isEmpty() && hasLegacyUnlockState()) {
+                return toVariantSnapshot();
+            }
+            return new VariantUnlockProgress();
+        }
+
+        private VariantUnlockProgress getOrCreateVariantUnlock(String variantKey) {
+            String key = normalizeVariantKey(variantKey);
+            VariantUnlockProgress scoped = this.unlockByVariant.get(key);
+            if (scoped != null) {
+                return scoped;
+            }
+            scoped = this.unlockByVariant.isEmpty() && hasLegacyUnlockState()
+                ? toVariantSnapshot()
+                : new VariantUnlockProgress();
+            this.unlockByVariant.put(key, scoped);
+            return scoped;
+        }
+
+        public void ensureVariantUnlockScope(String variantKey) {
+            getOrCreateVariantUnlock(variantKey);
+        }
+
+        public int getTradeCount(String variantKey) {
+            return getVariantUnlockView(variantKey).tradeCount;
+        }
+
+        public void setTradeCount(String variantKey, int tradeCount) {
+            getOrCreateVariantUnlock(variantKey).tradeCount = Math.max(0, tradeCount);
+        }
+
+        public boolean isEligibleNotified(String variantKey) {
+            return getVariantUnlockView(variantKey).eligibleNotified;
+        }
+
+        public void setEligibleNotified(String variantKey, boolean eligibleNotified) {
+            getOrCreateVariantUnlock(variantKey).eligibleNotified = eligibleNotified;
+        }
+
+        public boolean isUnlockedKatanaHidden(String variantKey) {
+            return getVariantUnlockView(variantKey).unlockedKatanaHidden;
+        }
+
+        public void setUnlockedKatanaHidden(String variantKey, boolean unlockedKatanaHidden) {
+            getOrCreateVariantUnlock(variantKey).unlockedKatanaHidden = unlockedKatanaHidden;
+        }
+
+        public boolean isUnlockedNotified(String variantKey) {
+            return getVariantUnlockView(variantKey).unlockedNotified;
+        }
+
+        public void setUnlockedNotified(String variantKey, boolean unlockedNotified) {
+            getOrCreateVariantUnlock(variantKey).unlockedNotified = unlockedNotified;
+        }
+
+        public boolean hasPurchasedSecretKatana(String secretKatanaId) {
+            if (secretKatanaId == null || secretKatanaId.isEmpty()) {
+                return false;
+            }
+            return this.purchasedSecretKatanaIds.contains(secretKatanaId);
+        }
+
+        public boolean markSecretKatanaPurchased(String secretKatanaId) {
+            if (secretKatanaId == null || secretKatanaId.isEmpty()) {
+                return false;
+            }
+            return this.purchasedSecretKatanaIds.add(secretKatanaId);
+        }
 
         public int getTradeCount() {
             return tradeCount;
@@ -330,6 +459,27 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putBoolean("EligibleNotified", this.eligibleNotified);
             nbt.putBoolean("UnlockedKatanaHidden", this.unlockedKatanaHidden);
             nbt.putBoolean("UnlockedNotified", this.unlockedNotified);
+            int variantDrop = Math.max(0, this.unlockByVariant.size() - MAX_VARIANT_ENTRIES);
+            if (variantDrop > 0 && !variantCapWarned) {
+                variantCapWarned = true;
+                LOGGER.warn("[MoonTrade] VARIANT_UNLOCK_MAP_CAP_TRUNCATE playerUuid={} cap={} drop={} source=save",
+                    playerUuid, MAX_VARIANT_ENTRIES, variantDrop);
+            }
+            NbtList variantList = new NbtList();
+            this.unlockByVariant.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_VARIANT_ENTRIES)
+                .forEach(entry -> {
+                    VariantUnlockProgress scoped = entry.getValue();
+                    NbtCompound entryNbt = new NbtCompound();
+                    entryNbt.putString("variant", entry.getKey());
+                    entryNbt.putInt("tradeCount", scoped.tradeCount);
+                    entryNbt.putBoolean("eligibleNotified", scoped.eligibleNotified);
+                    entryNbt.putBoolean("unlockedKatanaHidden", scoped.unlockedKatanaHidden);
+                    entryNbt.putBoolean("unlockedNotified", scoped.unlockedNotified);
+                    variantList.add(entryNbt);
+                });
+            nbt.put(NBT_VARIANT_UNLOCK_MAP, variantList);
             nbt.putInt(NBT_REFRESH_LEGACY, this.legacyRefreshSeenCount > 0 ? this.legacyRefreshSeenCount : 0);
             // Per-merchant refresh seen counts
             int refreshDrop = Math.max(0, this.sigilRefreshSeenByMerchant.size() - MAX_PER_MERCHANT_ENTRIES);
@@ -354,6 +504,18 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
             nbt.putLong("SilverWindowStart", this.silverWindowStart);
             nbt.putInt("SilverDropCount", this.silverDropCount);
+            int purchasedDrop = Math.max(0, this.purchasedSecretKatanaIds.size() - MAX_PURCHASED_SECRET_IDS);
+            if (purchasedDrop > 0 && !purchasedCapWarned) {
+                purchasedCapWarned = true;
+                LOGGER.warn("[MoonTrade] SECRET_PURCHASED_SET_CAP_TRUNCATE playerUuid={} cap={} drop={} source=save",
+                    playerUuid, MAX_PURCHASED_SECRET_IDS, purchasedDrop);
+            }
+            NbtList purchasedList = new NbtList();
+            this.purchasedSecretKatanaIds.stream()
+                .sorted()
+                .limit(MAX_PURCHASED_SECRET_IDS)
+                .forEach(secretId -> purchasedList.add(NbtString.of(secretId)));
+            nbt.put(NBT_PURCHASED_SECRET_IDS, purchasedList);
             // Sigil hash migration + per-merchant map
             nbt.putInt(NBT_LAST_SIGIL_HASH_LEGACY, this.legacyLastSigilOffersHash);
             int hashDrop = Math.max(0, this.lastSigilOffersHashByMerchant.size() - MAX_PER_MERCHANT_ENTRIES);
@@ -391,6 +553,19 @@ public class MerchantUnlockState extends PersistentState {
             if (nbt.contains("UnlockedNotified")) {
                 progress.unlockedNotified = nbt.getBoolean("UnlockedNotified");
             }
+            if (nbt.contains(NBT_VARIANT_UNLOCK_MAP, NbtElement.LIST_TYPE)) {
+                NbtList variantList = nbt.getList(NBT_VARIANT_UNLOCK_MAP, NbtElement.COMPOUND_TYPE);
+                for (int i = 0; i < variantList.size(); i++) {
+                    NbtCompound entryNbt = variantList.getCompound(i);
+                    String variant = normalizeVariantKey(entryNbt.getString("variant"));
+                    VariantUnlockProgress scoped = new VariantUnlockProgress();
+                    scoped.tradeCount = Math.max(0, entryNbt.getInt("tradeCount"));
+                    scoped.eligibleNotified = entryNbt.getBoolean("eligibleNotified");
+                    scoped.unlockedKatanaHidden = entryNbt.getBoolean("unlockedKatanaHidden");
+                    scoped.unlockedNotified = entryNbt.getBoolean("unlockedNotified");
+                    progress.unlockByVariant.put(variant, scoped);
+                }
+            }
             if (nbt.contains(NBT_REFRESH_LEGACY)) {
                 progress.legacyRefreshSeenCount = nbt.getInt(NBT_REFRESH_LEGACY);
             }
@@ -420,6 +595,15 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("SilverDropCount")) {
                 progress.silverDropCount = nbt.getInt("SilverDropCount");
+            }
+            if (nbt.contains(NBT_PURCHASED_SECRET_IDS, NbtElement.LIST_TYPE)) {
+                NbtList purchasedList = nbt.getList(NBT_PURCHASED_SECRET_IDS, NbtElement.STRING_TYPE);
+                for (int i = 0; i < purchasedList.size(); i++) {
+                    String secretId = purchasedList.get(i).asString();
+                    if (!secretId.isEmpty()) {
+                        progress.purchasedSecretKatanaIds.add(secretId);
+                    }
+                }
             }
             // Sigil hash migration + per-merchant map
             if (nbt.contains(NBT_LAST_SIGIL_HASH_LEGACY)) {

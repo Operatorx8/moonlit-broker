@@ -3,14 +3,18 @@ package mod.test.mymodtest.entity.spawn;
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
 import mod.test.mymodtest.registry.ModEntities;
 import mod.test.mymodtest.world.MerchantSpawnerState;
+import net.minecraft.entity.EntityType;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.StructureTags;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.TypeFilter;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.random.Random;
+import net.minecraft.village.VillagerType;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.SpawnHelper;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -162,7 +166,7 @@ public class MysteriousMerchantSpawner {
             }
         }
 
-        // 5. 备用检查：扫描已加载区块中的商人（兜底机制）
+        // 5. 备用检查：扫描已加载区块中的商人（兜底机制，检查所有 5 种类型）
         // 注意：必须用 isAlive() 过滤，因为 discard() 后实体仍在列表中直到 tick 结束
         int existingCount = world.getEntitiesByType(
             TypeFilter.instanceOf(MysteriousMerchantEntity.class),
@@ -229,8 +233,11 @@ public class MysteriousMerchantSpawner {
             return;
         }
 
-        // 11. 生成商人
-        MysteriousMerchantEntity merchant = ModEntities.MYSTERIOUS_MERCHANT.create(world);
+        // 11. 按 VillagerType 映射选择商人变体
+        EntityType<MysteriousMerchantEntity> chosenType = chooseMerchantType(world, spawnPos, random);
+
+        // 12. 生成商人
+        MysteriousMerchantEntity merchant = chosenType.create(world);
         if (merchant != null) {
             merchant.refreshPositionAndAngles(
                     spawnPos.getX() + 0.5,
@@ -241,14 +248,19 @@ public class MysteriousMerchantSpawner {
             );
 
             if (world.spawnEntity(merchant)) {
-                // 12. 记录到持久化状态（包含商人 UUID）
+                // 13. 记录到持久化状态（包含商人 UUID）
                 long cooldownTicks = DEBUG ? DEBUG_COOLDOWN_TICKS : NORMAL_COOLDOWN_TICKS;
                 long expectedLifetime = DEBUG ? DEBUG_EXPECTED_LIFETIME : NORMAL_EXPECTED_LIFETIME;
                 UUID merchantUuid = merchant.getUuid();
                 state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
 
+                // 获取 VillagerType 用于日志
+                RegistryEntry<Biome> biomeEntry = world.getBiome(spawnPos);
+                VillagerType villagerType = VillagerType.forBiome(biomeEntry);
+
                 if (DEBUG) {
-                    LOGGER.info("[Spawner] SPAWN_SUCCESS pos={} uuid={}... nearPlayer={} totalSpawned={}",
+                    LOGGER.info("[Spawner] action=MM_SPAWN_VARIANT villagerType={} chosen={} pos={} uuid={}... nearPlayer={} totalSpawned={}",
+                        villagerType, net.minecraft.registry.Registries.ENTITY_TYPE.getId(chosenType),
                         spawnPos.toShortString(),
                         merchantUuid.toString().substring(0, 8),
                         targetPlayer.getName().getString(),
@@ -317,7 +329,61 @@ public class MysteriousMerchantSpawner {
             return false;
         }
 
+        // Use base MYSTERIOUS_MERCHANT type for spawn check (all 5 share same dimensions)
         return SpawnHelper.isClearForSpawn(world, pos, world.getBlockState(pos),
                 world.getFluidState(pos), ModEntities.MYSTERIOUS_MERCHANT);
+    }
+
+    /**
+     * Phase 8: 按 VillagerType 映射选择商人变体 EntityType。
+     *
+     * 映射规则：
+     * - PLAINS / TAIGA  => Standard (95%), Wet (4%), Exotic (1%)
+     * - DESERT / SAVANNA => Arid    (95%), Wet (4%), Exotic (1%)
+     * - SNOW             => Cold    (100%, 不乱入)
+     * - SWAMP            => Wet     (100%, 不乱入)
+     * - JUNGLE           => Exotic  (100%, 不乱入)
+     */
+    @SuppressWarnings("unchecked")
+    private EntityType<MysteriousMerchantEntity> chooseMerchantType(ServerWorld world, BlockPos spawnPos, Random random) {
+        RegistryEntry<Biome> biomeEntry = world.getBiome(spawnPos);
+        VillagerType villagerType = VillagerType.forBiome(biomeEntry);
+
+        EntityType<MysteriousMerchantEntity> defaultType;
+
+        if (villagerType == VillagerType.SNOW) {
+            // Cold: 不乱入
+            return ModEntities.MYSTERIOUS_MERCHANT_COLD;
+        } else if (villagerType == VillagerType.SWAMP) {
+            // Wet: 不乱入
+            return ModEntities.MYSTERIOUS_MERCHANT_WET;
+        } else if (villagerType == VillagerType.JUNGLE) {
+            // Exotic: 不乱入
+            return ModEntities.MYSTERIOUS_MERCHANT_EXOTIC;
+        } else if (villagerType == VillagerType.DESERT || villagerType == VillagerType.SAVANNA) {
+            // Arid 区：95% Arid, 4% Wet, 1% Exotic
+            defaultType = ModEntities.MYSTERIOUS_MERCHANT_ARID;
+        } else {
+            // Standard 区 (PLAINS, TAIGA, 以及其他未知类型 fallback)：95% Standard, 4% Wet, 1% Exotic
+            defaultType = ModEntities.MYSTERIOUS_MERCHANT;
+        }
+
+        // 乱入概率：仅 Standard 区和 Arid 区生效
+        float intrusionRoll = random.nextFloat();
+        if (intrusionRoll < 0.01f) {
+            // 1% Exotic
+            if (DEBUG) {
+                LOGGER.debug("[Spawner] INTRUSION villagerType={} intrusion=EXOTIC roll={}", villagerType, intrusionRoll);
+            }
+            return ModEntities.MYSTERIOUS_MERCHANT_EXOTIC;
+        } else if (intrusionRoll < 0.05f) {
+            // 4% Wet
+            if (DEBUG) {
+                LOGGER.debug("[Spawner] INTRUSION villagerType={} intrusion=WET roll={}", villagerType, intrusionRoll);
+            }
+            return ModEntities.MYSTERIOUS_MERCHANT_WET;
+        }
+
+        return defaultType;
     }
 }

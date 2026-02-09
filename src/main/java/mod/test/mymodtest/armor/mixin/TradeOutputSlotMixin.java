@@ -138,15 +138,17 @@ public class TradeOutputSlotMixin {
                 player.getName().getString(), merchant.getUuid().toString().substring(0, 8), outputStack.getItem());
             return;
         }
-        
+
+        boolean recorded = recordPlayerSecretPurchase(player, secretId);
         // Atomically mark as sold - if already sold, this returns false
         boolean marked = merchant.tryMarkSecretSold(secretId);
-        
+        // Clear marker regardless of sold flag to avoid carrying marker on the purchased item.
+        MysteriousMerchantEntity.clearSecretTradeMarker(outputStack);
+
         if (marked) {
-            MysteriousMerchantEntity.clearSecretTradeMarker(outputStack);
             LOGGER.info("[MoonTrade] SECRET_KATANA_PURCHASED player={} merchant={} secretId={}", 
                 player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
-            
+
             player.sendMessage(
                 Text.literal("[神秘商人] 你获得了珍贵的隐藏神器！")
                     .formatted(Formatting.GOLD, Formatting.BOLD),
@@ -157,6 +159,23 @@ public class TradeOutputSlotMixin {
             LOGGER.warn("[MoonTrade] SECRET_ALREADY_SOLD_ON_PURCHASE player={} merchant={} secretId={}", 
                 player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
         }
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.debug("[MoonTrade] SECRET_PURCHASE_RECORD player={} secretId={} recorded={}",
+                player.getName().getString(), secretId, recorded);
+        }
+    }
+
+    private boolean recordPlayerSecretPurchase(ServerPlayerEntity player, String secretId) {
+        if (!(player.getWorld() instanceof ServerWorld serverWorld)) {
+            return false;
+        }
+        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+        boolean recorded = progress.markSecretKatanaPurchased(secretId);
+        if (recorded) {
+            state.markDirty();
+        }
+        return recorded;
     }
 
     /**
