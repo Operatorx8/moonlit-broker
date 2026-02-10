@@ -43,6 +43,7 @@ public final class ModItemGroups {
                         entries.add(ModItems.MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG);
                         entries.add(ModItems.MYSTERIOUS_MERCHANT_WET_SPAWN_EGG);
                         entries.add(ModItems.MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG);
+                        entries.add(ModItems.MYSTERIOUS_MERCHANT_DEBUG_RANDOM_SPAWN_EGG);
 
                         // Katanas
                         entries.add(KatanaItems.MOON_GLOW_KATANA);

@@ -9,6 +9,7 @@
   "item.mymodtest.mysterious_merchant_cold_spawn_egg": "Cold Mysterious Merchant Spawn Egg",
   "item.mymodtest.mysterious_merchant_wet_spawn_egg": "Wet Mysterious Merchant Spawn Egg",
   "item.mymodtest.mysterious_merchant_exotic_spawn_egg": "Exotic Mysterious Merchant Spawn Egg",
+  "item.mymodtest.mysterious_merchant_debug_random_spawn_egg": "Debug Random Mysterious Merchant Spawn Egg",
   "entity.mymodtest.mysterious_merchant": "Mysterious Merchant",
   "block.mymodtest.mysterious_anvil": "Mysterious Anvil",
   "subtitles.mymodtest.moontrace.mark": "Moontrace mark",

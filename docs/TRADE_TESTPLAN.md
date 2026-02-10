@@ -1,85 +1,63 @@
-# Trade Release Test Plan
+# Trade Test Plan (One-Cut Fix Verification)
 
-> 发布前必须全部通过；任意一项失败即阻塞发布。
+> 本文用于验证 3 个主问题一次性修复：UI 按钮稳定、spawn egg 乱入一致、katana 跨商人全局防重复购买。
 
 ## 环境准备
-- [ ] 使用开发环境启动客户端（`./gradlew runClient`）。
-- [ ] 准备日志窗口：`grep "MoonTrade" run/logs/latest.log | tail -n 120`。
+- [ ] 开发环境运行客户端：`./gradlew runClient`
+- [ ] 确认调试开关开启（开发环境默认）：`TradeConfig.MASTER_DEBUG=true`
+- [ ] 日志窗口准备：`tail -f run/logs/latest.log | grep "MoonTrade"`
 
-## T1 UI 翻页 / 滚轮 / 空行点击
+## T1 UI 按钮稳定性（next/prev/refresh）
 ### Steps
-1. `/summon mymodtest:mysterious_merchant` 生成商人并打开交易界面。
-2. 将列表翻到有空白行的页面，点击空白行。
-3. 使用 Next/Prev 和滚轮滚动列表。
+1. `/summon mymodtest:mysterious_merchant` 打开交易界面。
+2. 检查右上 `prev/next/refresh` 是否出现。
+3. 连续执行：翻页 -> refresh -> 关闭界面 -> 重开界面。
+4. 重复 10 次以上，观察按钮是否丢失、点击区是否被标题覆盖。
 ### Expected
-- 日志出现 `action=CLICK_EMPTY_IGNORED`。
-- 页面切换正常，不崩溃，不出现选中错位。
-- 滚轮可用且不会导致界面卡死。
-### Pass/Fail
-- Pass: 空行点击无崩溃且日志命中。
-- Fail: 任意崩溃、卡死、或点击空行触发异常选择。
+- 每次 `init` 日志出现 `MM_UI_INIT`。
+- 每次布局初始化至少出现一次 `MM_UI_LAYOUT titleWidth/buttonsLeftX/titleX`。
+- 按钮在 `offers rebuild` / 重开界面后不消失；标题不覆盖按钮点击区。
+- 当 offers <= pageSize 时，`prev/next` 隐藏，`refresh` 仍显示。
 
-## T2 Refresh 是否真正重建 offers
+## T2 Spawn Egg 乱入一致性（5 个 egg + 第 6 个 debug 随机 egg）
 ### Steps
-1. 打开商人界面，记录当前 `offersHash`。
-2. 点击 refresh（满足卷轴条件）。
-3. 再次查看日志。
+1. 创造模式拿到 5 个气候 egg：
+   - standard(plains/taiga), arid, cold, wet, exotic
+2. 分别对每个 egg 刷 100 次（建议记录日志统计）。
+3. 额外用第 6 个 `mysterious_merchant_debug_random_spawn_egg` 刷 100 次。
 ### Expected
-- 出现 `action=REBUILD_DONE`。
-- `refreshSeenCount` 递增。
-- `offersHash` 变化（或列表可见变化）。
-### Pass/Fail
-- Pass: `REBUILD_DONE` + `refreshSeenCount` 变化。
-- Fail: 点击 refresh 无重建日志或 hash 长期不变。
+- 每次刷出都记录 `MM_EGG_SPAWN origin=... rolled=... seed=... playerUuid=... pos=...`
+- `cold egg` 不再是 100% cold，能出现非 cold 变体（按 70/10/10/8/2 表）。
+- `plains/taiga egg` 同样出现多种变体，且与其他 origin 逻辑一致。
+- `debug egg` 会随机 origin，再走同一张概率表。
 
-## T3 唯一隐藏刀（同一实体不重复）
+## T3 隐藏神器权重与 NBT 固化
 ### Steps
-1. 用同一个商人实体完成隐藏刀交易。
-2. 立即关闭 UI 再打开。
-3. 退出世界并重新进入（确保同一实体仍在），再次打开 UI。
+1. 连续生成/重开 50 个商人实体，记录 `MM_SECRET_ROLL` 与 `MM_SECRET_PICK`。
+2. 对同一商人退出重进世界，再次检查其 `secretKatanaId` 是否变化。
+3. 完成隐藏交易，检查输出 katana 的自定义数据是否带 `MM_KATANA_ID`。
 ### Expected
-- 首次成交时日志出现 `SECRET_KATANA_PURCHASED` 与 `SECRET_SOLD`。
-- 同一实体后续不再出现隐藏刀交易。
-### Pass/Fail
-- Pass: 同一实体只会卖出一次隐藏刀。
-- Fail: 重开 UI 或重进世界后同一实体再次出现隐藏刀。
+- 日志出现：`MM_SECRET_ROLL variant=... seed=... roll=... chosenId=...`
+- 50 次内应出现明显非单一分布（非全是同一把）。
+- 同一实体重登后 `secretKatanaId` 不变（首次生成后固定）。
+- 输出 katana 可读取 `MM_KATANA_ID`（short id：`moonglow/regret/eclipse/oblivion/nmap`）。
 
-## T4 新商人 vs 同一商人
+## T4 跨商人全局防重复购买（服务端强制）
 ### Steps
-1. 对已售出隐藏刀的商人再次打开 UI（同一实体）。
-2. `/summon` 生成一个新商人实体并打开 UI。
+1. 玩家 A 购买某 `katanaId`（例如 `moonglow`）。
+2. 再遇到不同商人（不同 uuid、不同 variant），若售卖同 `katanaId`，尝试再次购买。
+3. 再次打开 UI，观察该 katana offer 展示状态。
 ### Expected
-- 旧实体：隐藏刀仍然不出现。
-- 新实体：允许再次出现隐藏刀（符合“唯一性按实体隔离”）。
-### Pass/Fail
-- Pass: 旧实体禁售、新实体可售。
-- Fail: 旧实体复活隐藏刀，或新实体永远不出隐藏刀。
+- 重复购买在服务端结算点被拦截，日志出现：
+  - `MM_KATANA_BLOCK player=... katanaId=... merchant=...`
+- 被拦截时输入材料不消耗，输出槽不产出第二把 katana。
+- 首次成功购买会记录：
+  - `MM_KATANA_OWNED_ADD ...`
+  - `MM_PURCHASED ...`
+- `rebuild/open UI` 后该玩家同 `katanaId` 显示 sold out（日志 `MM_SOLD_OUT_SHOWN`）。
+- 不删除 `Arcane Ledger` 交易，不因 sold out 发生 offers 重排。
 
-## T5 隐藏刀多样性（Moon 不再垄断）
-### Steps
-1. 连续 `/summon` 至少 10 个新商人，记录每个商人的 `action=SECRET_PICK` 日志。
-2. 统计 `chosenId` 分布。
-### Expected
-- `candidatesSize` 为 5。
-- `candidates` 含：`moon_glow_katana|regret_blade|eclipse_blade|oblivion_edge|nmap_katana`。
-- `chosenId` 不是几乎恒定为 `moon_glow_katana`。
-### Pass/Fail
-- Pass: 10 次中出现至少 2 种以上 `chosenId`。
-- Fail: `candidatesSize<5` 或 `chosenId` 长期单一。
-
-## T6 Release 开关清单（默认必须关闭）
-### Steps
-1. 检查 `MysteriousMerchantEntity` 调试开关。
-2. 运行一次正常交易流程并检查日志。
-### Expected
-- `DEBUG_SCROLL_INJECT=false`。
-- `DEBUG_REFRESH_INJECT=false`（发布版必须关闭）。
-- 发布日志中不应出现调试注入 tag：`MM_DEBUG_REFRESH_INJECT`。
-### Pass/Fail
-- Pass: 调试开关关闭且日志干净。
-- Fail: 任意 debug 注入仍开启或日志持续打印调试 tag。
-
-## 快速 grep（建议）
+## 建议 grep
 ```bash
-grep -E "CLICK_EMPTY_IGNORED|REBUILD_DONE|SECRET_PICK|SECRET_KATANA_PURCHASED|SECRET_SOLD|MM_DEBUG_REFRESH_INJECT" run/logs/latest.log | tail -n 200
+grep -E "MM_UI_INIT|MM_UI_LAYOUT|MM_EGG_SPAWN|MM_SECRET_ROLL|MM_SECRET_PICK|MM_KATANA_BLOCK|MM_KATANA_OWNED_ADD|MM_PURCHASED|MM_SOLD_OUT_SHOWN" run/logs/latest.log | tail -n 400
 ```

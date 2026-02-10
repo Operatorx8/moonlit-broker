@@ -5,6 +5,7 @@ import mod.test.mymodtest.trade.TradeAction;
 import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.trade.network.TradeActionC2SPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.screen.ingame.MerchantScreen;
@@ -26,6 +27,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -55,6 +57,8 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
     private int mymodtest$lastStartOffset = -1;
     @Unique
     private int mymodtest$lastSelectedIndex = -1;
+    @Unique
+    private boolean mymodtest$layoutLogged = false;
 
     protected MerchantScreenRefreshMixin(MerchantScreenHandler handler, PlayerInventory inventory, Text title) {
         super(handler, inventory, title);
@@ -63,29 +67,15 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
     @Inject(method = "init", at = @At("TAIL"))
     private void mymodtest$injectControls(CallbackInfo ci) {
         this.mymodtest$isMerchantUi = mymodtest$isMysteriousMerchantScreen();
-        if (!this.mymodtest$isMerchantUi) {
-            return;
-        }
-
-        int top = this.y + 4;
-        this.mymodtest$prevPageButton = this.addDrawableChild(
-            ButtonWidget.builder(Text.literal("<"), button -> mymodtest$changePage(-1))
-                .dimensions(this.x + this.backgroundWidth - 66, top, 20, 18)
-                .build()
-        );
-        this.mymodtest$nextPageButton = this.addDrawableChild(
-            ButtonWidget.builder(Text.literal(">"), button -> mymodtest$changePage(1))
-                .dimensions(this.x + this.backgroundWidth - 44, top, 20, 18)
-                .build()
-        );
-        this.mymodtest$refreshButton = this.addDrawableChild(
-            ButtonWidget.builder(Text.literal("⟳"), button -> mymodtest$sendRefreshRequest())
-                .dimensions(this.x + this.backgroundWidth - 22, top, 18, 18)
-                .build()
-        );
+        MYMODTEST$LOGGER.info("[MoonTrade] MM_UI_INIT title=\"{}\" syncId={} offers={} merchantUi={}",
+            this.title.getString(), this.handler.syncId, this.handler.getRecipes().size(), this.mymodtest$isMerchantUi ? 1 : 0);
+        mymodtest$ensureButtons();
         this.mymodtest$lastSelectedIndex = this.selectedIndex;
         this.mymodtest$lastStartOffset = this.indexStartOffset;
-        mymodtest$updateControlsAndTooltip();
+        this.mymodtest$layoutLogged = false;
+        if (this.mymodtest$isMerchantUi) {
+            mymodtest$updateControlsAndTooltip();
+        }
     }
 
     /**
@@ -141,6 +131,7 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
 
     @Inject(method = "render", at = @At("TAIL"))
     private void mymodtest$afterRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        mymodtest$ensureButtons();
         if (!this.mymodtest$isMerchantUi) {
             return;
         }
@@ -194,6 +185,99 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
         );
     }
 
+    @Redirect(
+        method = "drawForeground",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/DrawContext;drawText(Lnet/minecraft/client/font/TextRenderer;Lnet/minecraft/text/Text;IIIZ)I",
+            ordinal = 0
+        )
+    )
+    private int mymodtest$clampTitlePosition(
+        DrawContext context,
+        TextRenderer textRenderer,
+        Text text,
+        int x,
+        int y,
+        int color,
+        boolean shadow
+    ) {
+        if (!this.mymodtest$isMerchantUi) {
+            return context.drawText(textRenderer, text, x, y, color, shadow);
+        }
+        int titleWidth = textRenderer.getWidth(text);
+        int centerX = x;
+        int buttonsLeftX = this.backgroundWidth - 66;
+        int clampedX = Math.min(centerX, buttonsLeftX - titleWidth - 4);
+        clampedX = Math.max(4, clampedX);
+
+        if (!this.mymodtest$layoutLogged) {
+            this.mymodtest$layoutLogged = true;
+            MYMODTEST$LOGGER.info("[MoonTrade] MM_UI_LAYOUT titleWidth={} buttonsLeftX={} titleX={} syncId={}",
+                titleWidth, buttonsLeftX, clampedX, this.handler.syncId);
+        }
+        return context.drawText(textRenderer, text, clampedX, y, color, shadow);
+    }
+
+    @Unique
+    private void mymodtest$ensureButtons() {
+        this.mymodtest$isMerchantUi = mymodtest$isMysteriousMerchantScreen();
+        if (!this.mymodtest$isMerchantUi) {
+            return;
+        }
+        int top = this.y + 4;
+        int prevX = this.x + this.backgroundWidth - 66;
+        int nextX = this.x + this.backgroundWidth - 44;
+        int refreshX = this.x + this.backgroundWidth - 22;
+        boolean restored = false;
+
+        if (mymodtest$isButtonMissing(this.mymodtest$prevPageButton)) {
+            this.mymodtest$prevPageButton = this.addDrawableChild(
+                ButtonWidget.builder(Text.literal("<"), button -> mymodtest$changePage(-1))
+                    .dimensions(prevX, top, 20, 18)
+                    .build()
+            );
+            restored = true;
+        } else {
+            this.mymodtest$prevPageButton.setX(prevX);
+            this.mymodtest$prevPageButton.setY(top);
+        }
+
+        if (mymodtest$isButtonMissing(this.mymodtest$nextPageButton)) {
+            this.mymodtest$nextPageButton = this.addDrawableChild(
+                ButtonWidget.builder(Text.literal(">"), button -> mymodtest$changePage(1))
+                    .dimensions(nextX, top, 20, 18)
+                    .build()
+            );
+            restored = true;
+        } else {
+            this.mymodtest$nextPageButton.setX(nextX);
+            this.mymodtest$nextPageButton.setY(top);
+        }
+
+        if (mymodtest$isButtonMissing(this.mymodtest$refreshButton)) {
+            this.mymodtest$refreshButton = this.addDrawableChild(
+                ButtonWidget.builder(Text.literal("⟳"), button -> mymodtest$sendRefreshRequest())
+                    .dimensions(refreshX, top, 18, 18)
+                    .build()
+            );
+            restored = true;
+        } else {
+            this.mymodtest$refreshButton.setX(refreshX);
+            this.mymodtest$refreshButton.setY(top);
+        }
+
+        if (restored) {
+            MYMODTEST$LOGGER.info("[MoonTrade] MM_UI_BUTTONS_RESTORED syncId={} offers={}",
+                this.handler.syncId, this.handler.getRecipes().size());
+        }
+    }
+
+    @Unique
+    private boolean mymodtest$isButtonMissing(ButtonWidget button) {
+        return button == null || !this.children().contains(button);
+    }
+
     @Unique
     private void mymodtest$sendRefreshRequest() {
         if (this.client == null || this.client.player == null) {
@@ -245,14 +329,18 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
         int offersTotal = this.handler.getRecipes().size();
         int totalPages = mymodtest$getTotalPages(offersTotal);
         int currentPage = mymodtest$getCurrentPage();
+        boolean showPager = offersTotal > MYMODTEST$PAGE_SIZE;
 
         if (this.mymodtest$prevPageButton != null) {
-            this.mymodtest$prevPageButton.active = totalPages > 1 && currentPage > 0;
+            this.mymodtest$prevPageButton.visible = showPager;
+            this.mymodtest$prevPageButton.active = showPager && totalPages > 1 && currentPage > 0;
         }
         if (this.mymodtest$nextPageButton != null) {
-            this.mymodtest$nextPageButton.active = totalPages > 1 && currentPage < totalPages - 1;
+            this.mymodtest$nextPageButton.visible = showPager;
+            this.mymodtest$nextPageButton.active = showPager && totalPages > 1 && currentPage < totalPages - 1;
         }
         if (this.mymodtest$refreshButton != null) {
+            this.mymodtest$refreshButton.visible = true;
             int need = TradeConfig.COST_REFRESH;
             int have = mymodtest$countRefreshScrollsClient();
             this.mymodtest$refreshButton.setTooltip(Tooltip.of(Text.translatable(

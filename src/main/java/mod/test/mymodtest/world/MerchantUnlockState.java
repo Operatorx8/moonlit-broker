@@ -231,18 +231,55 @@ public class MerchantUnlockState extends PersistentState {
             getOrCreateVariantUnlock(variantKey).unlockedNotified = unlockedNotified;
         }
 
+        /**
+         * Normalize secret ID to a global per-katana purchase key.
+         * - "katana:<type>:<merchant8>" -> "katana:<type>"
+         * - "katana_<type>" -> "katana:<type>"
+         * - Legacy opaque IDs (e.g. katana_<uuid8>) are kept as-is.
+         */
+        public static String toPurchasedSecretKatanaKey(String secretKatanaId) {
+            if (secretKatanaId == null) {
+                return "";
+            }
+            String id = secretKatanaId.trim();
+            if (id.isEmpty()) {
+                return "";
+            }
+            if (id.startsWith("katana:")) {
+                String[] parts = id.split(":");
+                if (parts.length >= 2 && !parts[1].isEmpty()) {
+                    return "katana:" + parts[1];
+                }
+                return id;
+            }
+            if (id.startsWith("katana_")) {
+                String suffix = id.substring("katana_".length());
+                if (suffix.isEmpty()) {
+                    return "";
+                }
+                // Legacy format "katana_<uuid8>" has no stable katana type encoded.
+                if (suffix.matches("[0-9a-fA-F]{8}")) {
+                    return id;
+                }
+                return "katana:" + suffix;
+            }
+            return id;
+        }
+
         public boolean hasPurchasedSecretKatana(String secretKatanaId) {
-            if (secretKatanaId == null || secretKatanaId.isEmpty()) {
+            String purchaseKey = toPurchasedSecretKatanaKey(secretKatanaId);
+            if (purchaseKey.isEmpty()) {
                 return false;
             }
-            return this.purchasedSecretKatanaIds.contains(secretKatanaId);
+            return this.purchasedSecretKatanaIds.contains(purchaseKey);
         }
 
         public boolean markSecretKatanaPurchased(String secretKatanaId) {
-            if (secretKatanaId == null || secretKatanaId.isEmpty()) {
+            String purchaseKey = toPurchasedSecretKatanaKey(secretKatanaId);
+            if (purchaseKey.isEmpty()) {
                 return false;
             }
-            return this.purchasedSecretKatanaIds.add(secretKatanaId);
+            return this.purchasedSecretKatanaIds.add(purchaseKey);
         }
 
         public int getTradeCount() {
@@ -600,8 +637,9 @@ public class MerchantUnlockState extends PersistentState {
                 NbtList purchasedList = nbt.getList(NBT_PURCHASED_SECRET_IDS, NbtElement.STRING_TYPE);
                 for (int i = 0; i < purchasedList.size(); i++) {
                     String secretId = purchasedList.get(i).asString();
-                    if (!secretId.isEmpty()) {
-                        progress.purchasedSecretKatanaIds.add(secretId);
+                    String purchaseKey = toPurchasedSecretKatanaKey(secretId);
+                    if (!purchaseKey.isEmpty()) {
+                        progress.purchasedSecretKatanaIds.add(purchaseKey);
                     }
                 }
             }

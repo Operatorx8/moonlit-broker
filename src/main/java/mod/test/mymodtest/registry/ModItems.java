@@ -1,11 +1,11 @@
 package mod.test.mymodtest.registry;
 
+import mod.test.mymodtest.entity.spawn.MysteriousMerchantSpawnEggItem;
 import mod.test.mymodtest.trade.item.GuideScrollItem;
 import mod.test.mymodtest.trade.item.MerchantMarkItem;
 import mod.test.mymodtest.trade.item.SilverNoteItem;
 import mod.test.mymodtest.trade.item.TradeScrollItem;
 import net.minecraft.item.Item;
-import net.minecraft.item.SpawnEggItem;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
@@ -129,35 +129,84 @@ public final class ModItems {
     public static final Item MYSTERIOUS_MERCHANT_SPAWN_EGG = Registry.register(
             Registries.ITEM,
             MYSTERIOUS_MERCHANT_SPAWN_EGG_ID,
-            new SpawnEggItem(ModEntities.MYSTERIOUS_MERCHANT, 0x8B6B4A, 0xE8D7A8, new Item.Settings())
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT,
+                0x8B6B4A,
+                0xE8D7A8,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.STANDARD,
+                false
+            )
     );
 
     public static final Identifier MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG_ID = Identifier.of(MOD_ID, "mysterious_merchant_arid_spawn_egg");
     public static final Item MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG = Registry.register(
             Registries.ITEM,
             MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG_ID,
-            new SpawnEggItem(ModEntities.MYSTERIOUS_MERCHANT_ARID, 0xC78A32, 0x6B3A15, new Item.Settings())
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT_ARID,
+                0xC78A32,
+                0x6B3A15,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.ARID,
+                false
+            )
     );
 
     public static final Identifier MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG_ID = Identifier.of(MOD_ID, "mysterious_merchant_cold_spawn_egg");
     public static final Item MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG = Registry.register(
             Registries.ITEM,
             MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG_ID,
-            new SpawnEggItem(ModEntities.MYSTERIOUS_MERCHANT_COLD, 0xA8D9FF, 0x3B5F8B, new Item.Settings())
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT_COLD,
+                0xA8D9FF,
+                0x3B5F8B,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.COLD,
+                false
+            )
     );
 
     public static final Identifier MYSTERIOUS_MERCHANT_WET_SPAWN_EGG_ID = Identifier.of(MOD_ID, "mysterious_merchant_wet_spawn_egg");
     public static final Item MYSTERIOUS_MERCHANT_WET_SPAWN_EGG = Registry.register(
             Registries.ITEM,
             MYSTERIOUS_MERCHANT_WET_SPAWN_EGG_ID,
-            new SpawnEggItem(ModEntities.MYSTERIOUS_MERCHANT_WET, 0x3E7A58, 0x294B66, new Item.Settings())
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT_WET,
+                0x3E7A58,
+                0x294B66,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.WET,
+                false
+            )
     );
 
     public static final Identifier MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG_ID = Identifier.of(MOD_ID, "mysterious_merchant_exotic_spawn_egg");
     public static final Item MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG = Registry.register(
             Registries.ITEM,
             MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG_ID,
-            new SpawnEggItem(ModEntities.MYSTERIOUS_MERCHANT_EXOTIC, 0x4B8E35, 0xB86B2C, new Item.Settings())
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT_EXOTIC,
+                0x4B8E35,
+                0xB86B2C,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.EXOTIC,
+                false
+            )
+    );
+
+    public static final Identifier MYSTERIOUS_MERCHANT_DEBUG_RANDOM_SPAWN_EGG_ID = Identifier.of(MOD_ID, "mysterious_merchant_debug_random_spawn_egg");
+    public static final Item MYSTERIOUS_MERCHANT_DEBUG_RANDOM_SPAWN_EGG = Registry.register(
+            Registries.ITEM,
+            MYSTERIOUS_MERCHANT_DEBUG_RANDOM_SPAWN_EGG_ID,
+            new MysteriousMerchantSpawnEggItem(
+                ModEntities.MYSTERIOUS_MERCHANT,
+                0x8445AA,
+                0x3AE0C2,
+                new Item.Settings(),
+                mod.test.mymodtest.entity.MysteriousMerchantEntity.MerchantVariant.STANDARD,
+                true
+            )
     );
 
     /**
@@ -165,11 +214,11 @@ public final class ModItems {
      * 在 ModInitializer.onInitialize() 中调用
      */
     public static void register() {
-        LOGGER.info("[Mymodtest] 物品已注册: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
+        LOGGER.info("[Mymodtest] 物品已注册: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
                 MYSTERIOUS_COIN_ID, SEALED_LEDGER_ID, ARCANE_LEDGER_ID, SIGIL_ID,
                 MERCHANT_MARK_ID, TRADE_SCROLL_ID, SILVER_NOTE_ID, GUIDE_SCROLL_ID,
                 MYSTERIOUS_MERCHANT_SPAWN_EGG_ID, MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG_ID,
                 MYSTERIOUS_MERCHANT_COLD_SPAWN_EGG_ID, MYSTERIOUS_MERCHANT_WET_SPAWN_EGG_ID,
-                MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG_ID);
+                MYSTERIOUS_MERCHANT_EXOTIC_SPAWN_EGG_ID, MYSTERIOUS_MERCHANT_DEBUG_RANDOM_SPAWN_EGG_ID);
     }
 }

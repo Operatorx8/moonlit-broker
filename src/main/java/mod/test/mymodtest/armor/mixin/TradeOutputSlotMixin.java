@@ -3,6 +3,7 @@ package mod.test.mymodtest.armor.mixin;
 import mod.test.mymodtest.armor.effect.OldMarketHandler;
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
 import mod.test.mymodtest.trade.TradeConfig;
+import mod.test.mymodtest.world.KatanaOwnershipState;
 import mod.test.mymodtest.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -42,6 +43,48 @@ public class TradeOutputSlotMixin {
     @Final
     private Merchant merchant;
 
+    @Shadow
+    @Final
+    private PlayerEntity player;
+
+    @Inject(method = "takeStack", at = @At("HEAD"), cancellable = true)
+    private void armor$blockDuplicateKatanaTake(int amount, CallbackInfoReturnable<ItemStack> cir) {
+        if (!(this.player instanceof ServerPlayerEntity serverPlayer)) {
+            return;
+        }
+        if (!(this.merchant instanceof MysteriousMerchantEntity mysteriousMerchant)) {
+            return;
+        }
+        if (!(serverPlayer.getWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+
+        TradeOffer offer = this.merchantInventory.getTradeOffer();
+        if (offer == null) {
+            return;
+        }
+        String katanaId = MysteriousMerchantEntity.getKatanaIdFromKatanaStack(offer.getSellItem());
+        if (katanaId.isEmpty()) {
+            return;
+        }
+
+        KatanaOwnershipState state = KatanaOwnershipState.getServerState(serverWorld);
+        if (!state.has(serverPlayer.getUuid(), katanaId)) {
+            return;
+        }
+
+        offer.disable();
+        mysteriousMerchant.tryMarkSecretSold(katanaId);
+        mysteriousMerchant.sendOffers(serverPlayer, mysteriousMerchant.getDisplayName(), mysteriousMerchant.getExperience());
+        serverPlayer.sendMessage(
+            Text.literal("[神秘商人] 你已拥有该神器，无法重复购买。").formatted(Formatting.RED),
+            true
+        );
+        LOGGER.info("[MoonTrade] MM_KATANA_BLOCK player={} katanaId={} merchant={}",
+            serverPlayer.getUuid(), katanaId, mysteriousMerchant.getUuid());
+        cir.setReturnValue(ItemStack.EMPTY);
+    }
+
     /**
      * 在玩家取走交易结果后检查是否应该给予额外经验
      */
@@ -51,20 +94,17 @@ public class TradeOutputSlotMixin {
             return;
         }
 
-        // 获取当前交易
-        TradeOffer offer = merchantInventory.getTradeOffer();
-        if (offer == null) {
-            return;
-        }
-
         // ========== Trade System: 声望增加 ==========
         // 仅当商人是 MysteriousMerchantEntity 时增加声望
         if (merchant instanceof MysteriousMerchantEntity mysteriousMerchant) {
             incrementReputation(serverPlayer, mysteriousMerchant);
-            
-            // ========== 3.2 FIX: Secret sale enforcement ==========
-            // Check if this is the epic katana offer and mark as sold
-            checkAndMarkSecretSold(serverPlayer, mysteriousMerchant, offer, stack);
+            handleKatanaOwnershipOnTake(serverPlayer, mysteriousMerchant, stack);
+        }
+
+        // 获取当前交易
+        TradeOffer offer = merchantInventory.getTradeOffer();
+        if (offer == null) {
+            return;
         }
 
         // 获取交易经验
@@ -122,60 +162,32 @@ public class TradeOutputSlotMixin {
         }
     }
 
-    /**
-     * 3.2 FIX: Check if this is the epic katana purchase and mark as sold
-     * This prevents the katana from appearing again for this merchant
-     */
-    private void checkAndMarkSecretSold(ServerPlayerEntity player, MysteriousMerchantEntity merchant, 
-                                         TradeOffer offer, ItemStack outputStack) {
-        // Marked secret outputs are tagged when the hidden offer is built.
-        if (!MysteriousMerchantEntity.isSecretTradeOutput(outputStack)) {
+    private void handleKatanaOwnershipOnTake(ServerPlayerEntity player, MysteriousMerchantEntity merchant, ItemStack outputStack) {
+        String katanaId = MysteriousMerchantEntity.getKatanaIdFromKatanaStack(outputStack);
+        if (katanaId.isEmpty()) {
             return;
         }
-        String secretId = MysteriousMerchantEntity.getSecretTradeMarkerId(outputStack);
-        if (secretId == null || secretId.isEmpty()) {
-            LOGGER.warn("[MoonTrade] SECRET_MARKER_MISSING player={} merchant={} output={} action=skip_mark_sold",
-                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), outputStack.getItem());
-            return;
-        }
-
-        boolean recorded = recordPlayerSecretPurchase(player, secretId);
-        // Atomically mark as sold - if already sold, this returns false
-        boolean marked = merchant.tryMarkSecretSold(secretId);
-        // Clear marker regardless of sold flag to avoid carrying marker on the purchased item.
-        MysteriousMerchantEntity.clearSecretTradeMarker(outputStack);
-
-        if (marked) {
-            LOGGER.info("[MoonTrade] SECRET_KATANA_PURCHASED player={} merchant={} secretId={}", 
-                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
-
-            player.sendMessage(
-                Text.literal("[神秘商人] 你获得了珍贵的隐藏神器！")
-                    .formatted(Formatting.GOLD, Formatting.BOLD),
-                false
-            );
-        } else {
-            // This shouldn't happen if offer generation is correct, but log it
-            LOGGER.warn("[MoonTrade] SECRET_ALREADY_SOLD_ON_PURCHASE player={} merchant={} secretId={}", 
-                player.getName().getString(), merchant.getUuid().toString().substring(0, 8), secretId);
-        }
-        if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] SECRET_PURCHASE_RECORD player={} secretId={} recorded={}",
-                player.getName().getString(), secretId, recorded);
-        }
-    }
-
-    private boolean recordPlayerSecretPurchase(ServerPlayerEntity player, String secretId) {
         if (!(player.getWorld() instanceof ServerWorld serverWorld)) {
-            return false;
+            return;
         }
-        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
-        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-        boolean recorded = progress.markSecretKatanaPurchased(secretId);
-        if (recorded) {
-            state.markDirty();
+
+        KatanaOwnershipState state = KatanaOwnershipState.getServerState(serverWorld);
+        boolean added = state.add(player.getUuid(), katanaId);
+        merchant.tryMarkSecretSold(katanaId);
+        MysteriousMerchantEntity.clearSecretTradeMarker(outputStack);
+        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+
+        if (added) {
+            LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={}",
+                player.getUuid(), katanaId, merchant.getUuid());
+            LOGGER.info("[MoonTrade] MM_OWNERSHIP_ADD player={} katanaId={} merchant={}",
+                player.getUuid(), katanaId, merchant.getUuid());
+            LOGGER.info("[MoonTrade] MM_PURCHASED player={} katanaId={} merchant={}",
+                player.getUuid(), katanaId, merchant.getUuid());
+        } else if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={} added=0",
+                player.getUuid(), katanaId, merchant.getUuid());
         }
-        return recorded;
     }
 
     /**

@@ -9,6 +9,7 @@
   "item.mymodtest.mysterious_merchant_cold_spawn_egg": "神秘商人（寒冷）刷怪蛋",
   "item.mymodtest.mysterious_merchant_wet_spawn_egg": "神秘商人（湿润）刷怪蛋",
   "item.mymodtest.mysterious_merchant_exotic_spawn_egg": "神秘商人（异域）刷怪蛋",
+  "item.mymodtest.mysterious_merchant_debug_random_spawn_egg": "神秘商人（调试随机）刷怪蛋",
   "entity.mymodtest.mysterious_merchant": "神秘商人",
   "block.mymodtest.mysterious_anvil": "神秘铁砧",
   "subtitles.mymodtest.moontrace.mark": "月痕标记",

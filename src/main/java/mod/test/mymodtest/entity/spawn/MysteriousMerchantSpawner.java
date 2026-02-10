@@ -2,6 +2,7 @@ package mod.test.mymodtest.entity.spawn;
 
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
 import mod.test.mymodtest.registry.ModEntities;
+import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.world.MerchantSpawnerState;
 import net.minecraft.entity.EntityType;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -47,7 +48,7 @@ public class MysteriousMerchantSpawner {
 
     // ========== 调试开关 ==========
     /** 发布版默认关闭；开启后使用极短的时间参数和详细日志 */
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = TradeConfig.SPAWN_DEBUG;
 
     // ========== 生成常量 ==========
     /**
@@ -89,6 +90,24 @@ public class MysteriousMerchantSpawner {
     private static final long DEBUG_EXPECTED_LIFETIME = 1200;
     /** 正常模式：商人预期存活时间 5 天 (120000 ticks) */
     private static final long NORMAL_EXPECTED_LIFETIME = 120000;
+
+    private static final class WeightedVariantEntry {
+        private final MysteriousMerchantEntity.MerchantVariant variant;
+        private final int weight;
+
+        private WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant variant, int weight) {
+            this.variant = variant;
+            this.weight = Math.max(0, weight);
+        }
+    }
+
+    public record VariantRollResult(
+        MysteriousMerchantEntity.MerchantVariant originVariant,
+        MysteriousMerchantEntity.MerchantVariant rolledVariant,
+        int roll,
+        int totalWeight
+    ) {
+    }
 
     // ========== 内存状态（仅用于检查间隔，不影响持久化） ==========
     private long lastCheckTick = 0;
@@ -234,7 +253,10 @@ public class MysteriousMerchantSpawner {
         }
 
         // 11. 按 VillagerType 映射选择商人变体
-        EntityType<MysteriousMerchantEntity> chosenType = chooseMerchantType(world, spawnPos, random);
+        RegistryEntry<Biome> biomeEntry = world.getBiome(spawnPos);
+        VillagerType villagerType = VillagerType.forBiome(biomeEntry);
+        VariantRollResult variantRoll = chooseMerchantVariantForVillagerType(villagerType, random, DEBUG);
+        EntityType<MysteriousMerchantEntity> chosenType = merchantTypeOfVariant(variantRoll.rolledVariant());
 
         // 12. 生成商人
         MysteriousMerchantEntity merchant = chosenType.create(world);
@@ -254,13 +276,10 @@ public class MysteriousMerchantSpawner {
                 UUID merchantUuid = merchant.getUuid();
                 state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
 
-                // 获取 VillagerType 用于日志
-                RegistryEntry<Biome> biomeEntry = world.getBiome(spawnPos);
-                VillagerType villagerType = VillagerType.forBiome(biomeEntry);
-
                 if (DEBUG) {
-                    LOGGER.info("[Spawner] action=MM_SPAWN_VARIANT villagerType={} chosen={} pos={} uuid={}... nearPlayer={} totalSpawned={}",
-                        villagerType, net.minecraft.registry.Registries.ENTITY_TYPE.getId(chosenType),
+                    LOGGER.info("[Spawner] action=MM_SPAWN_VARIANT villagerType={} originVariant={} rolledVariant={} roll={}/{} chosen={} pos={} uuid={}... nearPlayer={} totalSpawned={}",
+                        villagerType, variantRoll.originVariant(), variantRoll.rolledVariant(), variantRoll.roll(), variantRoll.totalWeight(),
+                        net.minecraft.registry.Registries.ENTITY_TYPE.getId(chosenType),
                         spawnPos.toShortString(),
                         merchantUuid.toString().substring(0, 8),
                         targetPlayer.getName().getString(),
@@ -334,56 +353,113 @@ public class MysteriousMerchantSpawner {
                 world.getFluidState(pos), ModEntities.MYSTERIOUS_MERCHANT);
     }
 
-    /**
-     * Phase 8: 按 VillagerType 映射选择商人变体 EntityType。
-     *
-     * 映射规则：
-     * - PLAINS / TAIGA  => Standard (95%), Wet (4%), Exotic (1%)
-     * - DESERT / SAVANNA => Arid    (95%), Wet (4%), Exotic (1%)
-     * - SNOW             => Cold    (100%, 不乱入)
-     * - SWAMP            => Wet     (100%, 不乱入)
-     * - JUNGLE           => Exotic  (100%, 不乱入)
-     */
-    @SuppressWarnings("unchecked")
-    private EntityType<MysteriousMerchantEntity> chooseMerchantType(ServerWorld world, BlockPos spawnPos, Random random) {
-        RegistryEntry<Biome> biomeEntry = world.getBiome(spawnPos);
-        VillagerType villagerType = VillagerType.forBiome(biomeEntry);
-
-        EntityType<MysteriousMerchantEntity> defaultType;
-
+    public static MysteriousMerchantEntity.MerchantVariant originVariantForVillagerType(VillagerType villagerType) {
+        if (villagerType == VillagerType.DESERT || villagerType == VillagerType.SAVANNA) {
+            return MysteriousMerchantEntity.MerchantVariant.ARID;
+        }
         if (villagerType == VillagerType.SNOW) {
-            // Cold: 不乱入
-            return ModEntities.MYSTERIOUS_MERCHANT_COLD;
-        } else if (villagerType == VillagerType.SWAMP) {
-            // Wet: 不乱入
-            return ModEntities.MYSTERIOUS_MERCHANT_WET;
-        } else if (villagerType == VillagerType.JUNGLE) {
-            // Exotic: 不乱入
-            return ModEntities.MYSTERIOUS_MERCHANT_EXOTIC;
-        } else if (villagerType == VillagerType.DESERT || villagerType == VillagerType.SAVANNA) {
-            // Arid 区：95% Arid, 4% Wet, 1% Exotic
-            defaultType = ModEntities.MYSTERIOUS_MERCHANT_ARID;
-        } else {
-            // Standard 区 (PLAINS, TAIGA, 以及其他未知类型 fallback)：95% Standard, 4% Wet, 1% Exotic
-            defaultType = ModEntities.MYSTERIOUS_MERCHANT;
+            return MysteriousMerchantEntity.MerchantVariant.COLD;
+        }
+        if (villagerType == VillagerType.SWAMP) {
+            return MysteriousMerchantEntity.MerchantVariant.WET;
+        }
+        if (villagerType == VillagerType.JUNGLE) {
+            return MysteriousMerchantEntity.MerchantVariant.EXOTIC;
+        }
+        return MysteriousMerchantEntity.MerchantVariant.STANDARD;
+    }
+
+    public static VariantRollResult chooseMerchantVariantForVillagerType(VillagerType villagerType, Random random, boolean debug) {
+        MysteriousMerchantEntity.MerchantVariant originVariant = originVariantForVillagerType(villagerType);
+        return chooseMerchantVariantForOrigin(originVariant, random, debug);
+    }
+
+    public static VariantRollResult chooseMerchantVariantForOrigin(
+        MysteriousMerchantEntity.MerchantVariant originVariant,
+        Random random,
+        boolean debug
+    ) {
+        WeightedVariantEntry[] table = switch (originVariant) {
+            case ARID -> new WeightedVariantEntry[]{
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.ARID, 70),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.STANDARD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.COLD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.WET, 8),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.EXOTIC, 2)
+            };
+            case COLD -> new WeightedVariantEntry[]{
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.COLD, 70),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.STANDARD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.ARID, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.WET, 8),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.EXOTIC, 2)
+            };
+            case WET -> new WeightedVariantEntry[]{
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.WET, 70),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.STANDARD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.ARID, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.COLD, 8),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.EXOTIC, 2)
+            };
+            case EXOTIC -> new WeightedVariantEntry[]{
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.EXOTIC, 70),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.STANDARD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.ARID, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.COLD, 8),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.WET, 2)
+            };
+            case STANDARD -> new WeightedVariantEntry[]{
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.STANDARD, 70),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.ARID, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.COLD, 10),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.WET, 8),
+                new WeightedVariantEntry(MysteriousMerchantEntity.MerchantVariant.EXOTIC, 2)
+            };
+        };
+
+        int totalWeight = 0;
+        for (WeightedVariantEntry entry : table) {
+            totalWeight += entry.weight;
+        }
+        if (totalWeight <= 0) {
+            return new VariantRollResult(
+                originVariant,
+                MysteriousMerchantEntity.MerchantVariant.STANDARD,
+                0,
+                1
+            );
         }
 
-        // 乱入概率：仅 Standard 区和 Arid 区生效
-        float intrusionRoll = random.nextFloat();
-        if (intrusionRoll < 0.01f) {
-            // 1% Exotic
-            if (DEBUG) {
-                LOGGER.debug("[Spawner] INTRUSION villagerType={} intrusion=EXOTIC roll={}", villagerType, intrusionRoll);
+        int roll = random.nextInt(totalWeight);
+        int cursor = roll;
+        MysteriousMerchantEntity.MerchantVariant rolled = table[table.length - 1].variant;
+        for (WeightedVariantEntry entry : table) {
+            if (cursor < entry.weight) {
+                rolled = entry.variant;
+                break;
             }
-            return ModEntities.MYSTERIOUS_MERCHANT_EXOTIC;
-        } else if (intrusionRoll < 0.05f) {
-            // 4% Wet
-            if (DEBUG) {
-                LOGGER.debug("[Spawner] INTRUSION villagerType={} intrusion=WET roll={}", villagerType, intrusionRoll);
-            }
-            return ModEntities.MYSTERIOUS_MERCHANT_WET;
+            cursor -= entry.weight;
         }
 
-        return defaultType;
+        if (debug && DEBUG) {
+            LOGGER.debug("[Spawner] MM_VARIANT_ROLL originVariant={} rolledVariant={} roll={}/{}",
+                originVariant, rolled, roll, totalWeight);
+        }
+        return new VariantRollResult(originVariant, rolled, roll, totalWeight);
+    }
+
+    public static EntityType<MysteriousMerchantEntity> merchantTypeOfVariant(MysteriousMerchantEntity.MerchantVariant variant) {
+        return switch (variant) {
+            case ARID -> ModEntities.MYSTERIOUS_MERCHANT_ARID;
+            case COLD -> ModEntities.MYSTERIOUS_MERCHANT_COLD;
+            case WET -> ModEntities.MYSTERIOUS_MERCHANT_WET;
+            case EXOTIC -> ModEntities.MYSTERIOUS_MERCHANT_EXOTIC;
+            case STANDARD -> ModEntities.MYSTERIOUS_MERCHANT;
+        };
+    }
+
+    public static EntityType<MysteriousMerchantEntity> chooseMerchantTypeForVillagerType(VillagerType villagerType, Random random) {
+        VariantRollResult roll = chooseMerchantVariantForVillagerType(villagerType, random, DEBUG);
+        return merchantTypeOfVariant(roll.rolledVariant());
     }
 }
