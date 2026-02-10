@@ -6,6 +6,7 @@ import mod.test.mymodtest.entity.ai.SeekLightGoal;
 import mod.test.mymodtest.katana.item.KatanaItems;
 import mod.test.mymodtest.registry.ModEntities;
 import mod.test.mymodtest.registry.ModItems;
+import mod.test.mymodtest.trade.KatanaIdUtil;
 import mod.test.mymodtest.trade.TradeConfig;
 import mod.test.mymodtest.world.KatanaOwnershipState;
 import mod.test.mymodtest.world.MerchantSpawnerState;
@@ -48,7 +49,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
@@ -236,8 +236,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private boolean stateClearNotified = false;
 
     // Phase 8: 解封系统交易
-    private TradeOfferList katanaHiddenOffers = null;
-    private String katanaHiddenOffersCacheId = "";
     private String merchantName = "";
 
     // ========== Trade System: 隐藏交易限制 ==========
@@ -825,6 +823,18 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
 
+        // Server-authoritative ownership write on successful trade.
+        // This is a hard fallback path even if output-slot mixin path misses.
+        String soldKatanaId = KatanaIdUtil.extractCanonicalKatanaId(offer.getSellItem());
+        if (KatanaIdUtil.isSecretKatana(soldKatanaId)) {
+            KatanaOwnershipState ownershipState = KatanaOwnershipState.getServerState(serverWorld);
+            boolean added = ownershipState.addOwned(player.getUuid(), soldKatanaId);
+            if (added) {
+                LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={} source=afterUsing",
+                    player.getUuid(), soldKatanaId, this.getUuid());
+            }
+        }
+
         MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
         String variantKey = getVariantKey();
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), variantKey);
@@ -1028,7 +1038,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         TradeOfferList offers = this.getOffers();
         boolean eligible = false;
         boolean unlocked = false;
-        boolean secretSoldForPlayer = false;
         long seedForLog = -1L;
         int refreshForThisMerchant = -1;
         MerchantUnlockState state = null;
@@ -1043,7 +1052,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             eligible = progress.getTradeCount(variantKey) >= ELIGIBLE_TRADE_COUNT;
             unlocked = progress.isUnlockedKatanaHidden(variantKey);
             initSecretKatanaIdIfNeeded();
-            secretSoldForPlayer = ownershipState.has(player.getUuid(), this.secretKatanaId);
 
             MerchantUnlockState.Progress.RefreshCountReadResult refreshRead = progress.readSigilRefreshSeen(this.getUuid());
             refreshForThisMerchant = Math.max(0, refreshRead.count());
@@ -1056,20 +1064,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (state != null && progress != null) {
             if (eligible) {
                 offers.add(createSealedLedgerOffer());
-            }
-
-            if (eligible && !unlocked) {
                 offers.add(createUnsealOffer());
                 addSigilOffers(offers, seedForLog, refreshForThisMerchant);
             }
 
             if (unlocked) {
-                addSigilOffers(offers, seedForLog, refreshForThisMerchant);
-                if (this.secretSold || secretSoldForPlayer) {
-                    addKatanaSoldOutOffer(offers);
-                } else {
-                    addKatanaHiddenOffers(offers);
-                }
+                addKatanaHiddenOffers(offers);
             }
         }
 
@@ -1133,8 +1133,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     /**
-     * Rebuild secret page offers for player (public for TradeActionHandler)
-     * 3.1 FIX: Respects secretSold flag - does not include katana if already sold
+     * Rebuild secret page offers for player (public for TradeActionHandler).
+     * Ownership never removes chain offers; UI sold-out is handled by disabling matching katana offers.
      */
     public void rebuildSecretOffersForPlayer(ServerPlayerEntity player) {
         ensureVariantIdentityIfNeeded();
@@ -1155,19 +1155,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
         initSecretKatanaIdIfNeeded();
-        boolean soldForPlayer = ownershipState.has(player.getUuid(), this.secretKatanaId);
-        
-        // Add secret page specific offers
-        if (!this.secretSold && !soldForPlayer) {
-            addKatanaHiddenOffers(offers);
-        } else {
-            addKatanaSoldOutOffer(offers);
-            LOGGER.info("[MoonTrade] SECRET_ALREADY_SOLD merchant={} player={} soldByMerchant={} soldByPlayer={}",
-                this.getUuid().toString().substring(0, 8),
-                player.getName().getString(),
-                this.secretSold ? 1 : 0,
-                soldForPlayer ? 1 : 0);
-        }
+
+        // Keep the katana trade chain intact; sold-out is visual-only via disable().
+        addKatanaHiddenOffers(offers);
 
         applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
 
@@ -1183,7 +1173,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (!offers.isEmpty()) {
             resolvedItem = Registries.ITEM.getId(offers.get(0).getSellItem().getItem()).toString();
         }
-        String skip = (this.secretSold || soldForPlayer) ? "sold" : (offers.isEmpty() ? "empty_or_resolve_failed" : "none");
+        String skip = offers.isEmpty() ? "empty_or_resolve_failed" : "none";
         LOGGER.info("[MoonTrade] HIDDEN_BUILD player={} merchant={} secretSold={} katanaId={} resolved={} offersCount={} skip={}",
             player.getUuid(), this.getUuid(), this.secretSold ? 1 : 0,
             this.secretKatanaId, resolvedItem, offers.size(), skip);
@@ -1271,50 +1261,19 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // P0-3: 确保 ID 已初始化
         initSecretKatanaIdIfNeeded();
 
-        // secretKatanaId changed => invalidate cached offers to avoid stale output.
-        if (katanaHiddenOffers != null && !this.secretKatanaId.equals(katanaHiddenOffersCacheId)) {
-            katanaHiddenOffers = null;
-            katanaHiddenOffersCacheId = "";
+        if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
+            LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=id_still_empty",
+                getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
+            return;
         }
 
-        // P0-3: 仅在 ID 有效时生成并缓存；无效 ID 不缓存（允许后续重试）
-        if (katanaHiddenOffers == null) {
-            if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
-                LOGGER.warn("[MoonTrade] KATANA_CACHE_SKIP player={} merchant={} secretKatanaId={} reason=id_still_empty",
-                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
-                return;
-            }
-            katanaHiddenOffers = createKatanaHiddenOffers();
-            // 如果 resolve 失败返回空列表，不缓存（允许下次重试）
-            if (katanaHiddenOffers.isEmpty()) {
-                LOGGER.warn("[MoonTrade] KATANA_CACHE_SKIP player={} merchant={} secretKatanaId={} reason=resolve_failed",
-                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
-                katanaHiddenOffers = null;
-                return;
-            }
-            katanaHiddenOffersCacheId = this.secretKatanaId;
+        TradeOffer offer = createKatanaOffer();
+        if (offer == null) {
+            LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=resolve_failed",
+                getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
+            return;
         }
-
-        for (TradeOffer offer : katanaHiddenOffers) {
-            offers.add(offer);
-        }
-    }
-
-    private TradeOfferList createKatanaHiddenOffers() {
-        TradeOfferList list = new TradeOfferList();
-        TradeOffer offer = createKatanaOffer(false);
-        if (offer != null) {
-            list.add(offer);
-        }
-
-        return list;
-    }
-
-    private void addKatanaSoldOutOffer(TradeOfferList offers) {
-        TradeOffer soldOutOffer = createKatanaOffer(true);
-        if (soldOutOffer != null) {
-            offers.add(soldOutOffer);
-        }
+        offers.add(offer);
     }
 
     private void applyKatanaOwnershipSoldOut(TradeOfferList offers, java.util.UUID playerUuid, KatanaOwnershipState ownershipState) {
@@ -1322,11 +1281,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
         for (TradeOffer offer : offers) {
-            String katanaId = getKatanaIdFromKatanaStack(offer.getSellItem());
-            if (katanaId.isEmpty()) {
+            String katanaId = KatanaIdUtil.extractCanonicalKatanaId(offer.getSellItem());
+            if (!KatanaIdUtil.isSecretKatana(katanaId)) {
                 continue;
             }
-            if (ownershipState.has(playerUuid, katanaId)) {
+            if (ownershipState.hasOwned(playerUuid, katanaId)) {
                 if (!offer.isDisabled()) {
                     offer.disable();
                 }
@@ -1336,14 +1295,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
-    private TradeOffer createKatanaOffer(boolean soldOut) {
+    private TradeOffer createKatanaOffer() {
         ItemStack katanaStack = resolveKatanaStack();
         if (katanaStack.isEmpty()) {
             return null;
         }
-        if (!soldOut) {
-            markSecretTradeOutput(katanaStack);
-        }
+        markSecretTradeOutput(katanaStack);
         TradeOffer offer = new TradeOffer(
             new TradedItem(ModItems.ARCANE_LEDGER, 1),
             Optional.of(new TradedItem(Items.EMERALD, 32)),
@@ -1352,9 +1309,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             80,
             0.0f
         );
-        if (soldOut) {
-            offer.disable();
-        }
         return offer;
     }
 
@@ -1377,14 +1331,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         KatanaItems.ECLIPSE_BLADE, "eclipse",
         KatanaItems.OBLIVION_EDGE, "oblivion",
         KatanaItems.NMAP_KATANA, "nmap"
-    );
-
-    private static final Map<String, String> LEGACY_KATANA_ID_ALIAS = Map.of(
-        "moon_glow_katana", "moonglow",
-        "regret_blade", "regret",
-        "eclipse_blade", "eclipse",
-        "oblivion_edge", "oblivion",
-        "nmap_katana", "nmap"
     );
 
     /**
@@ -1440,33 +1386,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     private static String normalizeKatanaIdStrict(String rawId) {
-        if (rawId == null) {
-            return "";
-        }
-        String id = rawId.trim();
-        if (id.isEmpty()) {
-            return "";
-        }
-
-        String candidate = id;
-        if (candidate.startsWith("katana:")) {
-            candidate = candidate.substring("katana:".length());
-            int nextColon = candidate.indexOf(':');
-            if (nextColon > 0) {
-                candidate = candidate.substring(0, nextColon);
-            }
-        } else if (candidate.startsWith("katana_")) {
-            candidate = candidate.substring("katana_".length());
-        } else if (candidate.contains(":")) {
-            candidate = candidate.substring(candidate.indexOf(':') + 1);
-        }
-
-        if (candidate.isEmpty()) {
-            return "";
-        }
-        String lowered = candidate.toLowerCase(Locale.ROOT);
-        String aliased = LEGACY_KATANA_ID_ALIAS.getOrDefault(lowered, lowered);
-        return KATANA_WHITELIST.containsKey(aliased) ? aliased : "";
+        return KatanaIdUtil.canonicalizeKatanaId(rawId);
     }
 
     private String normalizeSecretKatanaId(String rawId) {
@@ -1822,8 +1742,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         SecretRollResult rollResult = rollSecretKatanaType(seed, TradeConfig.TRADE_DEBUG);
         String type = rollResult.chosenType;
         this.secretKatanaId = buildSecretKatanaId(type);
-        this.katanaHiddenOffers = null;
-        this.katanaHiddenOffersCacheId = "";
         if (TradeConfig.TRADE_DEBUG) {
             LOGGER.info("[MoonTrade] MM_SECRET_PICK variant={} pickedKatanaId={}", getVariantKey(), this.secretKatanaId);
             logSecretPick(type, seed);
@@ -1858,9 +1776,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // Trade System NBT 键
     private static final String NBT_SECRET_SOLD = "SecretSold";
     private static final String NBT_SECRET_KATANA_ID = "SecretKatanaId";
-    public static final String NBT_SECRET_MARKER = "MoonTradeSecret";
-    public static final String NBT_SECRET_MARKER_ID = "MoonTradeSecretId";
-    public static final String NBT_MM_KATANA_ID = "MM_KATANA_ID";
+    public static final String NBT_SECRET_MARKER = KatanaIdUtil.SECRET_MARKER;
+    public static final String NBT_SECRET_MARKER_ID = KatanaIdUtil.SECRET_MARKER_ID;
+    public static final String NBT_MM_KATANA_ID = KatanaIdUtil.MM_KATANA_ID;
     // P0-2: Sigil seed NBT 键
     private static final String NBT_SIGIL_ROLL_SEED = "SigilRollSeed";
     private static final String NBT_SIGIL_ROLL_INIT = "SigilRollInitialized";
@@ -1967,8 +1885,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (!normalized.equals(this.secretKatanaId)) {
             String before = this.secretKatanaId;
             this.secretKatanaId = normalized;
-            this.katanaHiddenOffers = null;
-            this.katanaHiddenOffersCacheId = "";
             LOGGER.warn("[MoonTrade] KATANA_ID_MIGRATE merchant={} legacyId={} newId={}",
                 this.getUuid(), before, this.secretKatanaId);
         }
@@ -2091,27 +2007,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     public static String getKatanaIdFromKatanaStack(ItemStack stack) {
-        if (!isKatana(stack)) {
-            return "";
-        }
-        NbtComponent component = stack.get(DataComponentTypes.CUSTOM_DATA);
-        if (component != null) {
-            NbtCompound nbt = component.copyNbt();
-            if (nbt.contains(NBT_MM_KATANA_ID)) {
-                String normalized = normalizeKatanaIdStrict(nbt.getString(NBT_MM_KATANA_ID));
-                if (!normalized.isEmpty()) {
-                    return normalized;
-                }
-            }
-            if (nbt.contains(NBT_SECRET_MARKER_ID)) {
-                String normalized = normalizeKatanaIdStrict(nbt.getString(NBT_SECRET_MARKER_ID));
-                if (!normalized.isEmpty()) {
-                    return normalized;
-                }
-            }
-        }
-        String fallback = KATANA_ID_BY_ITEM.get(stack.getItem());
-        return fallback == null ? "" : fallback;
+        return KatanaIdUtil.extractCanonicalKatanaId(stack);
     }
 
     public static String getSecretTradeMarkerId(ItemStack stack) {

@@ -1,5 +1,6 @@
 package mod.test.mymodtest.world;
 
+import mod.test.mymodtest.trade.KatanaIdUtil;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
@@ -14,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -27,13 +27,6 @@ public class KatanaOwnershipState extends PersistentState {
     private static final Logger LOGGER = LoggerFactory.getLogger(KatanaOwnershipState.class);
     private static final String DATA_NAME = "mymodtest_katana_ownership";
     private static final String NBT_PLAYERS = "Players";
-    private static final Map<String, String> LEGACY_KATANA_ID_ALIAS = Map.of(
-        "moon_glow_katana", "moonglow",
-        "regret_blade", "regret",
-        "eclipse_blade", "eclipse",
-        "oblivion_edge", "oblivion",
-        "nmap_katana", "nmap"
-    );
 
     private final Map<UUID, Set<String>> katanaIdsByPlayer = new HashMap<>();
 
@@ -50,7 +43,7 @@ public class KatanaOwnershipState extends PersistentState {
         return overworld.getPersistentStateManager().getOrCreate(TYPE, DATA_NAME);
     }
 
-    public boolean has(UUID playerUuid, String katanaId) {
+    public boolean hasOwned(UUID playerUuid, String katanaId) {
         String normalized = normalizeKatanaId(katanaId);
         if (normalized.isEmpty()) {
             return false;
@@ -59,7 +52,7 @@ public class KatanaOwnershipState extends PersistentState {
         return owned != null && owned.contains(normalized);
     }
 
-    public boolean add(UUID playerUuid, String katanaId) {
+    public boolean addOwned(UUID playerUuid, String katanaId) {
         String normalized = normalizeKatanaId(katanaId);
         if (normalized.isEmpty()) {
             return false;
@@ -72,44 +65,24 @@ public class KatanaOwnershipState extends PersistentState {
         return added;
     }
 
+    /**
+     * @deprecated Use {@link #hasOwned(UUID, String)}.
+     */
+    @Deprecated
+    public boolean has(UUID playerUuid, String katanaId) {
+        return hasOwned(playerUuid, katanaId);
+    }
+
+    /**
+     * @deprecated Use {@link #addOwned(UUID, String)}.
+     */
+    @Deprecated
+    public boolean add(UUID playerUuid, String katanaId) {
+        return addOwned(playerUuid, katanaId);
+    }
+
     public static String normalizeKatanaId(String katanaId) {
-        if (katanaId == null) {
-            return "";
-        }
-        String id = katanaId.trim();
-        if (id.isEmpty()) {
-            return "";
-        }
-
-        String candidate = id;
-        if (candidate.startsWith("katana:")) {
-            candidate = candidate.substring("katana:".length());
-            int nextColon = candidate.indexOf(':');
-            if (nextColon > 0) {
-                candidate = candidate.substring(0, nextColon);
-            }
-        } else if (candidate.startsWith("katana_")) {
-            candidate = candidate.substring("katana_".length());
-            if (candidate.matches("[0-9a-fA-F]{8}")) {
-                return "";
-            }
-        } else if (candidate.contains(":")) {
-            candidate = candidate.substring(candidate.indexOf(':') + 1);
-        }
-
-        if (candidate.isEmpty()) {
-            return "";
-        }
-        String lowered = candidate.toLowerCase(Locale.ROOT);
-        String aliased = LEGACY_KATANA_ID_ALIAS.getOrDefault(lowered, lowered);
-        if ("moonglow".equals(aliased)
-            || "regret".equals(aliased)
-            || "eclipse".equals(aliased)
-            || "oblivion".equals(aliased)
-            || "nmap".equals(aliased)) {
-            return aliased;
-        }
-        return "";
+        return KatanaIdUtil.canonicalizeKatanaId(katanaId);
     }
 
     @Override
