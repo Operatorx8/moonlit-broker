@@ -4,6 +4,8 @@ import mod.test.mymodtest.armor.effect.OldMarketHandler;
 import mod.test.mymodtest.entity.MysteriousMerchantEntity;
 import mod.test.mymodtest.trade.KatanaIdUtil;
 import mod.test.mymodtest.trade.TradeConfig;
+import mod.test.mymodtest.trade.item.TradeScrollItem;
+import mod.test.mymodtest.registry.ModItems;
 import mod.test.mymodtest.world.KatanaOwnershipState;
 import mod.test.mymodtest.world.MerchantUnlockState;
 import net.minecraft.entity.Entity;
@@ -70,16 +72,12 @@ public class TradeOutputSlotMixin {
         }
 
         LOGGER.info("[MoonTrade] MM_KATANA_BLOCK player={} katanaId={} merchant={} offerIndex={} sellItem={} amount={}",
-            serverPlayer.getUuid(), katanaId, merchantTag(this.merchant), resolveOfferIndex(offer),
-            Registries.ITEM.getId(sell.getItem()), amount);
+                serverPlayer.getUuid(), katanaId, merchantTag(this.merchant), resolveOfferIndex(offer),
+                Registries.ITEM.getId(sell.getItem()), amount);
         cir.setReturnValue(ItemStack.EMPTY);
     }
 
-    @Inject(
-        method = "onTakeItem(Lnet/minecraft/entity/player/PlayerEntity;Lnet/minecraft/item/ItemStack;)V",
-        at = @At("TAIL"),
-        require = 1
-    )
+    @Inject(method = "onTakeItem(Lnet/minecraft/entity/player/PlayerEntity;Lnet/minecraft/item/ItemStack;)V", at = @At("TAIL"), require = 1)
     private void armor$onTakeItem(PlayerEntity player, ItemStack stack, CallbackInfo ci) {
         if (player.getWorld().isClient) {
             return;
@@ -89,6 +87,16 @@ public class TradeOutputSlotMixin {
         }
 
         handleKatanaOwnershipOnTake(serverPlayer, stack);
+
+        // Task C: Scroll NBT init — ensure Trade Scrolls from trade output have correct
+        // Uses/Grade
+        if (stack.getItem() instanceof TradeScrollItem) {
+            if (TradeScrollItem.getUses(stack) <= 0) {
+                TradeScrollItem.initialize(stack, TradeConfig.GRADE_NORMAL);
+                LOGGER.info("[MoonTrade] SCROLL_NBT_INIT player={} grade={} uses={}",
+                        serverPlayer.getName().getString(), TradeConfig.GRADE_NORMAL, TradeScrollItem.getUses(stack));
+            }
+        }
 
         // Trade System: 声望增加（仅神秘商人）
         if (merchant instanceof MysteriousMerchantEntity) {
@@ -129,21 +137,21 @@ public class TradeOutputSlotMixin {
 
         MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-        
+
         progress.incrementReputation();
         state.markDirty();
-        
+
         int newRep = progress.getReputation();
-        
+
         if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] REP_INCREMENT player={} newRep={}", 
-                player.getName().getString(), newRep);
+            LOGGER.debug("[MoonTrade] REP_INCREMENT player={} newRep={}",
+                    player.getName().getString(), newRep);
         }
-        
+
         // 达到门槛时提示
         if (newRep == TradeConfig.SECRET_REP_THRESHOLD) {
             LOGGER.info("[MoonTrade] REP_THRESHOLD_REACHED player={} rep={}",
-                player.getName().getString(), newRep);
+                    player.getName().getString(), newRep);
         }
     }
 
@@ -161,8 +169,8 @@ public class TradeOutputSlotMixin {
         if (added) {
             TradeOffer offer = this.merchantInventory.getTradeOffer();
             LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={} offerIndex={} takenItem={}",
-                player.getUuid(), katanaId, merchantTag(this.merchant), resolveOfferIndex(offer),
-                Registries.ITEM.getId(taken.getItem()));
+                    player.getUuid(), katanaId, merchantTag(this.merchant), resolveOfferIndex(offer),
+                    Registries.ITEM.getId(taken.getItem()));
         }
     }
 

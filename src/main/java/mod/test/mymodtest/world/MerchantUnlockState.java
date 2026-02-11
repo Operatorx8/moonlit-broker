@@ -92,6 +92,7 @@ public class MerchantUnlockState extends PersistentState {
         private static final String NBT_LAST_SIGIL_HASH_MAP = "LastSigilOffersHashByMerchant";
         private static final String NBT_VARIANT_UNLOCK_MAP = "VariantUnlockByKey";
         private static final String NBT_PURCHASED_SECRET_IDS = "PurchasedSecretKatanaIds";
+        private static final String NBT_LAST_SUMMON_TICK = "LastSummonTick";
         // Cap is intentionally bounded to avoid unbounded save growth.
         // When exceeded, oldest UUID-ordered tail entries are truncated by design.
         private static final int MAX_PER_MERCHANT_ENTRIES = 2048;
@@ -121,6 +122,8 @@ public class MerchantUnlockState extends PersistentState {
         private long silverWindowStart;
         /** 当前窗口内银币掉落计数 */
         private int silverDropCount;
+        /** 上次发起商人召唤预约的世界 tick（玩家维度冷却） */
+        private long lastSummonTick = -1L;
 
         // ========== P0-A FIX: per-player sigil offers hash (跨玩家隔离) ==========
         /** Per-(player,merchant) 上次 sigil offers hash */
@@ -442,6 +445,14 @@ public class MerchantUnlockState extends PersistentState {
             this.silverDropCount = silverDropCount;
         }
 
+        public long getLastSummonTick() {
+            return lastSummonTick;
+        }
+
+        public void setLastSummonTick(long lastSummonTick) {
+            this.lastSummonTick = Math.max(-1L, lastSummonTick);
+        }
+
         // ========== P0-A FIX: sigil hash getter/setter ==========
         public int getLastSigilOffersHash(UUID merchantUuid) {
             if (merchantUuid == null) {
@@ -541,6 +552,7 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
             nbt.putLong("SilverWindowStart", this.silverWindowStart);
             nbt.putInt("SilverDropCount", this.silverDropCount);
+            nbt.putLong(NBT_LAST_SUMMON_TICK, this.lastSummonTick);
             int purchasedDrop = Math.max(0, this.purchasedSecretKatanaIds.size() - MAX_PURCHASED_SECRET_IDS);
             if (purchasedDrop > 0 && !purchasedCapWarned) {
                 purchasedCapWarned = true;
@@ -632,6 +644,9 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("SilverDropCount")) {
                 progress.silverDropCount = nbt.getInt("SilverDropCount");
+            }
+            if (nbt.contains(NBT_LAST_SUMMON_TICK)) {
+                progress.lastSummonTick = Math.max(-1L, nbt.getLong(NBT_LAST_SUMMON_TICK));
             }
             if (nbt.contains(NBT_PURCHASED_SECRET_IDS, NbtElement.LIST_TYPE)) {
                 NbtList purchasedList = nbt.getList(NBT_PURCHASED_SECRET_IDS, NbtElement.STRING_TYPE);

@@ -33,11 +33,12 @@ public class BountyHandler {
     /**
      * 尝试提交悬赏
      * 5 FIX: Scans full inventory for required items
+     * 
      * @return true 如果提交成功
      */
     public static boolean trySubmitBounty(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
         PlayerInventory inventory = player.getInventory();
-        
+
         // 5 FIX: Count items across entire inventory
         int countA = countItemInInventory(inventory, BOUNTY_ITEM_A);
         int countB = countItemInInventory(inventory, BOUNTY_ITEM_B);
@@ -45,28 +46,28 @@ public class BountyHandler {
         // AUDIT FIX: Log counts found (guarded under TRADE_DEBUG)
         if (TradeConfig.TRADE_DEBUG) {
             LOGGER.debug("[MoonTrade] BOUNTY_COUNT player={} itemA={} countA={} itemB={} countB={}",
-                player.getName().getString(), BOUNTY_ITEM_A, countA, BOUNTY_ITEM_B, countB);
+                    player.getName().getString(), BOUNTY_ITEM_A, countA, BOUNTY_ITEM_B, countB);
         }
 
         if (countA < REQUIRED_COUNT_A) {
-            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_A + " 个 " + 
-                BOUNTY_ITEM_A.getName().getString() + " 才能提交悬赏 (当前: " + countA + ")")
-                .formatted(Formatting.RED), true);
+            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_A + " 个 " +
+                    BOUNTY_ITEM_A.getName().getString() + " 才能提交悬赏 (当前: " + countA + ")")
+                    .formatted(Formatting.RED), true);
             return false;
         }
 
         if (countB < REQUIRED_COUNT_B) {
-            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_B + " 个 " + 
-                BOUNTY_ITEM_B.getName().getString() + " 才能提交悬赏 (当前: " + countB + ")")
-                .formatted(Formatting.RED), true);
+            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_B + " 个 " +
+                    BOUNTY_ITEM_B.getName().getString() + " 才能提交悬赏 (当前: " + countB + ")")
+                    .formatted(Formatting.RED), true);
             return false;
         }
 
         // 5 FIX: Atomically remove items from inventory
         // Pre-verify counts are sufficient before removing
         // AUDIT FIX: Pass player for rollback fail-safe
-        if (!removeItemsFromInventory(inventory, BOUNTY_ITEM_A, REQUIRED_COUNT_A, 
-                                       BOUNTY_ITEM_B, REQUIRED_COUNT_B, player)) {
+        if (!removeItemsFromInventory(inventory, BOUNTY_ITEM_A, REQUIRED_COUNT_A,
+                BOUNTY_ITEM_B, REQUIRED_COUNT_B, player)) {
             player.sendMessage(Text.literal("提交失败：物品移除错误").formatted(Formatting.RED), true);
             LOGGER.error("[MoonTrade] BOUNTY_REMOVE_FAILED player={}", player.getName().getString());
             return false;
@@ -76,7 +77,7 @@ public class BountyHandler {
         grantRewards(player);
 
         player.sendMessage(Text.literal("悬赏已提交！获得交易卷轴和银币")
-            .formatted(Formatting.GREEN), false);
+                .formatted(Formatting.GREEN), false);
 
         LOGGER.info("[MoonTrade] BOUNTY_SUBMIT player={}", player.getName().getString());
         return true;
@@ -105,31 +106,33 @@ public class BountyHandler {
     /**
      * 5 FIX: Atomically remove items from inventory
      * Removes item A first, then item B. If both succeed, returns true.
-     * AUDIT FIX: Validates rollback insertion; drops items to world if rollback fails.
+     * AUDIT FIX: Validates rollback insertion; drops items to world if rollback
+     * fails.
      */
-    private static boolean removeItemsFromInventory(PlayerInventory inventory, 
-                                                     Item itemA, int countA,
-                                                     Item itemB, int countB,
-                                                     ServerPlayerEntity player) {
+    private static boolean removeItemsFromInventory(PlayerInventory inventory,
+            Item itemA, int countA,
+            Item itemB, int countB,
+            ServerPlayerEntity player) {
         // Remove item A
         int removedA = removeItemFromInventory(inventory, itemA, countA);
         if (TradeConfig.TRADE_DEBUG) {
             LOGGER.debug("[MoonTrade] BOUNTY_REMOVE_A player={} requested={} removed={}",
-                player.getName().getString(), countA, removedA);
+                    player.getName().getString(), countA, removedA);
         }
         if (removedA < countA) {
-            // Rollback: give back what we removed (shouldn't happen if counts were verified)
+            // Rollback: give back what we removed (shouldn't happen if counts were
+            // verified)
             if (removedA > 0) {
                 rollbackWithFailsafe(inventory, player, itemA, removedA);
             }
             return false;
         }
-        
+
         // Remove item B
         int removedB = removeItemFromInventory(inventory, itemB, countB);
         if (TradeConfig.TRADE_DEBUG) {
             LOGGER.debug("[MoonTrade] BOUNTY_REMOVE_B player={} requested={} removed={}",
-                player.getName().getString(), countB, removedB);
+                    player.getName().getString(), countB, removedB);
         }
         if (removedB < countB) {
             // Rollback: give back both items
@@ -139,21 +142,23 @@ public class BountyHandler {
             }
             return false;
         }
-        
+
         return true;
     }
-    
+
     /**
-     * AUDIT FIX: Rollback with fail-safe - if insertStack fails, drop to world and log ERROR.
+     * AUDIT FIX: Rollback with fail-safe - if insertStack fails, drop to world and
+     * log ERROR.
      */
-    private static void rollbackWithFailsafe(PlayerInventory inventory, ServerPlayerEntity player, Item item, int count) {
+    private static void rollbackWithFailsafe(PlayerInventory inventory, ServerPlayerEntity player, Item item,
+            int count) {
         ItemStack rollbackStack = new ItemStack(item, count);
         if (!inventory.insertStack(rollbackStack)) {
             // Insertion failed - drop remaining items to world as fail-safe
             int remaining = rollbackStack.getCount();
             if (remaining > 0) {
                 LOGGER.error("[MoonTrade] BOUNTY_ROLLBACK_FAIL player={} item={} count={} - dropping to world",
-                    player.getName().getString(), item, remaining);
+                        player.getName().getString(), item, remaining);
                 player.dropItem(rollbackStack, false);
             }
         }
@@ -161,11 +166,12 @@ public class BountyHandler {
 
     /**
      * 5 FIX: Remove a specific count of an item from inventory
+     * 
      * @return the actual number of items removed
      */
     private static int removeItemFromInventory(PlayerInventory inventory, Item item, int count) {
         int remaining = count;
-        
+
         // Remove from main inventory first
         for (int i = 0; i < inventory.main.size() && remaining > 0; i++) {
             ItemStack stack = inventory.main.get(i);
@@ -175,7 +181,7 @@ public class BountyHandler {
                 remaining -= toRemove;
             }
         }
-        
+
         // Remove from offhand if needed
         for (int i = 0; i < inventory.offHand.size() && remaining > 0; i++) {
             ItemStack stack = inventory.offHand.get(i);
@@ -185,37 +191,34 @@ public class BountyHandler {
                 remaining -= toRemove;
             }
         }
-        
+
         return count - remaining;
     }
 
     /**
-     * AUDIT FIX: Added logging for reward grant/drop outcome (guarded under TRADE_DEBUG)
+     * AUDIT FIX: Added logging for reward grant/drop outcome (guarded under
+     * TRADE_DEBUG)
      */
-    private static void grantRewards(ServerPlayerEntity player) {
-        // 奖励1：交易卷轴
-        ItemStack scroll = new ItemStack(ModItems.TRADE_SCROLL, 1);
+    public static void grantRewards(ServerPlayerEntity player) {
+        final int rewardScroll = 1;
+        final int rewardSilver = TradeConfig.BOUNTY_SILVER_REWARD;
+        boolean anyDropped = false;
+
+        // 奖励1：交易卷轴 (Grade=NORMAL, Uses=3)
+        ItemStack scroll = new ItemStack(ModItems.TRADE_SCROLL, rewardScroll);
         TradeScrollItem.initialize(scroll, TradeConfig.GRADE_NORMAL);
-        boolean scrollGiven = player.giveItemStack(scroll);
-        if (!scrollGiven) {
+        if (!player.giveItemStack(scroll)) {
             player.dropItem(scroll, false);
-        }
-        if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] BOUNTY_REWARD_SCROLL player={} given={}", 
-                player.getName().getString(), scrollGiven ? "inventory" : "dropped");
+            anyDropped = true;
         }
 
         // 奖励2：银币
-        ItemStack silver = new ItemStack(ModItems.SILVER_NOTE, TradeConfig.BOUNTY_SILVER_REWARD);
-        boolean silverGiven = player.giveItemStack(silver);
-        if (!silverGiven) {
+        ItemStack silver = new ItemStack(ModItems.SILVER_NOTE, rewardSilver);
+        if (!player.giveItemStack(silver)) {
             player.dropItem(silver, false);
+            anyDropped = true;
         }
-        if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] BOUNTY_REWARD_SILVER player={} count={} given={}",
-                player.getName().getString(), TradeConfig.BOUNTY_SILVER_REWARD, silverGiven ? "inventory" : "dropped");
-        }
-        
+
         // 奖励3：如果玩家没有绑定的商人印记，给一个
         if (!MerchantMarkItem.playerHasValidMark(player)) {
             ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
@@ -223,12 +226,20 @@ public class BountyHandler {
             boolean markGiven = player.giveItemStack(mark);
             if (!markGiven) {
                 player.dropItem(mark, false);
+                anyDropped = true;
             }
-            if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] BOUNTY_REWARD_MARK player={} given={}",
+            LOGGER.info("[MoonTrade] action=BOUNTY_REWARD_MARK side=S player={} given={}",
                     player.getName().getString(), markGiven ? "inventory" : "dropped");
-            }
             player.sendMessage(Text.literal("获得商人印记！").formatted(Formatting.GOLD), false);
+        }
+
+        LOGGER.info("[MoonTrade] action=BOUNTY_REWARD side=S player={} rewardScroll={} rewardSilver={} dropped={}",
+                player.getName().getString(), rewardScroll, rewardSilver, anyDropped);
+
+        // 背包满提示
+        if (anyDropped) {
+            player.sendMessage(
+                    Text.literal("背包已满，部分奖励掉落在脚下").formatted(Formatting.YELLOW), false);
         }
     }
 }

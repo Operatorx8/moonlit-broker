@@ -9,6 +9,10 @@ import mod.test.mymodtest.registry.ModBlocks;
 import mod.test.mymodtest.registry.ModEntities;
 import mod.test.mymodtest.registry.ModItemGroups;
 import mod.test.mymodtest.registry.ModItems;
+import mod.test.mymodtest.trade.command.BountyContractCommand;
+import mod.test.mymodtest.trade.command.BountySubmitCommand;
+import mod.test.mymodtest.trade.loot.BountyDropHandler;
+import mod.test.mymodtest.trade.loot.BountyProgressHandler;
 import mod.test.mymodtest.trade.loot.LootTableInjector;
 import mod.test.mymodtest.trade.loot.MobDropHandler;
 import mod.test.mymodtest.trade.network.TradeNetworking;
@@ -62,14 +66,23 @@ public class Mymodtest implements ModInitializer {
         // Trade System: 注册怪物掉落处理器
         MobDropHandler.register();
 
+        // Trade System: 注册 Bounty 命令
+        BountySubmitCommand.register();
+        BountyContractCommand.register();
+
+        // Trade System: 注册悬赏进度处理器
+        BountyProgressHandler.register();
+
+        // Trade System: 注册悬赏契约掉落处理器
+        BountyDropHandler.register();
+
         // Phase 4: 注册世界 tick 事件，用于自然生成
         ServerTickEvents.END_WORLD_TICK.register(world -> {
             // 只在主世界生成商人
             if (world.getRegistryKey() == World.OVERWORLD) {
                 MysteriousMerchantSpawner spawner = spawners.computeIfAbsent(
                         world,
-                        w -> new MysteriousMerchantSpawner()
-                );
+                        w -> new MysteriousMerchantSpawner());
                 spawner.trySpawn(world);
             }
         });
