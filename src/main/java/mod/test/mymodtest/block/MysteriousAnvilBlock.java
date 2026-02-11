@@ -1,9 +1,9 @@
 package mod.test.mymodtest.block;
 
+import mod.test.mymodtest.screen.MysteriousAnvilScreenHandler;
 import net.minecraft.block.AnvilBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.FallingBlockEntity;
-import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.NamedScreenHandlerFactory;
 import net.minecraft.screen.ScreenHandlerContext;
 import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
@@ -19,7 +19,7 @@ public class MysteriousAnvilBlock extends AnvilBlock {
     @Override
     protected NamedScreenHandlerFactory createScreenHandlerFactory(BlockState state, World world, BlockPos pos) {
         return new SimpleNamedScreenHandlerFactory(
-                (syncId, inventory, player) -> new AnvilScreenHandler(syncId, inventory, ScreenHandlerContext.EMPTY),
+                (syncId, inventory, player) -> new MysteriousAnvilScreenHandler(syncId, inventory, ScreenHandlerContext.EMPTY),
                 Text.translatable("container.repair")
         );
     }

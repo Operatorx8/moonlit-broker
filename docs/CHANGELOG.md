@@ -17,6 +17,12 @@
 
 ### Changed
 
+- Mysterious Anvil 规则收紧（服务端权威）
+  - 仅允许修复本模组耐久装备/武器，且修复材料仅允许 `sacrifice`
+  - 禁止使用附魔书/书进行附魔合成，非法输入不再产出结果
+  - 修复按每个 `sacrifice` 固定百分比计算，按缺口向上取整消耗
+  - 神秘铁砧使用后不再进入破损状态（永不损坏）
+
 - Katana 审计与文案对齐（代码为准）
   - 新增 `docs/AUDIT_KATANA.md`，逐把列出真实触发条件、冷却、伤害/Debuff计算与来源文件
   - 统一 katana/过渡武器 tooltip key（`tooltip.mymodtest.<item>.subtitle/line1/line2/line3/params`）
