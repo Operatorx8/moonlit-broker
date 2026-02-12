@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.xqanzd.moonlitbroker.trade.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MerchantScreenRefreshMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

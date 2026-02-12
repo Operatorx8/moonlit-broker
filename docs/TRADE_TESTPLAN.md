@@ -9,7 +9,7 @@
 
 ## T1 UI 按钮稳定性（next/prev/refresh）
 ### Steps
-1. `/summon mymodtest:mysterious_merchant` 打开交易界面。
+1. `/summon xqanzd_moonlit_broker:mysterious_merchant` 打开交易界面。
 2. 检查右上 `prev/next/refresh` 是否出现。
 3. 连续执行：翻页 -> refresh -> 关闭界面 -> 重开界面。
 4. 重复 10 次以上，观察按钮是否丢失、点击区是否被标题覆盖。

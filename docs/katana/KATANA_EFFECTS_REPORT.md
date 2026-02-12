@@ -11,7 +11,7 @@ Generated on: 2026-02-05T01:48:27-08:00
 ---
 
 ## moon_glow_katana
-- Item ID: `mymodtest:moon_glow_katana`
+- Item ID: `xqanzd_moonlit_broker:moon_glow_katana`
 
 ### Trigger Conditions
 - Attack trigger entrypoint: `AttackEntityCallback` handler in `MoonTraceHandler.register()`.
@@ -71,18 +71,18 @@ Generated on: 2026-02-05T01:48:27-08:00
 - `NIGHT_VISION_DURATION = 60` ticks, `MoonTraceConfig`.
 
 ### Code Entry Points
-- `src/main/java/mod/test/mymodtest/katana/effect/MoonTraceHandler.java` - `public static void register()`
-- `src/main/java/mod/test/mymodtest/katana/effect/MoonTraceHandler.java` - `public static void tickSpeedBuff(World world)`
-- `src/main/java/mod/test/mymodtest/katana/effect/MoonTraceHandler.java` - `public static void tickDelayedMagic(ServerWorld world)`
-- `src/main/java/mod/test/mymodtest/katana/effect/MoonTraceManager.java` - `public static void applyMark(...)`, `public static Optional<MoonTraceState> getAndConsume(...)`
-- `src/main/java/mod/test/mymodtest/katana/KatanaInit.java` - `public static void init()` (tick wiring)
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/MoonTraceHandler.java` - `public static void register()`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/MoonTraceHandler.java` - `public static void tickSpeedBuff(World world)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/MoonTraceHandler.java` - `public static void tickDelayedMagic(ServerWorld world)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/MoonTraceManager.java` - `public static void applyMark(...)`, `public static Optional<MoonTraceState> getAndConsume(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/KatanaInit.java` - `public static void init()` (tick wiring)
 
 ### Notes / Risks
 - Boss recognition is hardcoded to Wither/Dragon only; other "boss-like" entities are treated as normal.
 - `MoonTraceConfig.DEBUG` defaults to `true` (high log volume risk).
 
 ## regret_blade
-- Item ID: `mymodtest:regret_blade`
+- Item ID: `xqanzd_moonlit_broker:regret_blade`
 
 ### Trigger Conditions
 - Attack trigger entrypoint: `AttackEntityCallback` in `LifeCutHandler.register()`.
@@ -117,17 +117,17 @@ Generated on: 2026-02-05T01:48:27-08:00
 - `ONLY_UNDEAD = true`, `CANNOT_KILL = true`, `MIN_HEALTH_AFTER_CUT = 1.0`, `LifeCutConfig`.
 
 ### Code Entry Points
-- `src/main/java/mod/test/mymodtest/katana/effect/LifeCutHandler.java` - `public static void register()`
-- `src/main/java/mod/test/mymodtest/katana/effect/LifeCutHandler.java` - `public static void tickDelayedDamage(ServerWorld world)`
-- `src/main/java/mod/test/mymodtest/katana/effect/LifeCutHandler.java` - `public static void cleanupCooldowns(long currentTick)`
-- `src/main/java/mod/test/mymodtest/katana/KatanaInit.java` - `public static void init()` (tick wiring)
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/LifeCutHandler.java` - `public static void register()`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/LifeCutHandler.java` - `public static void tickDelayedDamage(ServerWorld world)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/LifeCutHandler.java` - `public static void cleanupCooldowns(long currentTick)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/KatanaInit.java` - `public static void init()` (tick wiring)
 
 ### Notes / Risks
 - Ender Dragon is treated as boss in `isBoss`, but also fails `ONLY_UNDEAD`; result: dragon never triggers LifeCut.
 - Tooltip text says "Armor Penetration: 80% (Boss: 35%)" but config implements `0%` normal / `35%` boss.
 
 ## eclipse_blade
-- Item ID: `mymodtest:eclipse_blade`
+- Item ID: `xqanzd_moonlit_broker:eclipse_blade`
 
 ### Trigger Conditions
 - Attack trigger entrypoint: `AttackEntityCallback` in `EclipseHandler.register()`.
@@ -161,17 +161,17 @@ Generated on: 2026-02-05T01:48:27-08:00
 - Runtime adjustment: +15 is added to Darkness+Weakness and Blindness+Weakness in `EclipseHandler` static init.
 
 ### Code Entry Points
-- `src/main/java/mod/test/mymodtest/katana/effect/EclipseHandler.java` - `public static void register()`
-- `src/main/java/mod/test/mymodtest/katana/effect/EclipseManager.java` - `public static boolean hasMark(...)`, `public static void applyMark(...)`
-- `src/main/java/mod/test/mymodtest/katana/effect/EclipseManager.java` - `public static void tickCleanup(long currentTick)`
-- `src/main/java/mod/test/mymodtest/katana/KatanaInit.java` - `public static void init()` (tick wiring)
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/EclipseHandler.java` - `public static void register()`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/EclipseManager.java` - `public static boolean hasMark(...)`, `public static void applyMark(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/EclipseManager.java` - `public static void tickCleanup(long currentTick)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/KatanaInit.java` - `public static void init()` (tick wiring)
 
 ### Notes / Risks
 - Config comments/lang imply stronger armor penetration behavior (35%/70%), but implementation only logs/display-equivalent 15%/25% and does not modify damage.
 - `WEIGHT_DARKNESS_BLINDNESS` exists in config but is not used by runtime combo builder.
 
 ## oblivion_edge
-- Item ID: `mymodtest:oblivion_edge`
+- Item ID: `xqanzd_moonlit_broker:oblivion_edge`
 
 ### Trigger Conditions
 - Attack trigger entrypoint: `AttackEntityCallback` in `OblivionHandler.register()`.
@@ -216,17 +216,17 @@ Generated on: 2026-02-05T01:48:27-08:00
 - `ARMOR_PENETRATION = 0.35`, `ARMOR_PENETRATION_BOSS = 0.175`, `OblivionConfig`.
 
 ### Code Entry Points
-- `src/main/java/mod/test/mymodtest/katana/effect/OblivionHandler.java` - `public static void register()`
-- `src/main/java/mod/test/mymodtest/katana/effect/OblivionManager.java` - `canApplyReadWrite(...)`, `applyReadWrite(...)`, `hasReadWrite(...)`, `isCausalityOnCooldown(...)`, `setCausalityCooldown(...)`
-- `src/main/java/mod/test/mymodtest/katana/effect/OblivionManager.java` - `public static void tickCleanup(long currentTick)`
-- `src/main/java/mod/test/mymodtest/katana/KatanaInit.java` - `public static void init()` (tick wiring)
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/OblivionHandler.java` - `public static void register()`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/OblivionManager.java` - `canApplyReadWrite(...)`, `applyReadWrite(...)`, `hasReadWrite(...)`, `isCausalityOnCooldown(...)`, `setCausalityCooldown(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/OblivionManager.java` - `public static void tickCleanup(long currentTick)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/KatanaInit.java` - `public static void init()` (tick wiring)
 
 ### Notes / Risks
 - Causality uses `setHealth` direct assignment (bypasses normal damage pipeline/events).
 - Tooltip/lang says 20% armor penetration on marked targets, but config/logic use 35% normal targets-with-mark and 17.5% boss.
 
 ## nmap_katana
-- Item ID: `mymodtest:nmap_katana`
+- Item ID: `xqanzd_moonlit_broker:nmap_katana`
 
 ### Trigger Conditions
 - Attack trigger entrypoint: `AttackEntityCallback` in `NmapAttackHandler.register()`.
@@ -278,11 +278,11 @@ Generated on: 2026-02-05T01:48:27-08:00
 - `FIREWALL_PROJ_CHANCE = 0.35`, `FIREWALL_PROJ_CHANCE_BOSS = 0.15`, `FIREWALL_PROJ_COOLDOWN_TICKS = 120`, `NmapConfig`.
 
 ### Code Entry Points
-- `src/main/java/mod/test/mymodtest/katana/effect/nmap/NmapAttackHandler.java` - `public static void register()`
-- `src/main/java/mod/test/mymodtest/katana/effect/nmap/NmapScanHandler.java` - `public static void register()`, `public static void onPlayerDamaged(...)`
-- `src/main/java/mod/test/mymodtest/katana/effect/nmap/NmapFirewallHandler.java` - `shouldBlockDebuff(...)`, `shouldBlockProjectile(...)`
-- `src/main/java/mod/test/mymodtest/katana/mixin/LivingEntityMixin.java` - `katana$onAddStatusEffect(...)`, `katana$onDamage(...)`
-- `src/main/java/mod/test/mymodtest/katana/effect/nmap/NmapManager.java` - state/cooldown/penetration management APIs
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/nmap/NmapAttackHandler.java` - `public static void register()`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/nmap/NmapScanHandler.java` - `public static void register()`, `public static void onPlayerDamaged(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/nmap/NmapFirewallHandler.java` - `shouldBlockDebuff(...)`, `shouldBlockProjectile(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/mixin/LivingEntityMixin.java` - `katana$onAddStatusEffect(...)`, `katana$onDamage(...)`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/nmap/NmapManager.java` - state/cooldown/penetration management APIs
 
 ### Notes / Risks
 - Debug log string says "Resistance V for 6s" but config duration is 60 ticks (3s).
@@ -292,25 +292,25 @@ Generated on: 2026-02-05T01:48:27-08:00
 ---
 
 ## Shared Systems & Helpers
-- `src/main/java/mod/test/mymodtest/katana/KatanaInit.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/KatanaInit.java`
 - Responsibility: initializes katana subsystem, registers item/effect handlers, and central server-tick maintenance.
 - Called from mod bootstrap `Mymodtest.onInitialize()`.
-- `src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`
-- Responsibility: registry for 5 katana items and item IDs (`mymodtest:*`).
-- `src/main/java/mod/test/mymodtest/katana/mixin/LivingEntityMixin.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`
+- Responsibility: registry for 5 katana items and item IDs (`xqanzd_moonlit_broker:*`).
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/mixin/LivingEntityMixin.java`
 - Responsibility: central interception points for Nmap firewall and shield cooldown-on-damage.
-- `src/main/java/mod/test/mymodtest/katana/mixin/EnchantmentMixin.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/mixin/EnchantmentMixin.java`
 - Responsibility: blocks Sweeping Edge compatibility for all katanas.
-- `src/main/java/mod/test/mymodtest/katana/effect/MoonTraceManager.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/MoonTraceManager.java`
 - Responsibility: Moon Glow mark lifecycle (`apply`, `consume`, cleanup).
 - Called by `MoonTraceHandler` + `KatanaInit` cleanup tick.
-- `src/main/java/mod/test/mymodtest/katana/effect/EclipseManager.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/EclipseManager.java`
 - Responsibility: Eclipse mark lifecycle + cleanup.
 - Called by `EclipseHandler` + `KatanaInit` cleanup tick.
-- `src/main/java/mod/test/mymodtest/katana/effect/OblivionManager.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/OblivionManager.java`
 - Responsibility: ReadWrite marks, per-target ReadWrite cooldowns, per-player causality cooldowns, cleanup.
 - Called by `OblivionHandler` + `KatanaInit` cleanup tick.
-- `src/main/java/mod/test/mymodtest/katana/effect/nmap/NmapManager.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/katana/effect/nmap/NmapManager.java`
 - Responsibility: per-player Nmap state (scan cooldowns, shield active state, enumeration set/window, firewall cooldowns).
 - Called by `NmapScanHandler`, `NmapAttackHandler`, `NmapFirewallHandler`, and `KatanaInit` cleanup tick.
 - Delayed damage queues:

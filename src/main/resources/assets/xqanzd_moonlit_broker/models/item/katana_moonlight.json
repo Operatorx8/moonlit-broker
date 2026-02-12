@@ -1,0 +1,6 @@
+{
+  "parent": "item/handheld",
+  "textures": {
+    "layer0": "xqanzd_moonlit_broker:item/katana_moonlight"
+  }
+}

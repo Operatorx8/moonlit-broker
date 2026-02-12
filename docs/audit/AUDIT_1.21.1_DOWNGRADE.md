@@ -7,10 +7,10 @@
 - P2：个别错误日志使用 System.err 直出，难以与统一日志等级/格式对齐。
 
 ## 你做了哪些最小修复（文件+行/方法+摘要）
-- `src/main/java/mod/test/mymodtest/Mymodtest.java`：初始化日志改为 LOGGER.debug，避免发布版刷屏。
-- `src/main/java/mod/test/mymodtest/registry/ModItems.java`：物品注册日志改为 LOGGER.debug。
-- `src/main/java/mod/test/mymodtest/entity/spawn/MysteriousMerchantSpawner.java`：活跃商人死亡的异常情况改为 LOGGER.warn，并输出短 UUID。
-- `src/main/java/mod/test/mymodtest/entity/MysteriousMerchantEntity.java`：
+- `src/main/java/dev/xqanzd/moonlitbroker/Mymodtest.java`：初始化日志改为 LOGGER.debug，避免发布版刷屏。
+- `src/main/java/dev/xqanzd/moonlitbroker/registry/ModItems.java`：物品注册日志改为 LOGGER.debug。
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/spawn/MysteriousMerchantSpawner.java`：活跃商人死亡的异常情况改为 LOGGER.warn，并输出短 UUID。
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/MysteriousMerchantEntity.java`：
   - 隐藏交易解锁等信息日志改为 DEBUG_AI 条件下的 LOGGER.debug。
   - notifySpawnerStateClear 异常改为 LOGGER.error。
   - 反序列化无效 UUID 改为 LOGGER.warn。

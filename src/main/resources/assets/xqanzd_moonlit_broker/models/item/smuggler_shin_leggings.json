@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "xqanzd_moonlit_broker:item/smuggler_shin_leggings"
+  }
+}

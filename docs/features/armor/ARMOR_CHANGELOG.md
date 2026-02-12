@@ -27,7 +27,7 @@
   - `SmugglerShinHandler.onEntityDeath()` 现在能正确接收真实掉落列表
 
 - **P1: 核心资源减半未实现**
-  - 新增 `ModTags.Items.CORE_LOOT` 物品 tag（路径 `data/mymodtest/tags/item/core_loot.json`）
+  - 新增 `ModTags.Items.CORE_LOOT` 物品 tag（路径 `data/xqanzd_moonlit_broker/tags/item/core_loot.json`）
   - 默认包含：`nether_star`, `elytra`, `totem_of_undying`, `dragon_egg`, `dragon_breath`
   - `SmugglerShinHandler` 判断 `isSpecial = isBoss || containsCoreLoot(drops)`，两项概率均减半
 
@@ -48,7 +48,7 @@
 ### Added
 
 - `ModTags.java` - 自定义 Tag 定义（`CORE_LOOT`）
-- `data/mymodtest/tags/item/core_loot.json` - 核心战利品 tag
+- `data/xqanzd_moonlit_broker/tags/item/core_loot.json` - 核心战利品 tag
 
 ### Technical
 

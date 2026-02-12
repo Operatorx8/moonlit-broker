@@ -3,7 +3,7 @@
 ## 模块结构
 
 ```
-mymodtest/
+xqanzd_moonlit_broker/
 ├── Mymodtest.java           # 主入口
 ├── entity/
 │   ├── MysteriousMerchantEntity.java

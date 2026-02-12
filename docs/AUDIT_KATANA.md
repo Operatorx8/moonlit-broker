@@ -1,28 +1,28 @@
 # Katana / Katana-like Audit (Code as Source of Truth)
 
 Date: 2026-02-07  
-Project: MysteriousMerchant (`modid = mymodtest`)
+Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 
 ## 1) Scope and roster (from code, no guessing)
 
 ### Registered katana artifacts
-- `mymodtest:moon_glow_katana` (`src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`)
-- `mymodtest:regret_blade` (`src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`)
-- `mymodtest:eclipse_blade` (`src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`)
-- `mymodtest:oblivion_edge` (`src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`)
-- `mymodtest:nmap_katana` (`src/main/java/mod/test/mymodtest/katana/item/KatanaItems.java`)
-- `mymodtest:acer` (`src/main/java/mod/test/mymodtest/weapon/transitional/item/TransitionalWeaponItems.java`)
-- `mymodtest:velox` (`src/main/java/mod/test/mymodtest/weapon/transitional/item/TransitionalWeaponItems.java`)
-- `mymodtest:fatalis` (`src/main/java/mod/test/mymodtest/weapon/transitional/item/TransitionalWeaponItems.java`)
+- `xqanzd_moonlit_broker:moon_glow_katana` (`src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`)
+- `xqanzd_moonlit_broker:regret_blade` (`src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`)
+- `xqanzd_moonlit_broker:eclipse_blade` (`src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`)
+- `xqanzd_moonlit_broker:oblivion_edge` (`src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`)
+- `xqanzd_moonlit_broker:nmap_katana` (`src/main/java/dev/xqanzd/moonlitbroker/katana/item/KatanaItems.java`)
+- `xqanzd_moonlit_broker:acer` (`src/main/java/dev/xqanzd/moonlitbroker/weapon/transitional/item/TransitionalWeaponItems.java`)
+- `xqanzd_moonlit_broker:velox` (`src/main/java/dev/xqanzd/moonlitbroker/weapon/transitional/item/TransitionalWeaponItems.java`)
+- `xqanzd_moonlit_broker:fatalis` (`src/main/java/dev/xqanzd/moonlitbroker/weapon/transitional/item/TransitionalWeaponItems.java`)
 
 ### Katana tag check
-- Tag file: `src/main/resources/data/mymodtest/tags/item/katana.json`
+- Tag file: `src/main/resources/data/xqanzd_moonlit_broker/tags/item/katana.json`
 - Included: `moon_glow_katana`, `regret_blade`, `eclipse_blade`, `oblivion_edge`, `nmap_katana`, `acer`, `fatalis`
 - Excluded: `velox` (intentional, matches current rule “exclude velox”)
 
 ## 2) Per-weapon real spec (mechanics + params)
 
-## `mymodtest:moon_glow_katana`
+## `xqanzd_moonlit_broker:moon_glow_katana`
 - Base attributes:
   - `SwordItem.createAttributeModifiers(ToolMaterials.NETHERITE, 3, -2.2f)` (`MoonGlowKatanaItem#createAttributeModifiers`)
   - Durability: `1765` (`KatanaItems.KATANA_MAX_DURABILITY`)
@@ -55,7 +55,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
   - `MoonTraceConfig.DEBUG` controls verbose logs
   - Recommendation: keep for balancing; disable in release
 
-## `mymodtest:regret_blade`
+## `xqanzd_moonlit_broker:regret_blade`
 - Base attributes:
   - `SwordItem.createAttributeModifiers(ToolMaterials.NETHERITE, 3, -2.2f)` (`RegretBladeItem`)
   - Durability: `1765`
@@ -80,7 +80,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
   - `LifeCutConfig.DEBUG` controls detailed trigger math logs
   - Recommendation: keep in test, off in release
 
-## `mymodtest:eclipse_blade`
+## `xqanzd_moonlit_broker:eclipse_blade`
 - Base attributes:
   - `SwordItem.createAttributeModifiers(ToolMaterials.NETHERITE, 3, -2.2f)` (`EclipseBladeItem`)
   - Durability: `1765`
@@ -103,7 +103,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
   - `EclipseConfig.DEBUG` controls logs
   - Recommendation: keep in QA; off in release
 
-## `mymodtest:oblivion_edge`
+## `xqanzd_moonlit_broker:oblivion_edge`
 - Base attributes:
   - `SwordItem.createAttributeModifiers(ToolMaterials.NETHERITE, 2, -2.2f)` (`OblivionEdgeItem`)
   - Durability: `1765`
@@ -143,7 +143,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
   - `OblivionConfig.DEBUG` controls logs
   - Recommendation: keep for tuning, disable in release
 
-## `mymodtest:nmap_katana`
+## `xqanzd_moonlit_broker:nmap_katana`
 - Base attributes:
   - `SwordItem.createAttributeModifiers(ToolMaterials.NETHERITE, 2, -2.2f)` (`NmapKatanaItem`)
   - Durability: `1765`
@@ -181,7 +181,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
   - `NmapConfig.DEBUG` controls module logs
   - Recommendation: keep temporarily; off in release
 
-## `mymodtest:acer` (transitional)
+## `xqanzd_moonlit_broker:acer` (transitional)
 - Base attributes:
   - Damage/speed source: `TransitionalWeaponConstants.ACER_BASE_DAMAGE=6`, `ACER_ATTACK_SPEED=-2.2f` (`AcerItem#createSettings`)
   - Durability: `287` (`ACER_DURABILITY`)
@@ -193,7 +193,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
 - Debug/log:
   - `TransitionalWeaponConstants.DEBUG` toggles diagnostic logs in mixin
 
-## `mymodtest:velox` (transitional, intentionally not in katana tag)
+## `xqanzd_moonlit_broker:velox` (transitional, intentionally not in katana tag)
 - Base attributes:
   - Damage/speed source: `VELOX_BASE_DAMAGE=5`, `VELOX_ATTACK_SPEED=-1.8f` (`VeloxItem#createSettings`)
   - Durability: `262` (`VELOX_DURABILITY`)
@@ -203,7 +203,7 @@ Project: MysteriousMerchant (`modid = mymodtest`)
 - Debug/log:
   - No dedicated combat effect logger
 
-## `mymodtest:fatalis` (transitional)
+## `xqanzd_moonlit_broker:fatalis` (transitional)
 - Base attributes:
   - Damage/speed source: `FATALIS_BASE_DAMAGE=10`, `FATALIS_ATTACK_SPEED=-2.2f` (`FatalisItem#createSettings`)
   - Durability: `287` (`FATALIS_DURABILITY`)
@@ -215,8 +215,8 @@ Project: MysteriousMerchant (`modid = mymodtest`)
 
 ## 3) Sweeping / enchant constraints status (code check)
 
-- Sweeping attack path disabled for items in `mymodtest:katana`:
+- Sweeping attack path disabled for items in `xqanzd_moonlit_broker:katana`:
   - `PlayerEntitySweepMixin` redirects sweep AOE list, sweep sound, and sweep particles.
-- Sweeping Edge enchant blocked for `mymodtest:katana`:
+- Sweeping Edge enchant blocked for `xqanzd_moonlit_broker:katana`:
   - `EnchantmentMixin` intercepts `isPrimaryItem` and `isAcceptableItem` for `Enchantments.SWEEPING_EDGE`.
 - `velox` is outside katana tag, so it keeps vanilla sword sweep behavior.

@@ -25,7 +25,7 @@
 
 - Katana 审计与文案对齐（代码为准）
   - 新增 `docs/AUDIT_KATANA.md`，逐把列出真实触发条件、冷却、伤害/Debuff计算与来源文件
-  - 统一 katana/过渡武器 tooltip key（`tooltip.mymodtest.<item>.subtitle/line1/line2/line3/params`）
+  - 统一 katana/过渡武器 tooltip key（`tooltip.xqanzd_moonlit_broker.<item>.subtitle/line1/line2/line3/params`）
   - 修正过期文案（例如 Regret/Eclipse/Oblivion 的穿透与冷却描述）
 
 - Tooltip 集中化（客户端）
@@ -38,7 +38,7 @@
   - 不改动任何盔甲特效逻辑与数值
 
 - Katana 横扫行为修复（1.21.1）
-  - 新增 `mymodtest:katana` 物品标签，统一标记 5 把神器 katana
+  - 新增 `xqanzd_moonlit_broker:katana` 物品标签，统一标记 5 把神器 katana
   - 对 `PlayerEntity#attack` 的横扫分支做 katana 定向阻断：移除横扫 AOE、横扫音效、横扫粒子
   - 保留剑类附魔生态与附魔系数，仅禁止 `Sweeping Edge` 对 katana 生效
   - 即使通过 NBT/指令强行写入 Sweeping，katana 攻击也不会触发横扫

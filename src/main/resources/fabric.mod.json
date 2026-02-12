@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "mymodtest",
+  "id": "xqanzd_moonlit_broker",
   "version": "${version}",
-  "name": "Mysterious Merchant",
+  "name": "Moonlit Broker（月光掮客）",
   "description": "Mysterious Merchant with Katana weapons",
   "authors": [],
   "contact": {},
@@ -10,19 +10,23 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "mod.test.mymodtest.Mymodtest"
+      "dev.xqanzd.moonlitbroker.Mymodtest"
     ],
     "client": [
-      "mod.test.mymodtest.client.MymodtestClient"
+      "dev.xqanzd.moonlitbroker.client.MymodtestClient"
     ]
   },
   "mixins": [
-    "mymodtest.mixins.json",
-    "mymodtest.katana.mixins.json",
-    "mymodtest.armor.mixins.json",
-    "mymodtest.transitional.mixins.json",
-    "mymodtest.client.mixins.json"
+    "xqanzd_moonlit_broker.mixins.json",
+    "xqanzd_moonlit_broker.katana.mixins.json",
+    "xqanzd_moonlit_broker.armor.mixins.json",
+    "xqanzd_moonlit_broker.transitional.mixins.json",
+    {
+      "config": "xqanzd_moonlit_broker.client.mixins.json",
+      "environment": "client"
+    }
   ],
+  "accessWidener": "xqanzd_moonlit_broker.accesswidener",
   "depends": {
     "fabricloader": ">=${loader_version}",
     "fabric-api": "*",

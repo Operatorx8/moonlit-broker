@@ -1,13 +1,13 @@
 {
   "replace": false,
   "values": [
-    "mymodtest:old_market_chestplate",
-    "mymodtest:blood_pact_chestplate",
-    "mymodtest:ghost_god_chestplate",
-    "mymodtest:windbreaker_chestplate",
-    "mymodtest:void_devourer_chestplate",
-    "mymodtest:reactive_bug_plate",
-    "mymodtest:patchwork_coat",
-    "mymodtest:ritual_robe"
+    "xqanzd_moonlit_broker:old_market_chestplate",
+    "xqanzd_moonlit_broker:blood_pact_chestplate",
+    "xqanzd_moonlit_broker:ghost_god_chestplate",
+    "xqanzd_moonlit_broker:windbreaker_chestplate",
+    "xqanzd_moonlit_broker:void_devourer_chestplate",
+    "xqanzd_moonlit_broker:reactive_bug_plate",
+    "xqanzd_moonlit_broker:patchwork_coat",
+    "xqanzd_moonlit_broker:ritual_robe"
   ]
 }

@@ -45,7 +45,7 @@
 
 ```
 # 1. 准备
-/give @p mymodtest:merchant_mark
+/give @p xqanzd_moonlit_broker:merchant_mark
 /bountycontract give @s zombie 3
 
 # 2. reject 验证（INVALID / NOT_DONE）
@@ -85,3 +85,20 @@
 
 ## 11. Build
 - [ ] `./gradlew build` -> BUILD SUCCESSFUL
+
+## 12. UI Skin + Guide Book Verify
+- [ ] `./gradlew runClient` 进入标题界面
+- [ ] 通过首次交互或 `/give @p xqanzd_moonlit_broker:guide_scroll` 获取指南书
+- [ ] 右键指南书 -> 打开原版书本阅读界面（可翻页，无崩溃）
+- [ ] 打开商人交易界面 -> 背景已替换为 Pixel RPG 书页皮肤（无紫黑）
+- [ ] 交易仍可完成，翻页/刷新按钮可点击
+- [ ] GUI Scale 设置为 `2 / 3 / Auto` 时界面仍可用
+- [ ] `F3 + T` 资源重载后再次打开商人界面仍正常
+
+## 13. Merchant Book Skin Phase 2 Verify
+- [ ] `./gradlew clean build` -> BUILD SUCCESSFUL
+- [ ] `./gradlew runClient` 进入世界并打开神秘商人交易界面
+- [ ] 背景为 `merchant_book.png`（276x166）且无原版灰底叠画
+- [ ] 不再出现 `Inventory` 文本
+- [ ] 所有槽位（交易输入/输出 + 玩家背包 + 热键栏）均为 `slot_18.png` 底纹
+- [ ] `next/prev/refresh` 图标按钮可见，hover 有高亮反馈，点击可交互

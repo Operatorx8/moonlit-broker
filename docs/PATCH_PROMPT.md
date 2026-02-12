@@ -1,6 +1,6 @@
 # Patch Prompt: P0/P1 修复批次
 
-**目标文件**: `src/main/java/mod/test/mymodtest/entity/MysteriousMerchantEntity.java`
+**目标文件**: `src/main/java/dev/xqanzd/moonlitbroker/entity/MysteriousMerchantEntity.java`
 **构建验证**: 每个 patch 完成后 `./gradlew build` 必须通过
 
 ---
@@ -270,8 +270,8 @@ P1-2 → build（边界修复，无需专门验证）
 ```
 # 验证 1: despawn 清理（P0-1）
 # 前置：DEBUG_DESPAWN = true（临时开启）
-/summon mymodtest:mysterious_merchant
-# 等待 60 秒或 /kill @e[type=mymodtest:mysterious_merchant]
+/summon xqanzd_moonlit_broker:mysterious_merchant
+# 等待 60 秒或 /kill @e[type=xqanzd_moonlit_broker:mysterious_merchant]
 # 检查日志：NOTIFY_STATE_CLEAR reason=DISCARD 或 reason=DESPAWN
 # 检查：下一轮 trySpawn 能正常触发
 

@@ -15,17 +15,17 @@
 - P2：部分调试日志未统一到 LOGGER，影响日志级别控制与采样。
 
 ## 最小修复（diff 摘要）
-- `src/main/java/mod/test/mymodtest/world/MerchantSpawnerState.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/world/MerchantSpawnerState.java`
   - 将 DEBUG 下的 System.out 改为 LOGGER.debug，保留原有条件与内容。
-- `src/main/java/mod/test/mymodtest/entity/spawn/MysteriousMerchantSpawner.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/spawn/MysteriousMerchantSpawner.java`
   - 将 DEBUG 下的 System.out 改为 LOGGER.debug；保持触发条件不变。
-- `src/main/java/mod/test/mymodtest/entity/MysteriousMerchantEntity.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/MysteriousMerchantEntity.java`
   - DEBUG_DESPAWN/DEBUG_AI 下的 System.out 改为 LOGGER.debug，避免发布版刷屏。
-- `src/main/java/mod/test/mymodtest/entity/ai/EnhancedFleeGoal.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/ai/EnhancedFleeGoal.java`
   - 新增 LOGGER，并将 DEBUG_AI 输出改为 LOGGER.debug。
-- `src/main/java/mod/test/mymodtest/entity/ai/DrinkPotionGoal.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/ai/DrinkPotionGoal.java`
   - 新增 LOGGER，并将 DEBUG_AI 输出改为 LOGGER.debug。
-- `src/main/java/mod/test/mymodtest/entity/ai/SeekLightGoal.java`
+- `src/main/java/dev/xqanzd/moonlitbroker/entity/ai/SeekLightGoal.java`
   - 新增 LOGGER，并将 DEBUG_AI 输出改为 LOGGER.debug。
 
 ## 生成器关键不变量校验

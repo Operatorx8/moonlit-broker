@@ -1,0 +1,55 @@
+{
+  "entity.wandering_trader.ambient": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.ambient",
+    "sounds": [
+      "entity/wandering_trader/villager_idle1",
+      "entity/wandering_trader/villager_idle2",
+      "entity/wandering_trader/villager_idle3"
+    ]
+  },
+  "entity.wandering_trader.hurt": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.hurt",
+    "sounds": [
+      "entity/wandering_trader/villager_hurt1",
+      "entity/wandering_trader/villager_hurt2",
+      "entity/wandering_trader/villager_hurt3",
+      "entity/wandering_trader/villager_hurt4"
+    ]
+  },
+  "entity.wandering_trader.death": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.death",
+    "sounds": [
+      "entity/wandering_trader/villager_death"
+    ]
+  },
+  "entity.wandering_trader.yes": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.yes",
+    "sounds": [
+      "entity/wandering_trader/villager_accept1",
+      "entity/wandering_trader/villager_accept2",
+      "entity/wandering_trader/villager_accept3"
+    ]
+  },
+  "entity.wandering_trader.no": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.no",
+    "sounds": [
+      "entity/wandering_trader/villager_deny1",
+      "entity/wandering_trader/villager_deny2",
+      "entity/wandering_trader/villager_deny3"
+    ]
+  },
+  "entity.wandering_trader.trade": {
+    "replace": true,
+    "subtitle": "subtitles.entity.wandering_trader.trade",
+    "sounds": [
+      "entity/wandering_trader/villager_trade1",
+      "entity/wandering_trader/villager_trade2",
+      "entity/wandering_trader/villager_trade3"
+    ]
+  }
+}

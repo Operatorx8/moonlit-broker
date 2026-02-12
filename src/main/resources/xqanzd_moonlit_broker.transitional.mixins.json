@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.xqanzd.moonlitbroker.weapon.transitional.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "AcerCritMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

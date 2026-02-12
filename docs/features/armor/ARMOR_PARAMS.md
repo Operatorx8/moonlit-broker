@@ -256,11 +256,11 @@
 | `doubleLootChanceBoss` | 0.05 | (Boss/核心资源 5%) |
 | `cooldown` | 800 | ticks (40s) |
 | `excludePvp` | true | - |
-| `coreLootTag` | `mymodtest:core_loot` | (掉落物包含此 tag 物品时概率减半) |
+| `coreLootTag` | `xqanzd_moonlit_broker:core_loot` | (掉落物包含此 tag 物品时概率减半) |
 
 #### Core Loot Tag 说明
 
-- **Tag 路径**: `data/mymodtest/tags/item/core_loot.json`
+- **Tag 路径**: `data/xqanzd_moonlit_broker/tags/item/core_loot.json`
 - **用途**: 当击杀产生的掉落物中包含此 tag 内的物品时，额外掉落和双倍掉落概率均减半
 - **默认内容**:
   - `minecraft:nether_star`

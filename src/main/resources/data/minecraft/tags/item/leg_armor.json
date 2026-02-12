@@ -1,13 +1,13 @@
 {
   "replace": false,
   "values": [
-    "mymodtest:smuggler_shin_leggings",
-    "mymodtest:smuggler_pouch_leggings",
-    "mymodtest:graze_guard_leggings",
-    "mymodtest:stealth_shin_leggings",
-    "mymodtest:clear_ledger_leggings",
-    "mymodtest:wrapped_leggings",
-    "mymodtest:reinforced_greaves",
-    "mymodtest:cargo_pants"
+    "xqanzd_moonlit_broker:smuggler_shin_leggings",
+    "xqanzd_moonlit_broker:smuggler_pouch_leggings",
+    "xqanzd_moonlit_broker:graze_guard_leggings",
+    "xqanzd_moonlit_broker:stealth_shin_leggings",
+    "xqanzd_moonlit_broker:clear_ledger_leggings",
+    "xqanzd_moonlit_broker:wrapped_leggings",
+    "xqanzd_moonlit_broker:reinforced_greaves",
+    "xqanzd_moonlit_broker:cargo_pants"
   ]
 }

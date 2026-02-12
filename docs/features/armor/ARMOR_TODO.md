@@ -14,7 +14,7 @@
 - [x] 护腿 lang key（`en_us` / `zh_cn`）与 Lore 文案
 - [x] **护腿 P0/P1 修复**（v0.11.1）
   - [x] 走私者之胫掉落采集修复（LivingEntityDeathMixin before/after 扫描）
-  - [x] 核心资源减半实现（`mymodtest:core_loot` tag）
+  - [x] 核心资源减半实现（`xqanzd_moonlit_broker:core_loot` tag）
   - [x] 走私者暗袋激活期 20t 节奏限制
   - [x] Map key 改 UUID + respawn 清理
   - [x] ClearLedger Speed 来源用 expiresTick 判定

@@ -10,25 +10,25 @@
 # 测试命令（复制到游戏内执行）
 
 # 获取所有头盔
-/give @s mymodtest:sentinel_helmet
-/give @s mymodtest:silent_oath_helmet
-/give @s mymodtest:exile_mask_helmet
-/give @s mymodtest:relic_circlet_helmet
-/give @s mymodtest:retracer_ornament_helmet
+/give @s xqanzd_moonlit_broker:sentinel_helmet
+/give @s xqanzd_moonlit_broker:silent_oath_helmet
+/give @s xqanzd_moonlit_broker:exile_mask_helmet
+/give @s xqanzd_moonlit_broker:relic_circlet_helmet
+/give @s xqanzd_moonlit_broker:retracer_ornament_helmet
 
 # 获取所有胸甲
-/give @s mymodtest:old_market_chestplate
-/give @s mymodtest:blood_pact_chestplate
-/give @s mymodtest:ghost_god_chestplate
-/give @s mymodtest:windbreaker_chestplate
-/give @s mymodtest:void_devourer_chestplate
+/give @s xqanzd_moonlit_broker:old_market_chestplate
+/give @s xqanzd_moonlit_broker:blood_pact_chestplate
+/give @s xqanzd_moonlit_broker:ghost_god_chestplate
+/give @s xqanzd_moonlit_broker:windbreaker_chestplate
+/give @s xqanzd_moonlit_broker:void_devourer_chestplate
 
 # 获取所有护腿
-/give @s mymodtest:smuggler_shin_leggings
-/give @s mymodtest:smuggler_pouch_leggings
-/give @s mymodtest:graze_guard_leggings
-/give @s mymodtest:stealth_shin_leggings
-/give @s mymodtest:clear_ledger_leggings
+/give @s xqanzd_moonlit_broker:smuggler_shin_leggings
+/give @s xqanzd_moonlit_broker:smuggler_pouch_leggings
+/give @s xqanzd_moonlit_broker:graze_guard_leggings
+/give @s xqanzd_moonlit_broker:stealth_shin_leggings
+/give @s xqanzd_moonlit_broker:clear_ledger_leggings
 
 # 召唤测试怪物
 /summon zombie ~ ~ ~
@@ -494,7 +494,7 @@
 |---|--------|------|----------|------|
 | L1-F01 | 掉落采集 | 击杀普通僵尸 | 日志显示 `effect=smuggler_loot_bonus` 或 `smuggler_double_drop`，且额外物品确实生成 | [ ] |
 | L1-F02 | 核心资源减半 | 击杀凋灵或使用 `/loot spawn` 生成含 `nether_star` 掉落 | 日志显示 `core=true`，概率减半（需多次验证） | [ ] |
-| L1-F03 | core_loot tag | 检查 `data/mymodtest/tags/item/core_loot.json` 存在且格式正确 | 包含 5 个物品 ID | [ ] |
+| L1-F03 | core_loot tag | 检查 `data/xqanzd_moonlit_broker/tags/item/core_loot.json` 存在且格式正确 | 包含 5 个物品 ID | [ ] |
 
 ### 走私者暗袋 20t 节奏验证
 

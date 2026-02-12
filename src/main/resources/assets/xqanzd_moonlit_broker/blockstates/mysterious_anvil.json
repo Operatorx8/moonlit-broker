@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "xqanzd_moonlit_broker:block/mysterious_anvil" },
+    "facing=south": { "model": "xqanzd_moonlit_broker:block/mysterious_anvil", "y": 180 },
+    "facing=west": { "model": "xqanzd_moonlit_broker:block/mysterious_anvil", "y": 270 },
+    "facing=east": { "model": "xqanzd_moonlit_broker:block/mysterious_anvil", "y": 90 }
+  }
+}

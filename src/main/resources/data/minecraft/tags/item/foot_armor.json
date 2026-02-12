@@ -1,13 +1,13 @@
 {
   "replace": false,
   "values": [
-    "mymodtest:untraceable_treads_boots",
-    "mymodtest:boundary_walker_boots",
-    "mymodtest:ghost_step_boots",
-    "mymodtest:marching_boots",
-    "mymodtest:gossamer_boots",
-    "mymodtest:penitent_boots",
-    "mymodtest:standard_iron_boots",
-    "mymodtest:cushion_hiking_boots"
+    "xqanzd_moonlit_broker:untraceable_treads_boots",
+    "xqanzd_moonlit_broker:boundary_walker_boots",
+    "xqanzd_moonlit_broker:ghost_step_boots",
+    "xqanzd_moonlit_broker:marching_boots",
+    "xqanzd_moonlit_broker:gossamer_boots",
+    "xqanzd_moonlit_broker:penitent_boots",
+    "xqanzd_moonlit_broker:standard_iron_boots",
+    "xqanzd_moonlit_broker:cushion_hiking_boots"
   ]
 }
