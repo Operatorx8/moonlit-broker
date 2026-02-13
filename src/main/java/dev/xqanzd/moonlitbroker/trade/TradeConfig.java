@@ -30,6 +30,10 @@ public final class TradeConfig {
     public static final boolean SPAWN_DEBUG = MASTER_DEBUG;
     public static final boolean SCROLL_DEBUG = MASTER_DEBUG;
 
+    // ========== Debug Trade Gate ==========
+    /** 仅在 debug 时出现 Emerald->Diamond / Emerald->Netherite 等测试交易 */
+    public static final boolean DEBUG_TRADES = MASTER_DEBUG;
+
     // ========== 门槛阈值 ==========
     /** 进入隐藏页所需声望 */
     public static final int SECRET_REP_THRESHOLD = 15;
@@ -63,6 +67,22 @@ public final class TradeConfig {
     public static final long SILVER_CAP_WINDOW_TICKS = 12000L;
     /** 悬赏银币奖励 */
     public static final int BOUNTY_SILVER_REWARD = 3;
+
+    // ========== Coin 经济规则 ==========
+    /** Bounty 发 Coin 的 per-player 冷却 (2 MC 日 = 48000 ticks)，按"尝试"冷却 */
+    public static final long COIN_BOUNTY_CD_TICKS = 48000L;
+    /** Bounty 发 Coin 的概率 (15%) */
+    public static final float COIN_BOUNTY_CHANCE = 0.15f;
+    /** Katana 替代路线：Silver Note 成本 */
+    public static final int KATANA_ALT_SILVER_COST = 16;
+    /** 供奉（右键交互）连点冷却 (20 ticks = 1 秒) */
+    public static final int COIN_OFFER_CD_TICKS = 20;
+    /** 高级结构箱 Coin 掉率：stronghold_library */
+    public static final float CHEST_COIN_CHANCE_STRONGHOLD = 0.12f;
+    /** 高级结构箱 Coin 掉率：ancient_city */
+    public static final float CHEST_COIN_CHANCE_ANCIENT_CITY = 0.08f;
+    /** 高级结构箱 Coin 掉率：trial_chambers */
+    public static final float CHEST_COIN_CHANCE_TRIAL = 0.10f;
 
     // ========== 冷却时间 ==========
     /** 页面操作冷却 (0.5秒 = 10 ticks) */
@@ -126,6 +146,28 @@ public final class TradeConfig {
     public static final int SILVER_TO_SCROLL_COST = 8;
     /** Silver Note → Trade Scroll 最大购买次数 */
     public static final int SILVER_TO_SCROLL_MAX_USES = 6;
+    /** Page2 稳定来源：Silver Note -> Trade Scroll 成本 */
+    public static final int PAGE2_SCROLL_SOURCE_SILVER_COST = 10;
+    /** Page2 稳定来源：Silver Note -> Trade Scroll 最大次数 */
+    public static final int PAGE2_SCROLL_SOURCE_MAX_USES = 4;
+    /** Page2 稳定来源：Merchant Mark 的 Silver 成本 */
+    public static final int PAGE2_TICKET_SOURCE_SILVER_COST = 14;
+    /** Page2 稳定来源：Merchant Mark 的 Emerald 附加税 */
+    public static final int PAGE2_TICKET_SOURCE_EMERALD_TAX = 2;
+    /** Page2 稳定来源：Silver Note -> Merchant Mark 最大次数 */
+    public static final int PAGE2_TICKET_SOURCE_MAX_USES = 2;
+
+    // ========== Arcane Page Gate Costs ==========
+    public static final int ARCANE_SCROLL_COST = 1;
+    public static final int ARCANE_TICKET_COST = 1;
+    public static final int ARCANE_P3_01_SILVER_COST = 8;
+    public static final int ARCANE_P3_02_SILVER_COST = 10;
+    public static final int ARCANE_P3_03_SILVER_COST = 16;
+    public static final int ARCANE_P3_04_SILVER_COST = 6;
+    public static final int ARCANE_P3_05_SILVER_COST = 12;
+    public static final int ARCANE_P3_06_SILVER_COST = 6;
+    public static final int ARCANE_P3_07_SILVER_COST = 8;
+    public static final int ARCANE_P3_08_SILVER_COST = 24;
 
     // ========== 卷轴等级 ==========
     public static final String GRADE_NORMAL = "NORMAL";
@@ -209,6 +251,34 @@ public final class TradeConfig {
         return VARIANT_B_RANDOM_CACHE;
     }
 
+    /**
+     * Random B 的卷轴引导子池：当输入包含 Trade Scroll 时使用。
+     */
+    private static volatile Map<String, List<Item>> VARIANT_B_SCROLL_GUIDED_CACHE;
+
+    public static Map<String, List<Item>> variantBScrollGuidedPool() {
+        if (VARIANT_B_SCROLL_GUIDED_CACHE == null) {
+            VARIANT_B_SCROLL_GUIDED_CACHE = Map.of(
+                    "STANDARD", List.of(
+                            ArmorItems.RELIC_CIRCLET_HELMET,
+                            ArmorItems.WINDBREAKER_CHESTPLATE),
+                    "ARID", List.of(
+                            ArmorItems.VOID_DEVOURER_CHESTPLATE,
+                            ArmorItems.CLEAR_LEDGER_LEGGINGS),
+                    "COLD", List.of(
+                            ArmorItems.SILENT_OATH_HELMET,
+                            ArmorItems.GHOST_GOD_CHESTPLATE),
+                    "WET", List.of(
+                            ArmorItems.STEALTH_SHIN_LEGGINGS,
+                            ArmorItems.BOUNDARY_WALKER_BOOTS),
+                    "EXOTIC", List.of(
+                            ArmorItems.OLD_MARKET_CHESTPLATE,
+                            ArmorItems.SMUGGLER_SHIN_LEGGINGS)
+            );
+        }
+        return VARIANT_B_SCROLL_GUIDED_CACHE;
+    }
+
     // ========== Anti-Repeat: (playerUuid, variantKey) -> lastRandomBItemId ==========
     // 内存级，不持久化；商人消失/服务器重启后自然清零。
     private static final ConcurrentHashMap<String, String> LAST_RANDOM_B = new ConcurrentHashMap<>();
@@ -227,10 +297,18 @@ public final class TradeConfig {
 
     /** B 装备交易价格：Silver Note 数量 */
     public static final int B_ARMOR_SILVER_COST = 16;
-    /** B 装备交易价格：Emerald 附加税 */
+    /** B 招牌锚点门槛：Merchant Mark 数量 */
+    public static final int B_ARMOR_TICKET_COST = 1;
+    /** B 装备交易价格：Emerald 附加税（保留兼容，当前未使用） */
     public static final int B_ARMOR_EMERALD_TAX = 8;
     /** B 装备交易最大购买次数 */
     public static final int B_ARMOR_MAX_USES = 1;
+    /** Random B 默认门槛：Merchant Mark 数量 */
+    public static final int B_RANDOM_TICKET_COST = 1;
+    /** Random B 卷轴引导门槛：Trade Scroll 数量 */
+    public static final int B_RANDOM_SCROLL_COST = 1;
+    /** Random B 统一货币成本：Silver Note 数量 */
+    public static final int B_RANDOM_SILVER_COST = 12;
 
     /** A 特效过渡装备交易价格：Silver Note 数量 */
     public static final int A_ANCHOR_SILVER_COST = 10;

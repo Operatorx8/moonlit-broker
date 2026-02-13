@@ -2,8 +2,12 @@ package dev.xqanzd.moonlitbroker.trade.item;
 
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.WrittenBookContentComponent;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.WrittenBookItem;
+import net.minecraft.network.packet.s2c.play.OpenWrittenBookS2CPacket;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.stat.Stats;
 import net.minecraft.text.RawFilteredPair;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
@@ -71,10 +75,19 @@ public class GuideScrollItem extends WrittenBookItem {
     }
 
     @Override
-    public TypedActionResult<ItemStack> use(World world, net.minecraft.entity.player.PlayerEntity user, Hand hand) {
+    public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
         ItemStack stack = user.getStackInHand(hand);
         ensureGuideContent(stack);
-        return super.use(world, user, hand);
+
+        if (user instanceof ServerPlayerEntity serverPlayer) {
+            // Vanilla only opens Items.WRITTEN_BOOK here, so custom written-book items
+            // must resolve + send the open-book packet manually.
+            WrittenBookItem.resolve(stack, serverPlayer.getCommandSource(), serverPlayer);
+            serverPlayer.networkHandler.sendPacket(new OpenWrittenBookS2CPacket(hand));
+        }
+
+        user.incrementStat(Stats.USED.getOrCreateStat(this));
+        return TypedActionResult.success(stack, world.isClient());
     }
 
 }

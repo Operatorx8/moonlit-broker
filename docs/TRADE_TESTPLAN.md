@@ -60,4 +60,4 @@
 ## 建议 grep
 ```bash
 grep -E "MM_UI_INIT|MM_UI_LAYOUT|MM_EGG_SPAWN|MM_SECRET_ROLL|MM_SECRET_PICK|MM_KATANA_BLOCK|MM_KATANA_OWNED_ADD|MM_PURCHASED|MM_SOLD_OUT_SHOWN" run/logs/latest.log | tail -n 400
-```
+```![img.png](img.png)

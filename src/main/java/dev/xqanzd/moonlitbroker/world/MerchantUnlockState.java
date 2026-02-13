@@ -14,7 +14,7 @@ import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtString;
 
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -92,12 +92,20 @@ public class MerchantUnlockState extends PersistentState {
         private static final String NBT_LAST_SIGIL_HASH_MAP = "LastSigilOffersHashByMerchant";
         private static final String NBT_VARIANT_UNLOCK_MAP = "VariantUnlockByKey";
         private static final String NBT_PURCHASED_SECRET_IDS = "PurchasedSecretKatanaIds";
+        private static final String NBT_ARCANE_REWARD_CLAIMS = "ArcaneRewardClaims";
         private static final String NBT_LAST_SUMMON_TICK = "LastSummonTick";
         // Cap is intentionally bounded to avoid unbounded save growth.
         // When exceeded, oldest UUID-ordered tail entries are truncated by design.
         private static final int MAX_PER_MERCHANT_ENTRIES = 2048;
         private static final int MAX_VARIANT_ENTRIES = 16;
         private static final int MAX_PURCHASED_SECRET_IDS = 1024;
+        private static final int MAX_ARCANE_REWARD_CLAIMS = 64;
+        private static final Set<String> ARCANE_CLAIM_VARIANTS = Set.of(
+            "STANDARD",
+            "ARID",
+            "COLD",
+            "WET",
+            "EXOTIC");
         // Global de-noise: deprecated API warning should emit once per JVM lifetime.
         private static boolean deprecatedRefreshApiWarned = false;
 
@@ -124,6 +132,8 @@ public class MerchantUnlockState extends PersistentState {
         private int silverDropCount;
         /** 上次发起商人召唤预约的世界 tick（玩家维度冷却） */
         private long lastSummonTick = -1L;
+        /** Bounty 发 Coin 的 per-player 冷却：上次尝试 tick（按"尝试"写入，不是按"成功"） */
+        private long lastCoinBountyTick = -1L;
 
         // ========== P0-A FIX: per-player sigil offers hash (跨玩家隔离) ==========
         /** Per-(player,merchant) 上次 sigil offers hash */
@@ -131,13 +141,19 @@ public class MerchantUnlockState extends PersistentState {
         /** Legacy global hash fallback for migration */
         private int legacyLastSigilOffersHash = 0;
         /** Per-player purchased secret IDs; used to render global sold-out across merchants. */
-        private final Set<String> purchasedSecretKatanaIds = new HashSet<>();
+        private final Set<String> purchasedSecretKatanaIds = new LinkedHashSet<>();
+        /**
+         * Per-player claimed arcane reward keys.
+         * Key format: <variantKey>|<rewardKey>
+         */
+        private final Set<String> claimedArcaneRewardKeys = new LinkedHashSet<>();
         private boolean invalidRefreshUuidWarned = false;
         private boolean invalidHashUuidWarned = false;
         private boolean refreshCapWarned = false;
         private boolean hashCapWarned = false;
         private boolean variantCapWarned = false;
         private boolean purchasedCapWarned = false;
+        private boolean arcaneClaimCapWarned = false;
 
         private static final class VariantUnlockProgress {
             private int tradeCount;
@@ -283,6 +299,70 @@ public class MerchantUnlockState extends PersistentState {
                 return false;
             }
             return this.purchasedSecretKatanaIds.add(purchaseKey);
+        }
+
+        private static String toArcaneRewardClaimKey(String variantKey, String rewardKey) {
+            if (variantKey == null || rewardKey == null) {
+                return "";
+            }
+            String normalizedVariant = normalizeVariantKey(variantKey);
+            if (!ARCANE_CLAIM_VARIANTS.contains(normalizedVariant)) {
+                return "";
+            }
+            String normalizedReward = rewardKey.trim().toLowerCase(Locale.ROOT);
+            if (normalizedReward.isEmpty()) {
+                return "";
+            }
+            return normalizedVariant + "|" + normalizedReward;
+        }
+
+        private static String normalizeArcaneRewardClaimKey(String rawKey) {
+            if (rawKey == null) {
+                return "";
+            }
+            String trimmed = rawKey.trim();
+            if (trimmed.isEmpty()) {
+                return "";
+            }
+            int delimiter = trimmed.indexOf('|');
+            if (delimiter <= 0 || delimiter >= trimmed.length() - 1) {
+                return "";
+            }
+            String variantKey = trimmed.substring(0, delimiter);
+            String rewardKey = trimmed.substring(delimiter + 1);
+            return toArcaneRewardClaimKey(variantKey, rewardKey);
+        }
+
+        public boolean hasArcaneRewardClaimed(String variantKey, String rewardKey) {
+            String key = toArcaneRewardClaimKey(variantKey, rewardKey);
+            if (key.isEmpty()) {
+                return false;
+            }
+            return claimedArcaneRewardKeys.contains(key);
+        }
+
+        public boolean markArcaneRewardClaimed(String variantKey, String rewardKey) {
+            String key = toArcaneRewardClaimKey(variantKey, rewardKey);
+            if (key.isEmpty()) {
+                return false;
+            }
+            if (claimedArcaneRewardKeys.contains(key)) {
+                return false;
+            }
+            if (claimedArcaneRewardKeys.size() >= MAX_ARCANE_REWARD_CLAIMS) {
+                String evicted = "none";
+                var it = claimedArcaneRewardKeys.iterator();
+                if (it.hasNext()) {
+                    evicted = it.next();
+                    it.remove();
+                }
+                if (!arcaneClaimCapWarned || LOGGER.isDebugEnabled()) {
+                    arcaneClaimCapWarned = true;
+                    LOGGER.warn("[MoonTrade] ARCANE_CLAIM_SET_CAP_REACHED cap={} incoming={} evicted={} action=fifo_evict",
+                        MAX_ARCANE_REWARD_CLAIMS, key, evicted);
+                }
+            }
+            return claimedArcaneRewardKeys.add(key);
         }
 
         public int getTradeCount() {
@@ -453,6 +533,14 @@ public class MerchantUnlockState extends PersistentState {
             this.lastSummonTick = Math.max(-1L, lastSummonTick);
         }
 
+        public long getLastCoinBountyTick() {
+            return lastCoinBountyTick;
+        }
+
+        public void setLastCoinBountyTick(long lastCoinBountyTick) {
+            this.lastCoinBountyTick = Math.max(-1L, lastCoinBountyTick);
+        }
+
         // ========== P0-A FIX: sigil hash getter/setter ==========
         public int getLastSigilOffersHash(UUID merchantUuid) {
             if (merchantUuid == null) {
@@ -553,6 +641,7 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putLong("SilverWindowStart", this.silverWindowStart);
             nbt.putInt("SilverDropCount", this.silverDropCount);
             nbt.putLong(NBT_LAST_SUMMON_TICK, this.lastSummonTick);
+            nbt.putLong("LastCoinBountyTick", this.lastCoinBountyTick);
             int purchasedDrop = Math.max(0, this.purchasedSecretKatanaIds.size() - MAX_PURCHASED_SECRET_IDS);
             if (purchasedDrop > 0 && !purchasedCapWarned) {
                 purchasedCapWarned = true;
@@ -565,6 +654,18 @@ public class MerchantUnlockState extends PersistentState {
                 .limit(MAX_PURCHASED_SECRET_IDS)
                 .forEach(secretId -> purchasedList.add(NbtString.of(secretId)));
             nbt.put(NBT_PURCHASED_SECRET_IDS, purchasedList);
+            int arcaneDrop = Math.max(0, this.claimedArcaneRewardKeys.size() - MAX_ARCANE_REWARD_CLAIMS);
+            if (arcaneDrop > 0 && !arcaneClaimCapWarned) {
+                arcaneClaimCapWarned = true;
+                LOGGER.warn("[MoonTrade] ARCANE_CLAIM_SET_CAP_TRUNCATE playerUuid={} cap={} drop={} source=save",
+                    playerUuid, MAX_ARCANE_REWARD_CLAIMS, arcaneDrop);
+            }
+            NbtList arcaneClaimList = new NbtList();
+            this.claimedArcaneRewardKeys.stream()
+                .sorted()
+                .limit(MAX_ARCANE_REWARD_CLAIMS)
+                .forEach(key -> arcaneClaimList.add(NbtString.of(key)));
+            nbt.put(NBT_ARCANE_REWARD_CLAIMS, arcaneClaimList);
             // Sigil hash migration + per-merchant map
             nbt.putInt(NBT_LAST_SIGIL_HASH_LEGACY, this.legacyLastSigilOffersHash);
             int hashDrop = Math.max(0, this.lastSigilOffersHashByMerchant.size() - MAX_PER_MERCHANT_ENTRIES);
@@ -648,6 +749,9 @@ public class MerchantUnlockState extends PersistentState {
             if (nbt.contains(NBT_LAST_SUMMON_TICK)) {
                 progress.lastSummonTick = Math.max(-1L, nbt.getLong(NBT_LAST_SUMMON_TICK));
             }
+            if (nbt.contains("LastCoinBountyTick")) {
+                progress.lastCoinBountyTick = Math.max(-1L, nbt.getLong("LastCoinBountyTick"));
+            }
             if (nbt.contains(NBT_PURCHASED_SECRET_IDS, NbtElement.LIST_TYPE)) {
                 NbtList purchasedList = nbt.getList(NBT_PURCHASED_SECRET_IDS, NbtElement.STRING_TYPE);
                 for (int i = 0; i < purchasedList.size(); i++) {
@@ -655,6 +759,15 @@ public class MerchantUnlockState extends PersistentState {
                     String purchaseKey = toPurchasedSecretKatanaKey(secretId);
                     if (!purchaseKey.isEmpty()) {
                         progress.purchasedSecretKatanaIds.add(purchaseKey);
+                    }
+                }
+            }
+            if (nbt.contains(NBT_ARCANE_REWARD_CLAIMS, NbtElement.LIST_TYPE)) {
+                NbtList arcaneClaimList = nbt.getList(NBT_ARCANE_REWARD_CLAIMS, NbtElement.STRING_TYPE);
+                for (int i = 0; i < arcaneClaimList.size(); i++) {
+                    String normalizedKey = normalizeArcaneRewardClaimKey(arcaneClaimList.get(i).asString());
+                    if (!normalizedKey.isEmpty()) {
+                        progress.claimedArcaneRewardKeys.add(normalizedKey);
                     }
                 }
             }

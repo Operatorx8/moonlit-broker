@@ -5,16 +5,20 @@ import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
+import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Random;
 
 /**
  * 悬赏提交处理器
@@ -23,6 +27,7 @@ import org.slf4j.LoggerFactory;
  */
 public class BountyHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(BountyHandler.class);
+    private static final Random RANDOM = new Random();
 
     // 悬赏物品组合（可配置）
     private static final Item BOUNTY_ITEM_A = Items.ZOMBIE_HEAD;
@@ -203,6 +208,9 @@ public class BountyHandler {
         final int rewardScroll = 1;
         final int rewardSilver = TradeConfig.BOUNTY_SILVER_REWARD;
         boolean anyDropped = false;
+        boolean coinCooldownReady = false;
+        boolean coinRolled = false;
+        boolean coinGranted = false;
 
         // 奖励1：交易卷轴 (Grade=NORMAL, Uses=3)
         ItemStack scroll = new ItemStack(ModItems.TRADE_SCROLL, rewardScroll);
@@ -219,7 +227,36 @@ public class BountyHandler {
             anyDropped = true;
         }
 
-        // 奖励3：如果玩家没有绑定的商人印记，给一个
+        // 奖励3：Coin（按“尝试”冷却，2 MC 日内不再 roll）
+        if (player.getWorld() instanceof ServerWorld serverWorld) {
+            MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+            MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+            long now = serverWorld.getTime();
+            long last = progress.getLastCoinBountyTick();
+            if (last < 0 || now - last >= TradeConfig.COIN_BOUNTY_CD_TICKS) {
+                coinCooldownReady = true;
+                progress.setLastCoinBountyTick(now); // 按尝试写入
+                state.markDirty();
+                coinRolled = true;
+                if (RANDOM.nextFloat() < TradeConfig.COIN_BOUNTY_CHANCE) {
+                    coinGranted = true;
+                    ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
+                    if (!player.giveItemStack(coin)) {
+                        player.dropItem(coin, false);
+                        anyDropped = true;
+                    }
+                }
+            }
+
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info(
+                        "[MoonTrade] BOUNTY_COIN_ROLL player={} now={} last={} cdTicks={} cdReady={} rolled={} granted={}",
+                        player.getName().getString(), now, last, TradeConfig.COIN_BOUNTY_CD_TICKS,
+                        coinCooldownReady, coinRolled, coinGranted);
+            }
+        }
+
+        // 奖励4：如果玩家没有绑定的商人印记，给一个
         if (!MerchantMarkItem.playerHasValidMark(player)) {
             ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
             MerchantMarkItem.bindToPlayer(mark, player);
@@ -233,8 +270,9 @@ public class BountyHandler {
             player.sendMessage(Text.literal("获得商人印记！").formatted(Formatting.GOLD), false);
         }
 
-        LOGGER.info("[MoonTrade] action=BOUNTY_REWARD side=S player={} rewardScroll={} rewardSilver={} dropped={}",
-                player.getName().getString(), rewardScroll, rewardSilver, anyDropped);
+        LOGGER.info(
+                "[MoonTrade] action=BOUNTY_REWARD side=S player={} rewardScroll={} rewardSilver={} coinRolled={} coinGranted={} dropped={}",
+                player.getName().getString(), rewardScroll, rewardSilver, coinRolled, coinGranted, anyDropped);
 
         // 背包满提示
         if (anyDropped) {

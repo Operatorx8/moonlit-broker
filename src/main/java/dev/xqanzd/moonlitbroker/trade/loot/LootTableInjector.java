@@ -2,19 +2,11 @@ package dev.xqanzd.moonlitbroker.trade.loot;
 
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
-import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import net.fabricmc.fabric.api.loot.v3.LootTableEvents;
-import net.minecraft.item.ItemStack;
 import net.minecraft.loot.LootPool;
-import net.minecraft.loot.LootTable;
 import net.minecraft.loot.condition.RandomChanceLootCondition;
 import net.minecraft.loot.entry.ItemEntry;
-import net.minecraft.loot.function.LootFunction;
-import net.minecraft.loot.function.LootFunctionType;
-import net.minecraft.loot.function.LootFunctionTypes;
 import net.minecraft.loot.provider.number.ConstantLootNumberProvider;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,13 +15,14 @@ import java.util.Set;
 
 /**
  * 战利品表注入
- * 仅向指定的4类宝箱注入交易卷轴
+ * 卷轴：保留原有目标箱
+ * Coin：仅注入高级结构箱（stronghold_library / ancient_city / trial_chambers*）
  */
 public class LootTableInjector {
     private static final Logger LOGGER = LoggerFactory.getLogger(LootTableInjector.class);
 
-    // 目标宝箱战利品表（仅这4类）
-    private static final Set<Identifier> TARGET_CHESTS = Set.of(
+    // 卷轴目标箱（保持原逻辑）
+    private static final Set<Identifier> SCROLL_TARGET_CHESTS = Set.of(
         Identifier.ofVanilla("chests/simple_dungeon"),
         Identifier.ofVanilla("chests/abandoned_mineshaft"),
         Identifier.ofVanilla("chests/stronghold_corridor"),
@@ -38,6 +31,9 @@ public class LootTableInjector {
         Identifier.ofVanilla("chests/shipwreck_treasure"),
         Identifier.ofVanilla("chests/shipwreck_supply")
     );
+    private static final Identifier CHEST_STRONGHOLD_LIBRARY = Identifier.ofVanilla("chests/stronghold_library");
+    private static final Identifier CHEST_ANCIENT_CITY = Identifier.ofVanilla("chests/ancient_city");
+    private static final String TRIAL_CHEST_PREFIX = "minecraft:chests/trial_chambers";
 
     /**
      * 注册战利品表修改器
@@ -50,26 +46,49 @@ public class LootTableInjector {
             }
 
             Identifier id = key.getValue();
-            
-            // 检查是否为目标宝箱
-            if (!TARGET_CHESTS.contains(id)) {
-                return;
+
+            // 注入卷轴
+            if (SCROLL_TARGET_CHESTS.contains(id)) {
+                LootPool.Builder scrollPool = LootPool.builder()
+                        .rolls(ConstantLootNumberProvider.create(1))
+                        .conditionally(RandomChanceLootCondition.builder(TradeConfig.CHEST_SCROLL_CHANCE))
+                        .with(ItemEntry.builder(ModItems.TRADE_SCROLL));
+                tableBuilder.pool(scrollPool);
+                if (TradeConfig.TRADE_DEBUG) {
+                    LOGGER.debug("[MoonTrade] LOOT_INJECT_SCROLL table={} chance={}",
+                            id, TradeConfig.CHEST_SCROLL_CHANCE);
+                }
             }
 
-            // 添加交易卷轴掉落池
-            LootPool.Builder pool = LootPool.builder()
-                .rolls(ConstantLootNumberProvider.create(1))
-                .conditionally(RandomChanceLootCondition.builder(TradeConfig.CHEST_SCROLL_CHANCE))
-                .with(ItemEntry.builder(ModItems.TRADE_SCROLL));
-
-            tableBuilder.pool(pool);
-
-            if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] LOOT_INJECT table={} chance={}", 
-                    id, TradeConfig.CHEST_SCROLL_CHANCE);
+            // 注入 Coin（仅高级结构箱）
+            float coinChance = coinChanceForTable(id);
+            if (coinChance > 0f) {
+                LootPool.Builder coinPool = LootPool.builder()
+                        .rolls(ConstantLootNumberProvider.create(1))
+                        .conditionally(RandomChanceLootCondition.builder(coinChance))
+                        .with(ItemEntry.builder(ModItems.MYSTERIOUS_COIN));
+                tableBuilder.pool(coinPool);
+                if (TradeConfig.TRADE_DEBUG) {
+                    LOGGER.debug("[MoonTrade] LOOT_INJECT_COIN table={} chance={}",
+                            id, coinChance);
+                }
             }
         });
 
-        LOGGER.info("[MoonTrade] 战利品表注入已注册，目标宝箱数量: {}", TARGET_CHESTS.size());
+        LOGGER.info("[MoonTrade] 战利品表注入已注册，scrollTargets={} coinTargets=stronghold_library+ancient_city+trial_chambers*",
+                SCROLL_TARGET_CHESTS.size());
+    }
+
+    private static float coinChanceForTable(Identifier id) {
+        if (CHEST_STRONGHOLD_LIBRARY.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_STRONGHOLD;
+        }
+        if (CHEST_ANCIENT_CITY.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_ANCIENT_CITY;
+        }
+        if (id.toString().startsWith(TRIAL_CHEST_PREFIX)) {
+            return TradeConfig.CHEST_COIN_CHANCE_TRIAL;
+        }
+        return 0f;
     }
 }
