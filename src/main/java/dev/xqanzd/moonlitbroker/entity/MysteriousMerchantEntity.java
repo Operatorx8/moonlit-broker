@@ -1541,6 +1541,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // P0-3: 确保 ID 已初始化
         initSecretKatanaIdIfNeeded();
 
+        // Page 3 解锁奖励交易（arcane 解锁后可见）
+        addArcaneUnlockOffers(offers);
+
         if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
             LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=id_still_empty",
                     getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
@@ -2063,13 +2066,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     private static boolean isBaseOffer(TradeOffer offer) {
-        ItemStack first = offer.getOriginalFirstBuyItem();
         ItemStack sell = offer.getSellItem();
-        return (first.isOf(Items.EMERALD) && first.getCount() == 5 && sell.isOf(Items.DIAMOND) && sell.getCount() == 1)
-                || (first.isOf(Items.EMERALD) && first.getCount() == 10 && sell.isOf(Items.GOLDEN_APPLE)
-                        && sell.getCount() == 1)
-                || (first.isOf(Items.EMERALD) && first.getCount() == 32 && sell.isOf(ModItems.MYSTERIOUS_COIN)
-                        && sell.getCount() == 1);
+        // Base offers: anything that is NOT a sigil-chain offer and NOT a hidden/katana offer
+        if (isSigilOffer(offer)) return false;
+        // Katana whitelist items are hidden offers
+        if (KATANA_WHITELIST.containsValue(sell.getItem())) return false;
+        // Sealed/Arcane ledger are sigil-chain
+        if (sell.isOf(ModItems.SEALED_LEDGER) || sell.isOf(ModItems.ARCANE_LEDGER)) return false;
+        return true;
     }
 
     private static String toUnlockState(boolean eligible, boolean unlocked) {
