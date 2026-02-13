@@ -1,19 +1,13 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
-import dev.xqanzd.moonlitbroker.registry.ModTags;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
@@ -31,11 +25,12 @@ public class NmapScanHandler {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 long currentTick = player.getServerWorld().getTime();
-                if (currentTick % 20 == 0) {
-                    stripSweepingFromKatanas(player);
-                }
 
                 if (!isHoldingNmap(player)) continue;
+                // Contract gate: dormant nmap → no scan
+                ItemStack nmapStack = player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA)
+                        ? player.getMainHandStack() : player.getOffHandStack();
+                if (!KatanaContractUtil.isActiveContract(player.getServerWorld(), player, nmapStack)) continue;
                 if (currentTick < NmapManager.getNextScanTick(player)) continue;
                 NmapManager.setNextScanTick(player, currentTick + NmapConfig.SCAN_INTERVAL_TICKS);
 
@@ -150,41 +145,6 @@ public class NmapScanHandler {
         if (NmapConfig.DEBUG) {
             LOGGER.info(logMessage);
         }
-    }
-
-    private static void stripSweepingFromKatanas(ServerPlayerEntity player) {
-        RegistryEntry<Enchantment> sweeping = player.getServerWorld()
-            .getRegistryManager()
-            .get(RegistryKeys.ENCHANTMENT)
-            .getEntry(Enchantments.SWEEPING_EDGE)
-            .orElse(null);
-        if (sweeping == null) {
-            return;
-        }
-
-        for (ItemStack stack : player.getInventory().main) {
-            stripSweepingFromStack(player, stack, sweeping);
-        }
-        for (ItemStack stack : player.getInventory().offHand) {
-            stripSweepingFromStack(player, stack, sweeping);
-        }
-    }
-
-    private static void stripSweepingFromStack(ServerPlayerEntity player, ItemStack stack, RegistryEntry<Enchantment> sweeping) {
-        if (stack.isEmpty() || !stack.isIn(ModTags.Items.KATANA)) {
-            return;
-        }
-        if (EnchantmentHelper.getLevel(sweeping, stack) <= 0) {
-            return;
-        }
-
-        EnchantmentHelper.apply(stack, builder ->
-            builder.remove(entry -> entry.matchesKey(Enchantments.SWEEPING_EDGE))
-        );
-        LOGGER.info("[Katana] Stripped SweepingEdge from {} owner={}({})",
-            Registries.ITEM.getId(stack.getItem()),
-            player.getName().getString(),
-            player.getUuid());
     }
 
     /**

@@ -28,7 +28,7 @@ public final class ArmorConfig {
     public static final int CHESTPLATE_PROTECTION = 8;
 
     /** 韧性 */
-    public static final float TOUGHNESS = 2.0f;
+    public static final float TOUGHNESS = 5.0f;
 
     /** 默认击退抗性（头盔） */
     public static final float KNOCKBACK_RESISTANCE = 0.1f;
@@ -159,13 +159,13 @@ public final class ArmorConfig {
     /** 伤害减免概率（普通亡灵） */
     public static final float GHOST_GOD_DAMAGE_REDUCTION_CHANCE = 0.30f;
     /** 伤害减免概率（Boss） */
-    public static final float GHOST_GOD_DAMAGE_REDUCTION_CHANCE_BOSS = 0.15f;
+    public static final float GHOST_GOD_DAMAGE_REDUCTION_CHANCE_BOSS = 0.30f;
     /** 伤害减免比例 */
     public static final float GHOST_GOD_DAMAGE_REDUCTION_AMOUNT = 0.15f;
     /** Debuff 免疫概率（普通亡灵） */
     public static final float GHOST_GOD_DEBUFF_IMMUNE_CHANCE = 0.50f;
     /** Debuff 免疫概率（Boss） */
-    public static final float GHOST_GOD_DEBUFF_IMMUNE_CHANCE_BOSS = 0.25f;
+    public static final float GHOST_GOD_DEBUFF_IMMUNE_CHANCE_BOSS = 0.50f;
 
     // ==================== 商人的防风衣 (windbreaker_chestplate) ====================
     public static final String WINDBREAKER_SPEED_EFFECT_ID = "windbreaker_speed";
@@ -191,7 +191,7 @@ public final class ArmorConfig {
     /** 真实伤害比例（普通） */
     public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO = 0.04f;
     /** 真实伤害比例（Boss） */
-    public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO_BOSS = 0.02f;
+    public static final float VOID_DEVOURER_TRUE_DAMAGE_RATIO_BOSS = 0.04f;
     /** 冷却时间 (ticks) */
     public static final int VOID_DEVOURER_COOLDOWN = 100;
 
@@ -213,11 +213,11 @@ public final class ArmorConfig {
     /** 额外掉落概率（普通） */
     public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE = 0.20f;
     /** 额外掉落概率（Boss/核心资源） */
-    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE_BOSS = 0.10f;
+    public static final float SMUGGLER_SHIN_LOOT_BONUS_CHANCE_BOSS = 0.20f;
     /** 双倍掉落概率（普通） */
     public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE = 0.10f;
     /** 双倍掉落概率（Boss/核心资源） */
-    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE_BOSS = 0.05f;
+    public static final float SMUGGLER_SHIN_DOUBLE_LOOT_CHANCE_BOSS = 0.10f;
     /** 冷却时间 (ticks) */
     public static final int SMUGGLER_SHIN_COOLDOWN = 800;
 

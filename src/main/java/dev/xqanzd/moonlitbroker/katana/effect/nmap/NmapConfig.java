@@ -17,6 +17,7 @@ public class NmapConfig {
     public static final double THREAT_MOVE_DOT_MIN = 0.01;
 
     // ========== Port Enumeration ==========
+    public static final float BASE_ARMOR_PENETRATION = 0.25f;   // 全 katana 基础穿透 25%
     public static final int ENUM_WINDOW_TICKS = 200;             // 10 seconds
     public static final float PENETRATION_PER_HOSTILE = 0.05f;   // +5%
     public static final float PENETRATION_CAP = 0.35f;           // 35%
@@ -28,11 +29,11 @@ public class NmapConfig {
 
     // ========== Firewall Bypass - Debuff ==========
     public static final float FIREWALL_DEBUFF_CHANCE = 0.40f;
-    public static final float FIREWALL_DEBUFF_CHANCE_BOSS = 0.20f;
+    public static final float FIREWALL_DEBUFF_CHANCE_BOSS = 0.40f;
     public static final int FIREWALL_DEBUFF_COOLDOWN_TICKS = 120;
 
     // ========== Firewall Bypass - Projectile ==========
     public static final float FIREWALL_PROJ_CHANCE = 0.35f;
-    public static final float FIREWALL_PROJ_CHANCE_BOSS = 0.15f;
+    public static final float FIREWALL_PROJ_CHANCE_BOSS = 0.35f;
     public static final int FIREWALL_PROJ_COOLDOWN_TICKS = 120;
 }

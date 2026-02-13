@@ -43,8 +43,8 @@ public class MoonTraceConfig {
     public static final int GLOWING_DURATION = 12;                // 发光持续 0.6秒
 
     // === 消耗增伤（物理部分）===
-    public static final float ARMOR_PEN_NORMAL = 0.50f;           // 普通目标 50% 护甲穿透
-    public static final float ARMOR_PEN_BOSS = 0.25f;             // Boss 25% 护甲穿透
+    public static final float ARMOR_PEN_NORMAL = 0.25f;           // 普通目标 25% 护甲穿透
+    public static final float ARMOR_PEN_BOSS = 0.25f;             // Boss 对齐普通目标
 
     public static final float CONSUME_DAMAGE_MIN = 5.0f;          // 2.5❤
     public static final float CONSUME_DAMAGE_MAX = 9.0f;          // 4.5❤
@@ -52,11 +52,11 @@ public class MoonTraceConfig {
     // === 消耗时魔法补偿：magicBonus = BASE + min(maxHP * PERCENT, CAP) ===
     // 绕过护甲，专补高甲场景
     public static final float MAGIC_BASE_NORMAL = 1.0f;           // 普通：基础魔法伤害 0.5❤
-    public static final float MAGIC_BASE_BOSS = 0.5f;             // Boss：基础魔法伤害 0.25❤
+    public static final float MAGIC_BASE_BOSS = 1.0f;             // Boss：与普通目标一致
     public static final float MAGIC_PERCENT_HP_NORMAL = 0.02f;    // 普通：最大血量 2%
-    public static final float MAGIC_PERCENT_HP_BOSS = 0.01f;      // Boss：最大血量 1%
+    public static final float MAGIC_PERCENT_HP_BOSS = 0.02f;      // Boss：与普通目标一致
     public static final float MAGIC_PERCENT_CAP_NORMAL = 4.0f;    // 普通：百分比伤害上限 2❤
-    public static final float MAGIC_PERCENT_CAP_BOSS = 2.0f;      // Boss：百分比伤害上限 1❤
+    public static final float MAGIC_PERCENT_CAP_BOSS = 4.0f;      // Boss：与普通目标一致
 
     // === 夜间速度 Buff ===
     public static final int SPEED_BUFF_DURATION = 60;             // Speed buff 持续 3秒（刷新制）

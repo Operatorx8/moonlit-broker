@@ -18,10 +18,10 @@ public class EclipseConfig {
 
     // === 标记持续时间 ===
     public static final int MARK_DURATION_TICKS = 60;       // 3 秒
-    public static final float BOSS_DURATION_MULTIPLIER = 0.5f;  // Boss 减半
+    public static final float BOSS_DURATION_MULTIPLIER = 1.0f;  // Boss 不减半
 
     // === 护甲穿透（简化版：仅用于日志展示，不再做额外伤害补偿）===
-    public static final float BASE_ARMOR_PENETRATION = 0.15f;    // 未标记 15%
+    public static final float BASE_ARMOR_PENETRATION = 0.25f;    // 基础 25%
     public static final float MARKED_ARMOR_PENETRATION = 0.25f;  // 标记目标 25%
 
     // === Debuff 配置 ===

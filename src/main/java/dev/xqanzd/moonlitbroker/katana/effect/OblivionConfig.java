@@ -19,8 +19,8 @@ public class OblivionConfig {
     public static final int READWRITE_COOLDOWN_TICKS = 100;          // 5s
 
     // Boss 调整
-    public static final float BOSS_DURATION_MULTIPLIER = 0.5f;       // 持续 ×0.5
-    public static final float BOSS_COOLDOWN_MULTIPLIER = 2.0f;       // 冷却 ×2
+    public static final float BOSS_DURATION_MULTIPLIER = 1.0f;       // Boss 持续不减半
+    public static final float BOSS_COOLDOWN_MULTIPLIER = 1.0f;       // Boss 冷却不加倍
 
     // === 伴随 Debuff ===
     public static final int DEBUFF_AMPLIFIER = 1;                    // II 级
@@ -29,11 +29,11 @@ public class OblivionConfig {
     // === 倒因噬果 ===
     public static final float PLAYER_HP_THRESHOLD = 0.5f;            // 玩家 < 50% HP
     public static final float CAUSALITY_CHANCE = 0.20f;              // 20%
-    public static final float CAUSALITY_CHANCE_BOSS = 0.066667f;     // 6.67%
+    public static final float CAUSALITY_CHANCE_BOSS = 0.20f;         // Boss 概率对齐普通
     public static final int CAUSALITY_COOLDOWN_TICKS = 500;          // 25s
-    public static final int CAUSALITY_COOLDOWN_BOSS_TICKS = 900;     // 45s
+    public static final int CAUSALITY_COOLDOWN_BOSS_TICKS = 500;     // Boss 冷却对齐普通
 
     // === 护甲穿透（仅对 ReadWrite 目标生效） ===
     public static final float ARMOR_PENETRATION = 0.35f;             // 35%
-    public static final float ARMOR_PENETRATION_BOSS = 0.175f;       // Boss 减半 17.5%
+    public static final float ARMOR_PENETRATION_BOSS = 0.35f;        // Boss 保持 35%
 }

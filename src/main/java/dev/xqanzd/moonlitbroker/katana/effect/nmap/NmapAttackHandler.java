@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.WitherEntity;
@@ -21,11 +22,18 @@ public class NmapAttackHandler {
             if (world.isClient()) return ActionResult.PASS;
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
             if (!(player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA))) return ActionResult.PASS;
+            if (world instanceof ServerWorld sw
+                    && !KatanaContractUtil.isActiveContract(sw, player, player.getMainHandStack())) {
+                return ActionResult.PASS;
+            }
 
             long currentTick = world.getTime();
 
             // Port Enumeration -> Penetration
-            float penetration = NmapManager.getCurrentPenetration(player, currentTick);
+            float penetration = Math.max(
+                NmapConfig.BASE_ARMOR_PENETRATION,
+                NmapManager.getCurrentPenetration(player, currentTick)
+            );
             if (penetration > 0) {
                 applyPenetration(player, target, penetration);
             }

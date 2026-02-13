@@ -19,8 +19,8 @@ public class LifeCutConfig {
     // === 护甲穿透 ===
     // 穿透值表示无视多少比例的护甲，剩余护甲参与减伤计算
     // effectiveArmor = armor * (1 - penetration)
-    public static final float ARMOR_PENETRATION_NORMAL = 0.35f; // 普通目标：无视 35% 护甲
-    public static final float ARMOR_PENETRATION_BOSS = 0.35f;   // Boss：无视 35% 护甲
+    public static final float ARMOR_PENETRATION_NORMAL = 0.25f; // 普通目标：无视 25% 护甲
+    public static final float ARMOR_PENETRATION_BOSS = 0.25f;   // Boss：无视 25% 护甲
 
     // === Boss 处理 ===
     public static final boolean ALLOW_BOSS = true;              // 允许对 Boss 生效

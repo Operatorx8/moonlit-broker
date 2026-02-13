@@ -4,9 +4,7 @@
   "package": "dev.xqanzd.moonlitbroker.katana.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "EnchantmentMixin",
-    "LivingEntityMixin",
-    "PlayerEntitySweepMixin"
+    "LivingEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
