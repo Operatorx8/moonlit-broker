@@ -13,7 +13,13 @@
   "entity.xqanzd_moonlit_broker.mysterious_merchant": "Mysterious Merchant",
   "block.xqanzd_moonlit_broker.mysterious_anvil": "Mysterious Anvil",
   "subtitles.xqanzd_moonlit_broker.moontrace.mark": "Moontrace mark",
-  "item.xqanzd_moonlit_broker.moon_glow_katana": "Moon Glow Katana",
+  "subtitles.xqanzd_moonlit_broker.merchant.ambient": "Moonlit Broker murmurs",
+  "subtitles.xqanzd_moonlit_broker.merchant.hurt": "Moonlit Broker hurts",
+  "subtitles.xqanzd_moonlit_broker.merchant.death": "Moonlit Broker dies",
+  "subtitles.xqanzd_moonlit_broker.merchant.agree": "Moonlit Broker agrees",
+  "subtitles.xqanzd_moonlit_broker.merchant.disagree": "Moonlit Broker disagrees",
+  "subtitles.xqanzd_moonlit_broker.merchant.trade": "Moonlit Broker trades",
+  "item.xqanzd_moonlit_broker.moon_glow_katana": "Moonlight",
   "item.xqanzd_moonlit_broker.moon_glow_katana.effect_name": "[Moon Trace]",
   "item.xqanzd_moonlit_broker.moon_glow_katana.effect_desc1": "Night moonlight attacks may apply Moon Trace",
   "item.xqanzd_moonlit_broker.moon_glow_katana.effect_desc2": "Consume mark for bonus physical + delayed magic damage",
@@ -309,5 +315,8 @@
   "tooltip.xqanzd_moonlit_broker.cargo_pants.tagline": "One pocket is luckier than it looks.",
   "tooltip.xqanzd_moonlit_broker.cushion_hiking_boots.tagline": "Hard landings, softer endings.",
   "gui.xqanzd_moonlit_broker.trade.page": "Page %s/%s",
-  "gui.xqanzd_moonlit_broker.trade.refresh.tooltip": "Refresh cost: %1$s x%2$s (You have x%3$s)"
+  "gui.xqanzd_moonlit_broker.trade.refresh.tooltip": "Refresh cost: %1$s x%2$s (You have x%3$s)",
+  "message.xqanzd_moonlit_broker.contract.dormant": "This artifact's contract has expired. Use a Reclaim trade to reforge it.",
+  "message.xqanzd_moonlit_broker.reclaim.cooldown": "Reclaim is on cooldown. Please wait before reclaiming again.",
+  "tooltip.xqanzd_moonlit_broker.contract.dormant": "Contract Expired (Dormant)"
 }

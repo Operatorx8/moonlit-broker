@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.WitherEntity;
@@ -70,6 +71,10 @@ public class EclipseHandler {
             if (world.isClient()) return ActionResult.PASS;
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
             if (!(player.getMainHandStack().isOf(KatanaItems.ECLIPSE_BLADE))) return ActionResult.PASS;
+            if (world instanceof ServerWorld sw
+                    && !KatanaContractUtil.gateOrReturn(sw, player, player.getMainHandStack())) {
+                return ActionResult.PASS;
+            }
 
             // 检查目标是否已有月蚀标记（用于日志）
             boolean hadMark = EclipseManager.hasMark(target);

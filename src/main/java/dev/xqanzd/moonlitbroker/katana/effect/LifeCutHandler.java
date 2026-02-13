@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -49,6 +50,10 @@ public class LifeCutHandler {
             if (world.isClient()) return ActionResult.PASS;
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
             if (!(player.getMainHandStack().isOf(KatanaItems.REGRET_BLADE))) return ActionResult.PASS;
+            if (world instanceof ServerWorld sw
+                    && !KatanaContractUtil.gateOrReturn(sw, player, player.getMainHandStack())) {
+                return ActionResult.PASS;
+            }
 
             float currentHp = target.getHealth();
             float maxHp = target.getMaxHealth();

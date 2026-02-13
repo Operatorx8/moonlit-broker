@@ -30,7 +30,7 @@ public class NmapScanHandler {
                 // Contract gate: dormant nmap → no scan
                 ItemStack nmapStack = player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA)
                         ? player.getMainHandStack() : player.getOffHandStack();
-                if (!KatanaContractUtil.isActiveContract(player.getServerWorld(), player, nmapStack)) continue;
+                if (!KatanaContractUtil.gateOrReturn(player.getServerWorld(), player, nmapStack)) continue;
                 if (currentTick < NmapManager.getNextScanTick(player)) continue;
                 NmapManager.setNextScanTick(player, currentTick + NmapConfig.SCAN_INTERVAL_TICKS);
 

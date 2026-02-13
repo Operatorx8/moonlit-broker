@@ -244,14 +244,15 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         if (pages <= 0) {
             this.indexStartOffset = 0;
             this.selectedIndex = 0;
+            this.hasManualTradeSelection = false;
             return;
         }
         int currentPage = this.indexStartOffset / PAGE_SIZE;
         int targetPage = MathHelper.clamp(currentPage + delta, 0, pages - 1);
         this.indexStartOffset = targetPage * PAGE_SIZE;
         clampSelectedIndexToPage(offersTotal);
-        // Page switch should not auto-fill inputs. Only row click should.
-        syncSelectedOffer(true, false);
+        // Page switch is visual-only. Do not change active trade server-side.
+        this.hasManualTradeSelection = false;
         updateControlState();
     }
 

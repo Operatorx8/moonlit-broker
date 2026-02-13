@@ -2,6 +2,8 @@ package dev.xqanzd.moonlitbroker.screen;
 
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.registry.ModTags;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.entity.player.PlayerEntity;
@@ -40,6 +42,11 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         if (!isAllowedRepairTarget(left)) {
             return false;
         }
+        // Reject dormant katana
+        if (this.player.getWorld() instanceof ServerWorld sw
+                && KatanaContractUtil.isDormant(sw, this.player, left)) {
+            return false;
+        }
         if (!right.isOf(ModItems.SACRIFICE)) {
             return false;
         }
@@ -50,6 +57,11 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
     protected void onTakeOutput(PlayerEntity player, ItemStack stack) {
         ItemStack left = this.input.getStack(0);
         ItemStack right = this.input.getStack(1);
+        if (this.player.getWorld() instanceof ServerWorld sw
+                && KatanaContractUtil.isDormant(sw, this.player, left)) {
+            clearResultState();
+            return;
+        }
         if (!isAllowedRepairTarget(left) || !right.isOf(ModItems.SACRIFICE) || this.sacrificeUsage <= 0) {
             clearResultState();
             return;
@@ -77,6 +89,12 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         }
         if (!isAllowedRepairTarget(left)) {
             reject("left_not_allowed", left, right);
+            return;
+        }
+        // Reject dormant (contract-expired) katanas from repair
+        if (this.player.getWorld() instanceof ServerWorld sw
+                && KatanaContractUtil.isDormant(sw, this.player, left)) {
+            reject("dormant_contract", left, right);
             return;
         }
         if (!left.isDamageable()) {

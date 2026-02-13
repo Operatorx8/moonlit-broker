@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
@@ -24,6 +25,12 @@ public class NmapFirewallHandler {
      */
     public static boolean shouldBlockDebuff(PlayerEntity player, StatusEffectInstance effect, Entity source) {
         if (!isHoldingNmap(player)) return false;
+        // Contract gate: dormant nmap → no firewall
+        if (player.getWorld() instanceof net.minecraft.server.world.ServerWorld sw) {
+            net.minecraft.item.ItemStack nmapStack = player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA)
+                    ? player.getMainHandStack() : player.getOffHandStack();
+            if (!KatanaContractUtil.gateOrReturn(sw, player, nmapStack)) return false;
+        }
         if (effect.getEffectType().value().getCategory() != StatusEffectCategory.HARMFUL) return false;
         if (source == null || !isHostile(source)) return false;
 
@@ -51,6 +58,12 @@ public class NmapFirewallHandler {
      */
     public static boolean shouldBlockProjectile(PlayerEntity player, DamageSource source) {
         if (!isHoldingNmap(player)) return false;
+        // Contract gate: dormant nmap → no firewall
+        if (player.getWorld() instanceof net.minecraft.server.world.ServerWorld sw) {
+            net.minecraft.item.ItemStack nmapStack = player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA)
+                    ? player.getMainHandStack() : player.getOffHandStack();
+            if (!KatanaContractUtil.gateOrReturn(sw, player, nmapStack)) return false;
+        }
         if (!(source.getSource() instanceof ProjectileEntity projectile)) return false;
 
         Entity owner = projectile.getOwner();

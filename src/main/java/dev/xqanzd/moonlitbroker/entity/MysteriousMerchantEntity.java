@@ -10,6 +10,7 @@ import dev.xqanzd.moonlitbroker.registry.ModEntities;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.KatanaIdUtil;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import dev.xqanzd.moonlitbroker.world.KatanaOwnershipState;
 import dev.xqanzd.moonlitbroker.world.MerchantSpawnerState;
 import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 
 public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final Logger LOGGER = LoggerFactory.getLogger(MysteriousMerchantEntity.class);
@@ -124,8 +126,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new WeightedKatanaEntry("oblivion", 8),
                 new WeightedKatanaEntry("nmap", 2)
         }, new String[] {
-                "月影行商", "暮色旅人", "星尘商贩", "晨曦行者", "雾隐商人",
-                "风行者·洛", "夜行商·影", "流浪的阿尔"
+                "Moonlit Broker", "Dusk Wayfarer", "Stardust Trader", "Dawn Peddler", "Mistbound Merchant",
+                "Windrunner Luo", "Night Trader Ying", "Wandering Arlen"
         }),
         ARID("arid", new WeightedKatanaEntry[] {
                 new WeightedKatanaEntry("regret", 70),
@@ -134,8 +136,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new WeightedKatanaEntry("oblivion", 8),
                 new WeightedKatanaEntry("nmap", 2)
         }, new String[] {
-                "沙漠行商", "赤风旅人", "灼日商贩", "黄沙行者", "热浪商人",
-                "沙行者·炎", "荒漠商·砂", "流浪的哈桑"
+                "Sunscorch Broker", "Redwind Wayfarer", "Dunewalker Trader", "Heatwave Merchant", "Sandstrider",
+                "Flare Runner Yan", "Desert Trader Sha", "Wandering Hassan"
         }),
         COLD("cold", new WeightedKatanaEntry[] {
                 new WeightedKatanaEntry("eclipse", 70),
@@ -144,8 +146,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new WeightedKatanaEntry("oblivion", 8),
                 new WeightedKatanaEntry("nmap", 2)
         }, new String[] {
-                "冰原行商", "霜雪旅人", "极光商贩", "寒风行者", "冻土商人",
-                "冰行者·霜", "雪域商·凛", "流浪的尤里"
+                "Frostfield Broker", "Snowbound Wayfarer", "Aurora Trader", "Northwind Merchant", "Tundra Walker",
+                "Ice Runner Shuang", "Snowland Trader Rin", "Wandering Yuri"
         }),
         WET("wet", new WeightedKatanaEntry[] {
                 new WeightedKatanaEntry("oblivion", 70),
@@ -154,8 +156,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new WeightedKatanaEntry("eclipse", 8),
                 new WeightedKatanaEntry("nmap", 2)
         }, new String[] {
-                "沼泽行商", "雨林旅人", "苔藓商贩", "潮湿行者", "迷雾商人",
-                "水行者·澜", "沼地商·蛙", "流浪的莫斯"
+                "Marsh Broker", "Rainforest Wayfarer", "Mossbound Trader", "Mistwater Merchant", "Swamp Walker",
+                "Tide Runner Lan", "Bog Trader Wa", "Wandering Moss"
         }),
         EXOTIC("exotic", new WeightedKatanaEntry[] {
                 new WeightedKatanaEntry("nmap", 70),
@@ -164,8 +166,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new WeightedKatanaEntry("eclipse", 8),
                 new WeightedKatanaEntry("oblivion", 2)
         }, new String[] {
-                "丛林行商", "异域旅人", "秘境商贩", "野性行者", "奇珍商人",
-                "林行者·藤", "密林商·豹", "流浪的塔赞"
+                "Jungle Broker", "Exotic Wayfarer", "Sanctum Trader", "Wildland Merchant", "Canopy Walker",
+                "Vine Runner Teng", "Canopy Trader Bao", "Wandering Tarzan"
         });
 
         public final String typeKey;
@@ -179,6 +181,48 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
     }
+
+    private static final Map<String, String> LEGACY_MERCHANT_NAME_MIGRATION = Map.ofEntries(
+            Map.entry("月影行商", "Moonlit Broker"),
+            Map.entry("暮色旅人", "Dusk Wayfarer"),
+            Map.entry("星尘商贩", "Stardust Trader"),
+            Map.entry("晨曦行者", "Dawn Peddler"),
+            Map.entry("雾隐商人", "Mistbound Merchant"),
+            Map.entry("风行者·洛", "Windrunner Luo"),
+            Map.entry("夜行商·影", "Night Trader Ying"),
+            Map.entry("流浪的阿尔", "Wandering Arlen"),
+            Map.entry("沙漠行商", "Sunscorch Broker"),
+            Map.entry("赤风旅人", "Redwind Wayfarer"),
+            Map.entry("灼日商贩", "Dunewalker Trader"),
+            Map.entry("黄沙行者", "Heatwave Merchant"),
+            Map.entry("热浪商人", "Sandstrider"),
+            Map.entry("沙行者·炎", "Flare Runner Yan"),
+            Map.entry("荒漠商·砂", "Desert Trader Sha"),
+            Map.entry("流浪的哈桑", "Wandering Hassan"),
+            Map.entry("冰原行商", "Frostfield Broker"),
+            Map.entry("霜雪旅人", "Snowbound Wayfarer"),
+            Map.entry("极光商贩", "Aurora Trader"),
+            Map.entry("寒风行者", "Northwind Merchant"),
+            Map.entry("冻土商人", "Tundra Walker"),
+            Map.entry("冰行者·霜", "Ice Runner Shuang"),
+            Map.entry("雪域商·凛", "Snowland Trader Rin"),
+            Map.entry("流浪的尤里", "Wandering Yuri"),
+            Map.entry("沼泽行商", "Marsh Broker"),
+            Map.entry("雨林旅人", "Rainforest Wayfarer"),
+            Map.entry("苔藓商贩", "Mossbound Trader"),
+            Map.entry("潮湿行者", "Mistwater Merchant"),
+            Map.entry("迷雾商人", "Swamp Walker"),
+            Map.entry("水行者·澜", "Tide Runner Lan"),
+            Map.entry("沼地商·蛙", "Bog Trader Wa"),
+            Map.entry("流浪的莫斯", "Wandering Moss"),
+            Map.entry("丛林行商", "Jungle Broker"),
+            Map.entry("异域旅人", "Exotic Wayfarer"),
+            Map.entry("秘境商贩", "Sanctum Trader"),
+            Map.entry("野性行者", "Wildland Merchant"),
+            Map.entry("奇珍商人", "Canopy Walker"),
+            Map.entry("林行者·藤", "Vine Runner Teng"),
+            Map.entry("密林商·豹", "Canopy Trader Bao"),
+            Map.entry("流浪的塔赞", "Wandering Tarzan"));
 
     /**
      * 根据 EntityType 推导商人变体。
@@ -262,6 +306,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final int ELIGIBLE_TRADE_COUNT = 15;
     private static final int REFRESH_GUARANTEE_COUNT = 3;
     private static final int TRADE_PAGE_SIZE = 7;
+    private static final int KATANA_OFFER_MAX_USES = 1;
+    private static final int RECLAIM_OFFER_MAX_USES = 1;
 
     public MysteriousMerchantEntity(EntityType<? extends WanderingTraderEntity> type, World world) {
         super(type, world);
@@ -934,6 +980,18 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={} source=afterUsing",
                         player.getUuid(), soldKatanaId, this.getUuid());
             }
+
+            // Contract: register activeInstanceId from the sell item template
+            UUID instanceId = KatanaContractUtil.getInstanceId(offer.getSellItem());
+            if (instanceId != null) {
+                boolean isReclaim = KatanaContractUtil.isReclaimOutput(offer.getSellItem());
+                ownershipState.setActiveInstanceId(player.getUuid(), soldKatanaId, instanceId);
+                if (isReclaim) {
+                    ownershipState.setLastReclaimTick(player.getUuid(), soldKatanaId, serverWorld.getTime());
+                }
+                LOGGER.info("[MoonTrade] CONTRACT_ACTIVATE player={} katanaId={} instanceId={} reclaim={} merchant={}",
+                        player.getUuid(), soldKatanaId, instanceId, isReclaim, this.getUuid());
+            }
         }
 
         MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
@@ -1064,10 +1122,24 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     /**
      * Task E: 按变体添加特色交易（过渡装备 + 1 特色物品）
      * 主货币: Silver Note，绿宝石仅作少量附加税
+     *
+     * Variant Anchors: 每变体额外固定 1 件 A 特效过渡装备（按主题映射，必出）。
      */
     private void addVariantSpecialtyOffers(TradeOfferList offers) {
         MerchantVariant variant = variantOf(this.getType());
         LOGGER.info("[MoonTrade] VARIANT_SPECIALTY_BUILD variant={}", variant.typeKey);
+
+        // ---- A 特效过渡装备固定锚点（Normal 页必出） ----
+        Item aAnchorItem = TradeConfig.variantAAnchor().get(variant.name());
+        if (aAnchorItem != null) {
+            addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                    new TradedItem(ModItems.SILVER_NOTE, TradeConfig.A_ANCHOR_SILVER_COST),
+                    Optional.of(new TradedItem(Items.EMERALD, TradeConfig.A_ANCHOR_EMERALD_TAX)),
+                    new ItemStack(aAnchorItem),
+                    TradeConfig.A_ANCHOR_MAX_USES, 15, 0.05f),
+                    "variant_a_anchor_" + variant.typeKey);
+        }
+
         switch (variant) {
             case STANDARD -> {
                 addBaseOfferWithLoopGuard(offers, new TradeOffer(
@@ -1277,7 +1349,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             }
 
             if (unlocked) {
-                addKatanaHiddenOffers(offers);
+                addKatanaHiddenOffers(offers, player);
             }
         }
 
@@ -1366,7 +1438,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         initSecretKatanaIdIfNeeded();
 
         // Keep the katana trade chain intact; sold-out is visual-only via disable().
-        addKatanaHiddenOffers(offers);
+        addKatanaHiddenOffers(offers, player);
 
         applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
 
@@ -1465,7 +1537,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
-    private void addKatanaHiddenOffers(TradeOfferList offers) {
+    private void addKatanaHiddenOffers(TradeOfferList offers, ServerPlayerEntity player) {
         // P0-3: 确保 ID 已初始化
         initSecretKatanaIdIfNeeded();
 
@@ -1475,13 +1547,164 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
 
-        TradeOffer offer = createKatanaOffer();
+        TradeOffer offer = createKatanaOffer(player);
         if (offer == null) {
             LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=resolve_failed",
                     getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
             return;
         }
         offers.add(offer);
+
+        // Add reclaim offer if eligible
+        addReclaimOffer(offers, player);
+
+        // ---- Variant Anchors: B 招牌锚点（固定必出） + 随机层 1 件 B ----
+        addVariantBAnchorAndRandom(offers, player);
+    }
+
+    /**
+     * Variant Anchors: 在 Arcane/隐藏页添加 B 招牌锚点（固定）+ 随机层 1 件 B。
+     * Rule 1: 随机层只抽 1 件。
+     * Rule 2: Anti-Repeat per (player, variant)。
+     * Rule 3: EPIC Cap — 锚点若 EPIC，随机层过滤掉 EPIC 候选。
+     */
+    private void addVariantBAnchorAndRandom(TradeOfferList offers, ServerPlayerEntity player) {
+        MerchantVariant variant = variantOf(this.getType());
+        String variantKey = variant.name();
+
+        // ---- B 招牌锚点（固定必出） ----
+        Item bAnchorItem = TradeConfig.variantBAnchor().get(variantKey);
+        if (bAnchorItem == null) {
+            LOGGER.warn("[MoonTrade] B_ANCHOR_SKIP variant={} reason=no_anchor_mapping", variantKey);
+            return;
+        }
+        offers.add(new TradeOffer(
+                new TradedItem(ModItems.SILVER_NOTE, TradeConfig.B_ARMOR_SILVER_COST),
+                Optional.of(new TradedItem(Items.EMERALD, TradeConfig.B_ARMOR_EMERALD_TAX)),
+                new ItemStack(bAnchorItem),
+                TradeConfig.B_ARMOR_MAX_USES, 20, 0.05f));
+        LOGGER.info("[MoonTrade] B_ANCHOR_ADD variant={} item={}", variantKey,
+                Registries.ITEM.getId(bAnchorItem));
+
+        // ---- 随机层：Draw 1 ----
+        java.util.List<Item> pool = TradeConfig.variantBRandomPool().get(variantKey);
+        if (pool == null || pool.isEmpty()) {
+            LOGGER.info("[MoonTrade] B_RANDOM_SKIP variant={} reason=empty_pool", variantKey);
+            return;
+        }
+
+        // Rule 3: EPIC Cap — 如果锚点是 EPIC，过滤掉 EPIC 候选
+        boolean anchorIsEpic = TradeConfig.isEpic(bAnchorItem);
+        java.util.List<Item> candidates;
+        if (anchorIsEpic) {
+            candidates = new ArrayList<>();
+            for (Item item : pool) {
+                if (!TradeConfig.isEpic(item)) {
+                    candidates.add(item);
+                }
+            }
+            LOGGER.info("[MoonTrade] B_RANDOM_EPIC_FILTER variant={} poolSize={} afterFilter={}",
+                    variantKey, pool.size(), candidates.size());
+        } else {
+            candidates = new ArrayList<>(pool);
+        }
+
+        if (candidates.isEmpty()) {
+            LOGGER.info("[MoonTrade] B_RANDOM_SKIP variant={} reason=all_filtered_epic", variantKey);
+            return;
+        }
+
+        // 用 (merchantUuid ^ playerUuid ^ worldTime) 作为随机种子
+        long seed = this.getUuid().getLeastSignificantBits()
+                ^ player.getUuid().getMostSignificantBits()
+                ^ this.getEntityWorld().getTime();
+        Random rng = new Random(seed);
+        Item drawn = candidates.get(rng.nextInt(candidates.size()));
+
+        // Rule 2: Anti-Repeat — 与上次相同则重抽 1 次
+        String drawnId = Registries.ITEM.getId(drawn).toString();
+        String lastB = TradeConfig.getLastRandomB(player.getUuid(), variantKey);
+        if (drawnId.equals(lastB) && candidates.size() > 1) {
+            Item redraw = drawn;
+            int attempt = 0;
+            while (redraw == drawn && attempt < 1) {
+                redraw = candidates.get(rng.nextInt(candidates.size()));
+                attempt++;
+            }
+            drawn = redraw;
+            drawnId = Registries.ITEM.getId(drawn).toString();
+            LOGGER.info("[MoonTrade] B_RANDOM_ANTIREPEAT variant={} lastB={} redrawn={}", variantKey, lastB, drawnId);
+        }
+
+        // 记录本次结果
+        TradeConfig.setLastRandomB(player.getUuid(), variantKey, drawnId);
+
+        offers.add(new TradeOffer(
+                new TradedItem(ModItems.SILVER_NOTE, TradeConfig.B_ARMOR_SILVER_COST),
+                Optional.of(new TradedItem(Items.EMERALD, TradeConfig.B_ARMOR_EMERALD_TAX)),
+                new ItemStack(drawn),
+                TradeConfig.B_ARMOR_MAX_USES, 20, 0.05f));
+        LOGGER.info("[MoonTrade] B_RANDOM_ADD variant={} item={} anchorEpic={}", variantKey, drawnId, anchorIsEpic);
+    }
+
+    /**
+     * Add a reclaim trade offer if the player has previously owned this merchant variant's katana,
+     * has arcane access, and the reclaim cooldown has passed.
+     */
+    private void addReclaimOffer(TradeOfferList offers, ServerPlayerEntity player) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) return;
+
+        String katanaType = resolveKatanaType();
+        if (katanaType == null) return;
+
+        KatanaOwnershipState ownershipState = KatanaOwnershipState.getServerState(serverWorld);
+        UUID playerUuid = player.getUuid();
+
+        // Must have owned this katana type before
+        if (!ownershipState.hasOwned(playerUuid, katanaType)) return;
+
+        // Must have arcane unlock for this variant
+        MerchantUnlockState unlockState = MerchantUnlockState.getServerState(serverWorld);
+        String variantKey = getVariantKey();
+        MerchantUnlockState.Progress progress = unlockState.getOrCreateProgress(playerUuid, variantKey);
+        if (!progress.isUnlockedKatanaHidden(variantKey)) return;
+
+        // Check reclaim cooldown
+        long lastReclaim = ownershipState.getLastReclaimTick(playerUuid, katanaType);
+        long nowTick = serverWorld.getTime();
+        if (lastReclaim > 0 && (nowTick - lastReclaim) < TradeConfig.RECLAIM_CD_TICKS) {
+            LOGGER.info("[MoonTrade] RECLAIM_COOLDOWN player={} type={} remaining={}",
+                    playerUuid, katanaType, TradeConfig.RECLAIM_CD_TICKS - (nowTick - lastReclaim));
+            return;
+        }
+
+        // Resolve the katana item
+        Item katanaItem = KATANA_WHITELIST.get(katanaType);
+        if (katanaItem == null) return;
+
+        ItemStack reclaimStack = new ItemStack(katanaItem, 1);
+        // Write contract data + reclaim marker
+        UUID instanceId = UUID.randomUUID();
+        KatanaContractUtil.writeKatanaContract(reclaimStack, playerUuid, katanaType, instanceId);
+        // Also write legacy markers for compat
+        NbtComponent component = reclaimStack.get(DataComponentTypes.CUSTOM_DATA);
+        NbtCompound nbt = component == null ? new NbtCompound() : component.copyNbt();
+        nbt.putBoolean(NBT_SECRET_MARKER, true);
+        nbt.putString(NBT_SECRET_MARKER_ID, katanaType);
+        nbt.putBoolean(KatanaContractUtil.NBT_RECLAIM, true);
+        reclaimStack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+
+        TradeOffer reclaimOffer = new TradeOffer(
+                new TradedItem(Items.NETHERITE_INGOT, TradeConfig.RECLAIM_COST_NETHERITE),
+                Optional.of(new TradedItem(Items.DIAMOND, TradeConfig.RECLAIM_COST_DIAMONDS)),
+                reclaimStack,
+                RECLAIM_OFFER_MAX_USES,
+                80,
+                0.0f);
+        offers.add(reclaimOffer);
+
+        LOGGER.info("[MoonTrade] RECLAIM_OFFER_ADDED player={} type={} instanceId={} merchant={}",
+                playerUuid, katanaType, instanceId, this.getUuid());
     }
 
     private void applyKatanaOwnershipSoldOut(TradeOfferList offers, java.util.UUID playerUuid,
@@ -1490,6 +1713,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
         for (TradeOffer offer : offers) {
+            if (KatanaContractUtil.isReclaimOutput(offer.getSellItem())) {
+                // Reclaim must remain purchasable after first ownership.
+                continue;
+            }
             String katanaId = KatanaIdUtil.extractCanonicalKatanaId(offer.getSellItem());
             if (!KatanaIdUtil.isSecretKatana(katanaId)) {
                 continue;
@@ -1504,12 +1731,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
-    private TradeOffer createKatanaOffer() {
+    private TradeOffer createKatanaOffer(ServerPlayerEntity player) {
         ItemStack katanaStack = resolveKatanaStack();
         if (katanaStack.isEmpty()) {
             return null;
         }
-        markSecretTradeOutput(katanaStack);
+        markSecretTradeOutput(katanaStack, player);
 
         // Task D: Per-variant secondary cost
         MerchantVariant variant = variantOf(this.getType());
@@ -1544,7 +1771,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new TradedItem(ModItems.ARCANE_LEDGER, 1),
                 Optional.of(new TradedItem(secondaryCost, secondaryCount)),
                 katanaStack,
-                1,
+                KATANA_OFFER_MAX_USES,
                 80,
                 0.0f);
         return offer;
@@ -1600,12 +1827,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         return new ItemStack(item, 1);
     }
 
-    private void markSecretTradeOutput(ItemStack stack) {
+    private void markSecretTradeOutput(ItemStack stack, ServerPlayerEntity player) {
         NbtComponent component = stack.get(DataComponentTypes.CUSTOM_DATA);
         NbtCompound nbt = component == null ? new NbtCompound() : component.copyNbt();
         nbt.putBoolean(NBT_SECRET_MARKER, true);
         nbt.putString(NBT_SECRET_MARKER_ID, this.secretKatanaId);
         nbt.putString(NBT_MM_KATANA_ID, this.secretKatanaId);
+        // Contract: stamp owner + instanceId so the sold copy carries contract data
+        UUID instanceId = UUID.randomUUID();
+        nbt.putString(KatanaContractUtil.NBT_OWNER_UUID, player.getUuid().toString());
+        nbt.putString(KatanaContractUtil.NBT_INSTANCE_ID, instanceId.toString());
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
     }
 
@@ -1927,6 +2158,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
+    private static String migrateLegacyMerchantName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        return LEGACY_MERCHANT_NAME_MIGRATION.getOrDefault(name, name);
+    }
+
     /**
      * Phase 8: 首次生成时，用稳定 seed 从变体名字池中选一个名字。
      * 仅当 merchantName 为空时执行（NBT 加载后不会覆盖）。
@@ -2062,6 +2300,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
         // Phase 6: 读取商人名称
         this.merchantName = nbt.getString(NBT_MERCHANT_NAME);
+        this.merchantName = migrateLegacyMerchantName(this.merchantName);
         if (!this.merchantName.isEmpty()) {
             this.setCustomName(Text.literal(this.merchantName).formatted(Formatting.GOLD));
             this.setCustomNameVisible(true);

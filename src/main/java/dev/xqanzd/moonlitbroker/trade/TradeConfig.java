@@ -1,6 +1,15 @@
 package dev.xqanzd.moonlitbroker.trade;
 
+import dev.xqanzd.moonlitbroker.armor.item.ArmorItems;
+import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorItems;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.item.Item;
+import net.minecraft.util.Rarity;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 交易系统配置常量
@@ -81,6 +90,26 @@ public final class TradeConfig {
     /** 召唤商人的预期生命周期（用于 active 保险机制） */
     public static final long SUMMON_EXPECTED_LIFETIME_TICKS = 120000L;
 
+    // ========== Reclaim（补发/契约迁移） ==========
+    /** Reclaim 冷却时间 (3 MC 天 = 72000 ticks) */
+    public static final long RECLAIM_CD_TICKS = 24000L * 3;
+    /** Reclaim 第一输入：下界合金锭数量 */
+    public static final int RECLAIM_COST_NETHERITE = 1;
+    /** Reclaim 第二输入：钻石数量 */
+    public static final int RECLAIM_COST_DIAMONDS = 16;
+
+    // ========== Contract Gate Scope ==========
+    /** true: 仅对 5 把神器应用契约 gate；false: 对所有可识别 katanaId 应用 */
+    public static final boolean CONTRACT_ENFORCE_ONLY_MYTHIC = true;
+    /** true: 创造模式跳过契约 gate（用于测试/排障） */
+    public static final boolean CONTRACT_ALLOW_CREATIVE_BYPASS = true;
+
+    // ========== Dormant Hint（契约失效提示） ==========
+    /** 是否在 dormant katana 被 gate 拦截时显示 actionbar 提示 */
+    public static final boolean DORMANT_SHOW_ACTIONBAR_HINT = true;
+    /** 同一玩家提示节流 (60 ticks = 3s) */
+    public static final int DORMANT_HINT_COOLDOWN_TICKS = 60;
+
     // ========== NBT 键名 ==========
     public static final String NBT_SCROLL_USES = "Uses";
     public static final String NBT_SCROLL_GRADE = "Grade";
@@ -101,4 +130,120 @@ public final class TradeConfig {
     // ========== 卷轴等级 ==========
     public static final String GRADE_NORMAL = "NORMAL";
     public static final String GRADE_SEALED = "SEALED";
+
+    // ========== Variant Anchors + Light RNG ==========
+
+    /**
+     * A) Normal 页：每变体固定 1 件 A 特效过渡装备（按主题映射）。
+     * key = MerchantVariant.name()  (STANDARD / ARID / COLD / WET / EXOTIC)
+     * 延迟初始化，因为 Item 静态字段在 mod init 后才可用。
+     */
+    private static volatile Map<String, Item> VARIANT_A_ANCHOR_CACHE;
+
+    public static Map<String, Item> variantAAnchor() {
+        if (VARIANT_A_ANCHOR_CACHE == null) {
+            VARIANT_A_ANCHOR_CACHE = Map.of(
+                    "STANDARD", TransitionalArmorItems.CARGO_PANTS,       // Moonglow → Cargo Pants
+                    "ARID",     TransitionalArmorItems.REACTIVE_BUG_PLATE,// Regret  → Reactive Bug Plate
+                    "COLD",     TransitionalArmorItems.SANCTIFIED_HOOD,   // Eclipse → Sanctified Hood
+                    "WET",      TransitionalArmorItems.CUSHION_HIKING_BOOTS,// Oblivion → Cushion Hiking Boots
+                    "EXOTIC",   TransitionalArmorItems.CARGO_PANTS        // Nmap    → Cargo Pants (允许重复)
+            );
+        }
+        return VARIANT_A_ANCHOR_CACHE;
+    }
+
+    /**
+     * B) Arcane 页：每变体固定 1 件 B 招牌锚点（解锁后必出）。
+     */
+    private static volatile Map<String, Item> VARIANT_B_ANCHOR_CACHE;
+
+    public static Map<String, Item> variantBAnchor() {
+        if (VARIANT_B_ANCHOR_CACHE == null) {
+            VARIANT_B_ANCHOR_CACHE = Map.of(
+                    "STANDARD", ArmorItems.SENTINEL_HELMET,
+                    "ARID",     ArmorItems.BLOOD_PACT_CHESTPLATE,
+                    "COLD",     ArmorItems.RETRACER_ORNAMENT_HELMET,
+                    "WET",      ArmorItems.UNTRACEABLE_TREADS_BOOTS,
+                    "EXOTIC",   ArmorItems.SMUGGLER_POUCH_LEGGINGS
+            );
+        }
+        return VARIANT_B_ANCHOR_CACHE;
+    }
+
+    /**
+     * C) Arcane 随机层候选集合（每变体抽 1）。
+     */
+    private static volatile Map<String, List<Item>> VARIANT_B_RANDOM_CACHE;
+
+    public static Map<String, List<Item>> variantBRandomPool() {
+        if (VARIANT_B_RANDOM_CACHE == null) {
+            VARIANT_B_RANDOM_CACHE = Map.of(
+                    "STANDARD", List.of(
+                            ArmorItems.RELIC_CIRCLET_HELMET,
+                            ArmorItems.BOUNDARY_WALKER_BOOTS,
+                            ArmorItems.GOSSAMER_BOOTS,
+                            ArmorItems.WINDBREAKER_CHESTPLATE),
+                    "ARID", List.of(
+                            ArmorItems.VOID_DEVOURER_CHESTPLATE,
+                            ArmorItems.EXILE_MASK_HELMET,
+                            ArmorItems.CLEAR_LEDGER_LEGGINGS,
+                            ArmorItems.MARCHING_BOOTS),
+                    "COLD", List.of(
+                            ArmorItems.SILENT_OATH_HELMET,
+                            ArmorItems.GHOST_GOD_CHESTPLATE,
+                            ArmorItems.GRAZE_GUARD_LEGGINGS,
+                            ArmorItems.GHOST_STEP_BOOTS),
+                    "WET", List.of(
+                            ArmorItems.STEALTH_SHIN_LEGGINGS,
+                            ArmorItems.GHOST_STEP_BOOTS,
+                            ArmorItems.BOUNDARY_WALKER_BOOTS,
+                            ArmorItems.GOSSAMER_BOOTS),
+                    "EXOTIC", List.of(
+                            ArmorItems.SMUGGLER_SHIN_LEGGINGS,
+                            ArmorItems.OLD_MARKET_CHESTPLATE,
+                            ArmorItems.WINDBREAKER_CHESTPLATE,
+                            ArmorItems.MARCHING_BOOTS)
+            );
+        }
+        return VARIANT_B_RANDOM_CACHE;
+    }
+
+    // ========== Anti-Repeat: (playerUuid, variantKey) -> lastRandomBItemId ==========
+    // 内存级，不持久化；商人消失/服务器重启后自然清零。
+    private static final ConcurrentHashMap<String, String> LAST_RANDOM_B = new ConcurrentHashMap<>();
+
+    private static String antiRepeatKey(UUID playerUuid, String variantKey) {
+        return playerUuid.toString() + "|" + variantKey;
+    }
+
+    public static String getLastRandomB(UUID playerUuid, String variantKey) {
+        return LAST_RANDOM_B.get(antiRepeatKey(playerUuid, variantKey));
+    }
+
+    public static void setLastRandomB(UUID playerUuid, String variantKey, String itemId) {
+        LAST_RANDOM_B.put(antiRepeatKey(playerUuid, variantKey), itemId);
+    }
+
+    /** B 装备交易价格：Silver Note 数量 */
+    public static final int B_ARMOR_SILVER_COST = 16;
+    /** B 装备交易价格：Emerald 附加税 */
+    public static final int B_ARMOR_EMERALD_TAX = 8;
+    /** B 装备交易最大购买次数 */
+    public static final int B_ARMOR_MAX_USES = 1;
+
+    /** A 特效过渡装备交易价格：Silver Note 数量 */
+    public static final int A_ANCHOR_SILVER_COST = 10;
+    /** A 特效过渡装备交易价格：Emerald 附加税 */
+    public static final int A_ANCHOR_EMERALD_TAX = 4;
+    /** A 特效过渡装备交易最大购买次数 */
+    public static final int A_ANCHOR_MAX_USES = 2;
+
+    /**
+     * 判断 Item 是否为 EPIC 稀有度
+     */
+    public static boolean isEpic(Item item) {
+        if (item == null) return false;
+        return item.getDefaultStack().getRarity() == Rarity.EPIC;
+    }
 }

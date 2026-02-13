@@ -1,7 +1,7 @@
 {
   "entity.wandering_trader.ambient": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.ambient",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.ambient",
     "sounds": [
       "entity/wandering_trader/villager_idle1",
       "entity/wandering_trader/villager_idle2",
@@ -10,7 +10,7 @@
   },
   "entity.wandering_trader.hurt": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.hurt",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.hurt",
     "sounds": [
       "entity/wandering_trader/villager_hurt1",
       "entity/wandering_trader/villager_hurt2",
@@ -20,14 +20,14 @@
   },
   "entity.wandering_trader.death": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.death",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.death",
     "sounds": [
       "entity/wandering_trader/villager_death"
     ]
   },
   "entity.wandering_trader.yes": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.yes",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.agree",
     "sounds": [
       "entity/wandering_trader/villager_accept1",
       "entity/wandering_trader/villager_accept2",
@@ -36,7 +36,7 @@
   },
   "entity.wandering_trader.no": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.no",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.disagree",
     "sounds": [
       "entity/wandering_trader/villager_deny1",
       "entity/wandering_trader/villager_deny2",
@@ -45,7 +45,7 @@
   },
   "entity.wandering_trader.trade": {
     "replace": true,
-    "subtitle": "subtitles.entity.wandering_trader.trade",
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.trade",
     "sounds": [
       "entity/wandering_trader/villager_trade1",
       "entity/wandering_trader/villager_trade2",

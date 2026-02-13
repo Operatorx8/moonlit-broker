@@ -2,6 +2,7 @@ package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
 import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -49,6 +50,10 @@ public class MoonTraceHandler {
             if (world.isClient()) return ActionResult.PASS;
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
             if (!(player.getMainHandStack().isOf(KatanaItems.MOON_GLOW_KATANA))) return ActionResult.PASS;
+            if (world instanceof net.minecraft.server.world.ServerWorld sw
+                    && !KatanaContractUtil.gateOrReturn(sw, player, player.getMainHandStack())) {
+                return ActionResult.PASS;
+            }
 
             if (MoonTraceConfig.DEBUG) {
                 LOGGER.info("[MoonTrace] Attack: {} -> {}",
@@ -125,6 +130,11 @@ public class MoonTraceHandler {
 
             // 检查主手是否持有月之光芒
             if (!serverPlayer.getMainHandStack().isOf(KatanaItems.MOON_GLOW_KATANA)) {
+                continue;
+            }
+            // Contract gate: dormant katana → no passive buff
+            if (world instanceof net.minecraft.server.world.ServerWorld sw
+                    && !KatanaContractUtil.gateOrReturn(sw, serverPlayer, serverPlayer.getMainHandStack())) {
                 continue;
             }
 

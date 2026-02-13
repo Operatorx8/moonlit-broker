@@ -23,7 +23,7 @@ public class NmapAttackHandler {
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
             if (!(player.getMainHandStack().isOf(KatanaItems.NMAP_KATANA))) return ActionResult.PASS;
             if (world instanceof ServerWorld sw
-                    && !KatanaContractUtil.isActiveContract(sw, player, player.getMainHandStack())) {
+                    && !KatanaContractUtil.gateOrReturn(sw, player, player.getMainHandStack())) {
                 return ActionResult.PASS;
             }
 

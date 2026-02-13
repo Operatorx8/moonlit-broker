@@ -2,12 +2,12 @@
 
 ## 定位
 
-神秘商人盔甲系列：当前覆盖头盔 / 胸甲 / 护腿散件效果，偏向**生存探索**风格，兼顾**战斗辅助**。
+神秘商人盔甲系列：当前覆盖头盔 / 胸甲 / 护腿 / 靴子散件效果，偏向**生存探索**风格，兼顾**战斗辅助**。
 
 ### 设计理念
 
-- **独特性**：每件头盔解决一个特定场景的问题
-- **决策感**：玩家需要根据当前任务选择头盔
+- **独特性**：每件装备解决一个特定场景的问题
+- **决策感**：玩家需要根据当前任务选择装备
 - **平衡性**：强力效果配长 CD，弱效果可频繁触发
 - **可追溯**：所有触发都有日志，便于验证和调试
 
@@ -17,7 +17,7 @@
 
 ### 必须遵守
 
-1. **单件效果独立**：每件头盔只提供一种主效果，不互相依赖
+1. **单件效果独立**：每件装备只提供一种主效果，不互相依赖
 2. **冷却隔离**：各头盔冷却独立，互不影响
 3. **服务端权威**：所有判定在服务端执行，客户端只负责展示
 4. **固定 UUID**：动态属性修改器使用预定义 UUID，避免叠加 bug
@@ -70,6 +70,18 @@
 | 3 | `graze_guard_leggings` | 擦身护胫 | EPIC | 防御/保命 |
 | 4 | `stealth_shin_leggings` | 潜行之胫 | RARE | 机动/摔落 |
 | 5 | `clear_ledger_leggings` | 清账步态 | RARE | 机动/击杀 |
+
+---
+
+### 靴子（5件）
+
+| # | 内部 ID | 显示名 | 稀有度 | 定位 |
+|---|---------|--------|--------|------|
+| 1 | `untraceable_treads_boots` | 无追索步履 | EPIC | 潜行/脱战 |
+| 2 | `boundary_walker_boots` | 边界行走 | UNCOMMON | 机动/地形 |
+| 3 | `ghost_step_boots` | 幽灵步伐 | RARE | 生存/抗推挤 |
+| 4 | `marching_boots` | 急行之靴 | UNCOMMON | 机动/节奏 |
+| 5 | `gossamer_boots` | 轻灵之靴 | RARE | 控场/蛛网 |
 
 ---
 
@@ -437,6 +449,153 @@ boolean hasTotem(Player player) {
 [MoonTrace|Armor|TRIGGER] action=trigger result=OK effect=clear_ledger_speed first_proc=true ctx{p=Steve t=Zombie}
 [MoonTrace|Armor|APPLY] action=apply result=OK effect=speed final{dur=60 amp=0} ctx{p=Steve}
 [MoonTrace|Armor|APPLY] action=apply result=OK effect=speed_extend add=20 cap=120 final{dur=100} ctx{p=Steve}
+```
+
+---
+
+## 靴子详细规格
+
+### 靴子通用属性（对齐代码现状）
+
+- 护甲槽位：`FEET`
+- 防火：`fireproof = true`
+- 不可铁砧修复：`repairable = false`
+- 韧性：`5.0`（当前代码值，见 `BootsEffectConstants.BOOTS_TOUGHNESS`）
+- 击退抗性：`0.0`
+- enchantability：沿用全局稀有度分档（`UNCOMMON->IRON(9)`, `RARE->CHAIN(12)`, `EPIC->NETHERITE(15)`）
+
+### 靴子实现约定（引用代码入口）
+
+- 统一低频扫描入口：`BootsTickHandler.tick`（每 `20 ticks`）
+- 战斗时序更新：
+  - 攻击命中：`PlayerAttackMixin` 更新 `lastHitLivingTick`
+  - 受击事件：`ArmorDamageMixin` 更新 `lastHurtByLivingTick` 与幽灵步伐受击窗口计数
+- 特殊 Mixin：
+  - 幽灵步伐：`Entity#pushAwayFrom`（取消推挤）
+  - 轻灵之靴：`Entity#slowMovement`（蛛网减速修正）
+
+### 事件入口清单（最稳入口）
+
+| 靴子 | 最稳入口（建议） | 原因 |
+|------|-------------------|------|
+| 无追索步履 | `BootsTickHandler.tick` | 纯状态机（脱战窗口 + CD） |
+| 边界行走 | `BootsTickHandler.tick` | 环境条件判定集中（维度/露天/天气/夜晚） |
+| 幽灵步伐 | `BootsTickHandler.tick` + `Entity#pushAwayFrom` | Tick 管状态，Mixin 处理实体推挤 |
+| 急行之靴 | `BootsTickHandler.tick` + `PlayerEntity#attack` | Tick 负责进入/维持，攻击即时退出 |
+| 轻灵之靴 | `Entity#slowMovement` | 蛛网减速属于底层移动流程，Mixin 最稳定 |
+
+### 1. 无追索步履 (Untraceable Treads)
+
+**效果**：脱战后短隐身（无粒子）
+
+**机制**：
+- 条件：`12s` 未攻击 `LivingEntity` 且 `12s` 未被 `LivingEntity` 伤害
+- 生效：给予 `Invisibility` `3s`（无粒子）
+- 冷却：`45s`（900 ticks）
+
+**触发条件**：
+```
+穿戴该靴 AND
+(now - lastHitLivingTick >= 240) AND
+(now - lastHurtByLivingTick >= 240) AND
+(now >= untraceableCdReadyTick)
+```
+
+**日志**：
+```
+[MysteriousMerchant|Armor|BOOT] action=enter player=Steve bootId=xqanzd_moonlit_broker:untraceable_treads_boots nowTick=12000 expiresTick=12060 cdUntil=12900
+```
+
+---
+
+### 2. 边界行走 (Boundary Walker)
+
+**效果**：环境触发 Jump Boost I（滚动刷新）
+
+**机制**：
+- 仅主世界
+- 必须露天（`isSkyVisible`）
+- 条件：雨/雷/雪天气或夜晚
+- 生效：`Jump Boost I`，每 `25 ticks` 刷新
+
+**触发条件**：
+```
+穿戴该靴 AND 维度=Overworld AND 露天 AND (world.isRaining() OR world.isNight())
+```
+
+**日志**：
+```
+[MysteriousMerchant|Armor|BOOT] action=enter player=Steve bootId=xqanzd_moonlit_broker:boundary_walker_boots nowTick=24000 expiresTick=24025
+```
+
+---
+
+### 3. 幽灵步伐 (Ghost Step)
+
+**效果**：非战斗免推挤 + 受击应急免推挤
+
+**机制**：
+- 效果 A（常驻）：最近 `8s` 未命中 `LivingEntity` 时，开启免推挤
+- 效果 B（应急）：`1s` 窗口内被 `LivingEntity` 命中 `2` 次，开启 `1s` 免推挤
+- 应急冷却：`15s`（300 ticks）
+- 推挤取消由 `pushAwayFrom` Mixin 执行
+
+**触发条件**：
+```
+效果A：now - lastHitLivingTick >= 160
+效果B：damageWindowCount >= 2 且 now >= ghostBurstCdReadyTick
+```
+
+**日志**：
+```
+[MysteriousMerchant|Armor|BOOT] action=enter player=Steve bootId=xqanzd_moonlit_broker:ghost_step_boots nowTick=36000 expiresTick=36020 cdUntil=36300
+```
+
+---
+
+### 4. 急行之靴 (Marching Boots)
+
+**效果**：脱战加速（Speed II）并带退出冷却
+
+**机制**：
+- 进入：`8s` 未命中 + `4s` 未被 `LivingEntity` 伤害 + CD 就绪
+- 持续：`Speed II`，每 `25 ticks` 刷新，最长 `15s`
+- 退出：攻击命中立即退出，或条件失效/超时退出
+- 退出冷却：`12s`（240 ticks）
+
+**触发条件**：
+```
+穿戴该靴 AND !marchActive AND
+(now - lastHitLivingTick >= 160) AND
+(now - lastHurtByLivingTick >= 80) AND
+(now >= marchCdReadyTick)
+```
+
+**日志**：
+```
+[MysteriousMerchant|Armor|BOOT] action=enter player=Steve bootId=xqanzd_moonlit_broker:marching_boots nowTick=42000 expiresTick=42300 cdUntil=42000
+```
+
+---
+
+### 5. 轻灵之靴 (Gossamer Boots)
+
+**效果**：蛛网减速减轻 + 缓慢降阶
+
+**机制**：
+- 仅在 `Cobweb` 的 `slowMovement` 链路触发
+- 蛛网减速降低 `70%`（保留更多移动速度）
+- 若存在 `Slowness II+`，降为 `Slowness I`
+- 状态刷新窗口：`25 ticks`
+
+**触发条件**：
+```
+穿戴该靴 AND 当前 slowMovement 的方块为 Cobweb
+```
+
+**日志**：
+```
+[MysteriousMerchant|Armor|BOOT] action=enter player=Steve bootId=xqanzd_moonlit_broker:gossamer_boots nowTick=51000 expiresTick=51025
 ```
 
 ---

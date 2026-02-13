@@ -6,6 +6,7 @@ import dev.xqanzd.moonlitbroker.trade.KatanaIdUtil;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
+import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import dev.xqanzd.moonlitbroker.world.KatanaOwnershipState;
 import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.minecraft.entity.Entity;
@@ -63,6 +64,9 @@ public class TradeOutputSlotMixin {
         }
         String katanaId = KatanaIdUtil.extractCanonicalKatanaId(sell);
         if (!KatanaIdUtil.isSecretKatana(katanaId)) {
+            return;
+        }
+        if (KatanaContractUtil.isReclaimOutput(sell)) {
             return;
         }
 

@@ -45,6 +45,19 @@
 | `repairable` | false | 不可铁砧修复 |
 | `rarity` | 按护腿定义 | 不同护腿使用不同稀有度 |
 
+### 靴子通用属性（5 件靴子共享）
+
+| 属性 | 值 | 说明 |
+|------|-----|------|
+| `durability` | 按靴子定义 | 见下方靴子基础数值表 |
+| `protection` | 按靴子定义 | 见下方靴子基础数值表 |
+| `toughness` | 5.0 | 韧性（当前代码值） |
+| `knockbackResistance` | 0.0 | 默认无击退抗性 |
+| `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
+| `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
+| `repairable` | false | 不可铁砧修复 |
+| `rarity` | 按靴子定义 | 不同靴子使用不同稀有度 |
+
 ### 材质属性
 
 | 属性 | 值 |
@@ -92,6 +105,16 @@
 | `graze_guard_leggings` | `EPIC` | `NETHERITE` (15) |
 | `stealth_shin_leggings` | `RARE` | `CHAIN` (12) |
 | `clear_ledger_leggings` | `RARE` | `CHAIN` (12) |
+
+### 5 件靴子基础数值与稀有度分配
+
+| 靴子 | durability | protection | rarity | enchantability 档位 |
+|------|------------|------------|--------|----------------------|
+| `untraceable_treads_boots` | 380 | 3 | `EPIC` | `NETHERITE` (15) |
+| `boundary_walker_boots` | 380 | 2 | `UNCOMMON` | `IRON` (9) |
+| `ghost_step_boots` | 320 | 1 | `RARE` | `CHAIN` (12) |
+| `marching_boots` | 400 | 2 | `UNCOMMON` | `IRON` (9) |
+| `gossamer_boots` | 375 | 2 | `RARE` | `CHAIN` (12) |
 
 ---
 
@@ -320,6 +343,69 @@
 
 ---
 
+## 靴子效果参数
+
+### 1. 无追索步履 (untraceable_treads_boots)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | EPIC | - |
+| `idleWindow` | 240 | ticks (12s) |
+| `invisibilityDuration` | 60 | ticks (3s) |
+| `cooldown` | 900 | ticks (45s) |
+| `showParticles` | false | - |
+| `showIcon` | true | - |
+| `requiresNoHitWindow` | 240 | ticks |
+| `requiresNoHurtWindow` | 240 | ticks |
+
+### 2. 边界行走 (boundary_walker_boots)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | UNCOMMON | - |
+| `overworldOnly` | true | - |
+| `skyVisibleRequired` | true | - |
+| `weatherOrNightRequired` | true | (雨/雷/雪或夜晚) |
+| `jumpBoostAmplifier` | 0 | (等级 I) |
+| `jumpBoostRefresh` | 25 | ticks (1.25s) |
+
+### 3. 幽灵步伐 (ghost_step_boots)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | RARE | - |
+| `combatLockTicks` | 160 | ticks (8s) |
+| `hitWindowTicks` | 20 | ticks (1s) |
+| `hitCountThreshold` | 2 | 次 |
+| `burstDuration` | 20 | ticks (1s) |
+| `burstCooldown` | 300 | ticks (15s) |
+| `requiresLivingAttacker` | true | - |
+
+### 4. 急行之靴 (marching_boots)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | UNCOMMON | - |
+| `noHitWindow` | 160 | ticks (8s) |
+| `noHurtWindow` | 80 | ticks (4s) |
+| `speedAmplifier` | 1 | (等级 II) |
+| `speedRefresh` | 25 | ticks (1.25s) |
+| `maxDuration` | 300 | ticks (15s) |
+| `cooldown` | 240 | ticks (12s) |
+| `attackExit` | true | (命中即退出) |
+
+### 5. 轻灵之靴 (gossamer_boots)
+
+| 参数 | 值 | 单位 |
+|------|-----|------|
+| `rarity` | RARE | - |
+| `triggerBlock` | `minecraft:cobweb` | - |
+| `webSlowReduce` | 0.70 | (减速降低 70%) |
+| `slownessDowngradeThreshold` | 1 | (II 及以上降为 I) |
+| `refreshTicks` | 25 | ticks (1.25s) |
+
+---
+
 ## 冷却时间汇总
 
 ### 头盔
@@ -353,6 +439,16 @@
 | 潜行之胫 | 充能间隔 | 900 | 45 |
 | 清账步态 | 速度 | 320 | 16 |
 
+### 靴子
+
+| 靴子 | 效果 | 冷却/窗口 (ticks) | 冷却/窗口 (秒) |
+|------|------|------------------|---------------|
+| 无追索步履 | 消隐 | 900 | 45 |
+| 边界行走 | 跳跃刷新 | 25 | 1.25 |
+| 幽灵步伐 | 应急幽灵 CD | 300 | 15 |
+| 急行之靴 | 退出冷却 | 240 | 12 |
+| 轻灵之靴 | 蛛网刷新窗口 | 25 | 1.25 |
+
 ---
 
 ## 扫描/更新间隔汇总
@@ -377,6 +473,15 @@
 |------|-------------|-----------|
 | 走私者暗袋（磁吸扫描） | 20 | 1 |
 | 潜行之胫（充能检测） | 20 | 1 |
+
+### 靴子
+
+| 靴子 | 间隔 (ticks) | 间隔 (秒) |
+|------|-------------|-----------|
+| 靴子总扫描（BootsTick） | 20 | 1 |
+| 边界行走（Jump 刷新） | 25 | 1.25 |
+| 急行之靴（Speed 刷新） | 25 | 1.25 |
+| 轻灵之靴（蛛网刷新） | 25 | 1.25 |
 
 ---
 
@@ -519,6 +624,39 @@ public class LeggingsEffectConstants {
     public static final int CLEAR_LEDGER_MAX_DURATION = 120;
     public static final int CLEAR_LEDGER_COOLDOWN = 320;
 }
+
+public class BootsEffectConstants {
+    // 通用
+    public static final int BOOT_SCAN_INTERVAL_TICKS = 20;
+
+    // 无追索步履
+    public static final int UNTRACEABLE_IDLE_WINDOW_TICKS = 240;
+    public static final int UNTRACEABLE_INVIS_TICKS = 60;
+    public static final int UNTRACEABLE_CD_TICKS = 900;
+
+    // 边界行走
+    public static final int BOUNDARY_JUMP_LEVEL = 1;
+    public static final int BOUNDARY_REFRESH_TICKS = 25;
+
+    // 幽灵步伐
+    public static final int GHOST_COMBAT_LOCK_TICKS = 160;
+    public static final int GHOST_HIT_WINDOW_TICKS = 20;
+    public static final int GHOST_HIT_COUNT_THRESHOLD = 2;
+    public static final int GHOST_BURST_TICKS = 20;
+    public static final int GHOST_BURST_CD_TICKS = 300;
+
+    // 急行之靴
+    public static final int MARCH_NO_HIT_TICKS = 160;
+    public static final int MARCH_NO_HURT_TICKS = 80;
+    public static final int MARCH_SPEED_LEVEL = 2;
+    public static final int MARCH_MAX_DURATION_TICKS = 300;
+    public static final int MARCH_CD_TICKS = 240;
+
+    // 轻灵之靴
+    public static final double GOSSAMER_WEB_SLOW_REDUCE = 0.70;
+    public static final int GOSSAMER_SLOWNESS_DOWNGRADE = 1;
+    public static final int GOSSAMER_REFRESH_TICKS = 25;
+}
 ```
 
 ---
@@ -556,3 +694,13 @@ public class LeggingsEffectConstants {
 | 擦身护胫 | TBD | TBD | TBD | TBD | EPIC |
 | 潜行之胫 | TBD | TBD | TBD | TBD | RARE |
 | 清账步态 | TBD | TBD | TBD | TBD | RARE |
+
+### 靴子
+
+| 靴子 | cost | weight | minLevel | maxLevel | rarityGate |
+|------|------|--------|----------|----------|------------|
+| 无追索步履 | TBD | TBD | TBD | TBD | EPIC |
+| 边界行走 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 幽灵步伐 | TBD | TBD | TBD | TBD | RARE |
+| 急行之靴 | TBD | TBD | TBD | TBD | UNCOMMON |
+| 轻灵之靴 | TBD | TBD | TBD | TBD | RARE |

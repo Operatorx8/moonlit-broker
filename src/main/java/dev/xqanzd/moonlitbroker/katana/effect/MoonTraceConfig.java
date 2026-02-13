@@ -59,10 +59,10 @@ public class MoonTraceConfig {
     public static final float MAGIC_PERCENT_CAP_BOSS = 4.0f;      // Boss：与普通目标一致
 
     // === 夜间速度 Buff ===
-    public static final int SPEED_BUFF_DURATION = 60;             // Speed buff 持续 3秒（刷新制）
+    public static final int SPEED_BUFF_DURATION = 120;             // Speed buff 持续 6秒（刷新制）
     public static final int SPEED_BUFF_LEVEL = 0;                 // Speed I
     public static final int SPEED_BUFF_REFRESH_INTERVAL = 40;     // 每 2秒刷新一次
 
     // === 夜间夜视 Buff ===
-    public static final int NIGHT_VISION_DURATION = 60;           // 持续 3秒（与 Speed 同步刷新）
+    public static final int NIGHT_VISION_DURATION = 1200;           // 持续 60秒（与 Speed 同步刷新）
 }
