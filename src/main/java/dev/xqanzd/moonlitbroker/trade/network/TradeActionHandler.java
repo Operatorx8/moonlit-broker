@@ -31,8 +31,8 @@ import java.util.Map;
  */
 public class TradeActionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(TradeActionHandler.class);
-    private static final int TRADE_PAGE_SIZE = 7;
-    private static final int ELIGIBLE_TRADE_COUNT = 15;
+    private static final int TRADE_PAGE_SIZE = 18;
+    private static final int TRADE_TOTAL_PAGES = 4;
     private static final int REFRESH_SCROLL_COST = 1;
     private static final Item REFRESH_SCROLL_ITEM = ModItems.TRADE_SCROLL;
 
@@ -84,7 +84,7 @@ public class TradeActionHandler {
         switch (action) {
             case OPEN_NORMAL -> handleOpenNormal(player, merchant);
             case SWITCH_SECRET -> handleSwitchSecret(player, merchant);
-            case REFRESH -> handleRefresh(player, merchant);
+            case REFRESH -> handleRefresh(player, merchant, packet.pageIndex());
             case PREV_PAGE, NEXT_PAGE -> handlePageNav(player, merchant, action);
             case SUBMIT_BOUNTY -> BountyHandler.trySubmitBounty(player, merchant);
         }
@@ -284,17 +284,8 @@ public class TradeActionHandler {
         player.sendMessage(Text.literal("已进入隐藏交易页").formatted(Formatting.LIGHT_PURPLE), false);
     }
 
-    private static void handleRefresh(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
-        boolean onSecret = isOnSecretPage(player, merchant);
-
-        // Task C: Secret refresh rejection — HIDDEN page refresh is not allowed
-        if (onSecret) {
-            LOGGER.info(
-                    "[MoonTrade] REFRESH_SECRET_GUARD player={} merchant={} stable=true reason=refresh_rejected_on_hidden",
-                    playerTag(player), merchantTag(merchant));
-            player.sendMessage(Text.literal("隐藏交易页不可刷新").formatted(Formatting.RED), true);
-            return;
-        }
+    private static void handleRefresh(ServerPlayerEntity player, MysteriousMerchantEntity merchant, int requestedPageIndex) {
+        int logicalPage = sanitizeRequestedRefreshPageIndex(player, merchant, requestedPageIndex);
 
         String source = "REFRESH_NORMAL";
         String unlockState = resolveUnlockState(player, merchant);
@@ -305,8 +296,9 @@ public class TradeActionHandler {
         int haveBefore = countItem(player, REFRESH_SCROLL_ITEM);
 
         LOGGER.info(
-                "[MoonTrade] action=REFRESH_REQUEST side=S player={} merchant={} source={} beforeHash={} offersTotal={} base={} sigil={} hidden={} pageSize={}",
+                "[MoonTrade] action=REFRESH_REQUEST side=S player={} merchant={} source={} page={} beforeHash={} offersTotal={} base={} sigil={} hidden={} pageSize={}",
                 playerTag(player), merchantTag(merchant), source,
+                logicalPage + 1,
                 Integer.toHexString(beforeHash),
                 beforeCounters.totalCount(), beforeCounters.baseCount(), beforeCounters.sigilCount(),
                 beforeCounters.hiddenCount(),
@@ -355,20 +347,19 @@ public class TradeActionHandler {
         {
             ServerWorld world = player.getServerWorld();
             MerchantUnlockState state = MerchantUnlockState.getServerState(world);
-            MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-            MerchantUnlockState.Progress.RefreshCountReadResult readResult = progress
-                    .readSigilRefreshSeen(merchantUuid);
-            int refreshSeenBefore = readResult.count();
-            int refreshSeenAfter = refreshSeenBefore + 1;
-            progress.setSigilRefreshSeen(merchantUuid, refreshSeenAfter);
+            MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), merchant.getVariantKey());
+            int pageKey = logicalPage + 1;
+            int refreshSeenBefore = progress.getShelfRefreshNonce(merchantUuid, pageKey);
+            int refreshSeenAfter = progress.incShelfRefreshNonce(merchantUuid, pageKey);
             state.markDirty();
             if (TradeConfig.TRADE_DEBUG) {
                 LOGGER.debug(
-                        "[MoonTrade] REFRESH_COUNT_WRITE playerUuid={} merchantUuid={} page=NORMAL before={} after={} source={} costApplied=1",
-                        player.getUuid(), merchantUuid, refreshSeenBefore, refreshSeenAfter, readResult.source());
+                        "[MoonTrade] REFRESH_COUNT_WRITE playerUuid={} merchantUuid={} page={} before={} after={} source=page_nonce costApplied=1",
+                        player.getUuid(), merchantUuid, pageKey, refreshSeenBefore, refreshSeenAfter);
             }
             rebuildAudit = merchant.rebuildOffersForPlayer(player,
-                    MysteriousMerchantEntity.OfferBuildSource.REFRESH_NORMAL);
+                    MysteriousMerchantEntity.OfferBuildSource.REFRESH_NORMAL,
+                    logicalPage);
         }
         long durationMs = Math.max(0L, (System.nanoTime() - rebuildStartNanos) / 1_000_000L);
 
@@ -385,8 +376,9 @@ public class TradeActionHandler {
                 true);
 
         LOGGER.info(
-                "[MoonTrade] action=REFRESH_APPLY side=S player={} merchant={} source={} item={} cost={} haveBefore={} haveAfter={} unlock={} beforeHash={} afterHash={} offersTotal={} base={} sigil={} hidden={} seed={} cache={} refreshSeenCount={} durationMs={} pageSize={}",
+                "[MoonTrade] action=REFRESH_APPLY side=S player={} merchant={} source={} page={} item={} cost={} haveBefore={} haveAfter={} unlock={} beforeHash={} afterHash={} offersTotal={} base={} sigil={} hidden={} seed={} cache={} refreshSeenCount={} durationMs={} pageSize={}",
                 playerTag(player), merchantTag(merchant), source,
+                logicalPage + 1,
                 refreshItemId, REFRESH_SCROLL_COST, haveBefore, haveAfter, unlockState,
                 Integer.toHexString(beforeHash), Integer.toHexString(afterHash),
                 afterCounters.totalCount(), afterCounters.baseCount(), afterCounters.sigilCount(),
@@ -396,6 +388,21 @@ public class TradeActionHandler {
                 rebuildAudit == null ? -1 : rebuildAudit.refreshSeenCount(),
                 durationMs,
                 TRADE_PAGE_SIZE);
+    }
+
+    private static int sanitizeRequestedRefreshPageIndex(ServerPlayerEntity player,
+            MysteriousMerchantEntity merchant,
+            int requestedPageIndex) {
+        int sanitizedPageIndex = requestedPageIndex;
+        if (requestedPageIndex < 0 || requestedPageIndex >= TRADE_TOTAL_PAGES) {
+            sanitizedPageIndex = 0;
+            long requestedPageUi = (long) requestedPageIndex + 1L;
+            LOGGER.warn(
+                    "[MoonTrade] action=REFRESH_INVALID_PAGE side=S player={} merchant={} requestedPageIndex={} requestedPageUi={} fallbackPageIndex={} fallbackPageUi={}",
+                    playerTag(player), merchantTag(merchant), requestedPageIndex, requestedPageUi,
+                    sanitizedPageIndex, sanitizedPageIndex + 1);
+        }
+        return sanitizedPageIndex;
     }
 
     private static void handlePageNav(ServerPlayerEntity player, MysteriousMerchantEntity merchant,
@@ -481,7 +488,7 @@ public class TradeActionHandler {
         if (progress.isUnlockedKatanaHidden(variantKey)) {
             return "UNLOCKED";
         }
-        return progress.getTradeCount(variantKey) >= ELIGIBLE_TRADE_COUNT ? "ELIGIBLE" : "LOCKED";
+        return "ELIGIBLE";
     }
 
     /**

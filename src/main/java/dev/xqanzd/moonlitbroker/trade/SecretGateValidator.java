@@ -3,10 +3,8 @@ package dev.xqanzd.moonlitbroker.trade;
 import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
 import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
-import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.server.world.ServerWorld;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +32,6 @@ public class SecretGateValidator {
      * 需要同时满足：
      * 1. 持有绑定到自己的 Merchant Mark
      * 2. 持有 SEALED 等级的 Trade Scroll，且 uses >= 2
-     * 3. reputation >= 15
      */
     public static ValidationResult validate(PlayerEntity player, MysteriousMerchantEntity merchant) {
         // 条件1：检查 Merchant Mark
@@ -65,26 +62,9 @@ public class SecretGateValidator {
             return ValidationResult.fail("卷轴次数不足 (需要 " + TradeConfig.SECRET_SCROLL_USES_MIN + ")");
         }
 
-        // 条件3：检查 reputation
-        if (!(player.getWorld() instanceof ServerWorld serverWorld)) {
-            return ValidationResult.fail("服务端验证失败");
-        }
-        
-        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
-        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-        int reputation = progress.getReputation();
-        
-        if (reputation < TradeConfig.SECRET_REP_THRESHOLD) {
-            if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] GATE_FAIL player={} reason=REP_LOW rep={}", 
-                    player.getName().getString(), reputation);
-            }
-            return ValidationResult.fail("声望不足 (需要 " + TradeConfig.SECRET_REP_THRESHOLD + ", 当前 " + reputation + ")");
-        }
-
-        // 所有条件满足
-        LOGGER.info("[MoonTrade] GATE_PASS player={} rep={}", 
-            player.getName().getString(), reputation);
+        // 所有条件满足（成本门槛模式：不再使用 reputation / totalTrades / merchantXp）
+        LOGGER.info("[MoonTrade] GATE_PASS player={} reason=cost_gate_only",
+                player.getName().getString());
         return ValidationResult.success();
     }
 

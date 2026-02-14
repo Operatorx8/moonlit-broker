@@ -19,7 +19,10 @@ public class MysteriousAnvilBlock extends AnvilBlock {
     @Override
     protected NamedScreenHandlerFactory createScreenHandlerFactory(BlockState state, World world, BlockPos pos) {
         return new SimpleNamedScreenHandlerFactory(
-                (syncId, inventory, player) -> new MysteriousAnvilScreenHandler(syncId, inventory, ScreenHandlerContext.EMPTY),
+                (syncId, inventory, player) -> new MysteriousAnvilScreenHandler(
+                        syncId,
+                        inventory,
+                        ScreenHandlerContext.create(world, pos)),
                 Text.translatable("container.repair")
         );
     }

@@ -7,6 +7,8 @@ import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorItems;
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.weapon.transitional.item.TransitionalWeaponItems;
+import dev.xqanzd.moonlitbroker.registry.ModBlocks;
 import dev.xqanzd.moonlitbroker.registry.ModEntities;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.KatanaIdUtil;
@@ -98,7 +100,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     /** 发布版默认关闭；仅用于验证滚动条可滚动（额外注入测试交易） */
     private static final boolean DEBUG_SCROLL_INJECT = false;
     /** 发布版默认关闭；开启后在 REFRESH_NORMAL 时追加 10 条 debug trade，验证 refresh 确实重建 offers */
-    private static final boolean DEBUG_REFRESH_INJECT = true;
+    private static final boolean DEBUG_REFRESH_INJECT = false;
     /** 发布版默认关闭；开启后启用商人变体系统调试日志 */
     public static final boolean DEBUG_VARIANT = false;
 
@@ -122,6 +124,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             this.chosenType = chosenType;
             this.roll = roll;
         }
+    }
+
+    private record OfferUsageState(int uses, int demandBonus, int specialPrice) {
+    }
+
+    private enum SparkTier {
+        UNCOMMON,
+        RARE
     }
 
     /**
@@ -284,6 +294,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             Items.NETHERITE_CHESTPLATE,
             Items.NETHERITE_LEGGINGS,
             Items.NETHERITE_BOOTS,
+            Items.NETHERITE_SCRAP,
             Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE);
     /** 去重默认按输出 item；仅白名单物品按 item + NBT 分流，避免误杀不同内容。 */
     private static final Set<Item> NBT_SENSITIVE_DEDUP_OUTPUTS = Set.of(
@@ -310,7 +321,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private static final String ARCANE_REWARD_P3_05 = "p3_05_sacrifice";
     private static final String ARCANE_REWARD_P3_06 = "p3_06_silver_notes";
     private static final String ARCANE_REWARD_P3_07 = "p3_07_blaze_powder";
-    private static final String ARCANE_REWARD_P3_08 = "p3_08_netherite_scrap";
+    private static final String ARCANE_REWARD_P3_08 = "p3_08_ancient_debris";
 
     // ========== Phase 3: AI 行为常量 ==========
     /** 基础移动速度 */
@@ -368,9 +379,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     @SuppressWarnings("unused")
     private boolean sigilRollInitialized_DEPRECATED = false;
 
-    private static final int ELIGIBLE_TRADE_COUNT = 15;
     private static final int REFRESH_GUARANTEE_COUNT = 3;
-    private static final int TRADE_PAGE_SIZE = 7;
+    private static final int TRADE_PAGE_SIZE = 18;
+    private static final int TRADE_TOTAL_PAGES = 4;
+    private static final int PAGE_FIXED_COUNT = TradeConfig.VISIBLE_TOP_SLOTS;
+    private static final int PAGE_SHELF_COUNT = TRADE_PAGE_SIZE - PAGE_FIXED_COUNT;
+    private static final int HIDDEN_FIXED_COUNT = TradeConfig.VISIBLE_TOP_SLOTS;
+    private static final int HIDDEN_SHELF_COUNT = TRADE_PAGE_SIZE - HIDDEN_FIXED_COUNT;
     private static final int KATANA_OFFER_MAX_USES = 1;
     private static final int RECLAIM_OFFER_MAX_USES = 1;
 
@@ -1091,52 +1106,34 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         String variantKey = getVariantKey();
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), variantKey);
 
+        boolean unlockStateChanged = false;
         String arcaneRewardKey = resolveArcaneRewardKey(offer);
         if (arcaneRewardKey != null) {
             boolean firstClaim = progress.markArcaneRewardClaimed(variantKey, arcaneRewardKey);
             if (firstClaim) {
-                state.markDirty();
+                unlockStateChanged = true;
             }
             LOGGER.info(
                     "[MoonTrade] ARCANE_REWARD_CLAIM player={} merchant={} variant={} rewardKey={} firstClaim={}",
                     player.getUuid(), this.getUuid(), variantKey, arcaneRewardKey, firstClaim);
         }
 
-        // 3. 更新玩家交易数据
-        progress.setTradeCount(variantKey, progress.getTradeCount(variantKey) + 1);
-        int count = progress.getTradeCount(variantKey);
-        state.markDirty();
-
-        // 4. 给玩家正面效果 (100 ticks = 5秒)
+        // 成本门槛模式：不再以 totalTrades / merchantXp 作为解锁条件。
+        // 仍保留交易完成的短时增益反馈。
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 100, 0));
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 100, 0));
 
-        // 5. 达到解封资格提示（仅一次）
-        if (count >= ELIGIBLE_TRADE_COUNT && !progress.isEligibleNotified(variantKey)) {
-            progress.setEligibleNotified(variantKey, true);
-            state.markDirty();
-            if (player instanceof ServerPlayerEntity serverPlayer) {
-                serverPlayer.sendMessage(
-                        Text.literal("[神秘商人] 你已获得解封资格。")
-                                .formatted(Formatting.GOLD, Formatting.BOLD),
-                        false);
-            }
-            // P0-9 修复：关键业务日志使用 info 级别
-            LOGGER.info("[MerchantUnlock] ELIGIBLE player={} tradeCount={}",
-                    player.getName().getString(), count);
-        }
-
-        // 6. 识别解封交易
+        // 识别解封交易（仅由成本物品触发）
         if (isUnsealOffer(offer)) {
             if (!progress.isUnlockedKatanaHidden(variantKey)) {
                 progress.setUnlockedKatanaHidden(variantKey, true);
-                state.markDirty();
+                unlockStateChanged = true;
                 LOGGER.info("[MerchantUnlock] UNLOCK player={} uuid={} variant={}",
                         player.getName().getString(), player.getUuid().toString().substring(0, 8), variantKey);
             }
             if (!progress.isUnlockedNotified(variantKey)) {
                 progress.setUnlockedNotified(variantKey, true);
-                state.markDirty();
+                unlockStateChanged = true;
                 if (player instanceof ServerPlayerEntity serverPlayer) {
                     serverPlayer.sendMessage(
                             Text.literal("[神秘商人] 你解封了卷轴，隐藏交易已开启。")
@@ -1151,16 +1148,18 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             }
         }
 
-        // Task F: afterUsing unlock scope audit log
-        LOGGER.info(
-                "[MoonTrade] UNLOCK_SCOPE_AUDIT player={} variant={} eligible={} unlocked={} tradeCount={} scope=per_variant",
-                player.getName().getString(), variantKey,
-                count >= ELIGIBLE_TRADE_COUNT, progress.isUnlockedKatanaHidden(variantKey), count);
+        if (unlockStateChanged) {
+            state.markDirty();
+        }
 
-        // 6. 调试日志（仅在 DEBUG_AI 开启时输出详细信息）
+        LOGGER.info(
+                "[MoonTrade] UNLOCK_SCOPE_AUDIT player={} variant={} eligible={} unlocked={} scope=cost_gate_only",
+                player.getName().getString(), variantKey,
+                true, progress.isUnlockedKatanaHidden(variantKey));
+
         if (DEBUG_AI) {
-            LOGGER.debug("[MysteriousMerchant] TRADE_COMPLETE player={} count={} unlocked={}",
-                    player.getName().getString(), count, progress.isUnlockedKatanaHidden(variantKey));
+            LOGGER.debug("[MysteriousMerchant] TRADE_COMPLETE player={} unlocked={}",
+                    player.getName().getString(), progress.isUnlockedKatanaHidden(variantKey));
         }
     }
 
@@ -1175,21 +1174,26 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
         addBaseOffers(offers);
+        normalizeMerchantExperienceInPlace(offers);
+        sanitizeReleaseOffersInPlace(offers, "FILL_RECIPES_FALLBACK");
         LOGGER.info(
                 "[MoonTrade] action=FILL_RECIPES_CALLED side=S merchant={} offersBefore={} offersAfter={} reason=empty_fallback_add_base",
                 merchantTag(), offersBefore, offers.size());
     }
 
     private void addBaseOffers(TradeOfferList offers) {
-        // ========== PAGE 1: 生存与基础 (18 条 emerald + A 锚点) ==========
-        addPage1Offers(offers);
-        // ========== PAGE 2: 货币化建造/生产/附魔周边 (18 条，银币主消耗) ==========
-        addPage2Offers(offers);
+        addBaseOffers(offers, null, null, getVariantKey(), new int[TRADE_TOTAL_PAGES]);
+    }
 
-        // Task E: 变体特色交易（过渡装备 + 特色物品 + A 锚点）
-        addVariantSpecialtyOffers(offers);
+    private void addBaseOffers(TradeOfferList offers,
+            UUID playerUuid,
+            MerchantUnlockState.Progress progress,
+            String variantKey,
+            int[] pageRefreshNonces) {
+        addPage1Offers(offers, playerUuid, getPageRefreshNonce(pageRefreshNonces, 1));
+        addPage2Offers(offers, playerUuid, getPageRefreshNonce(pageRefreshNonces, 2));
+        addPage3Offers(offers, playerUuid, progress, variantKey, getPageRefreshNonce(pageRefreshNonces, 3));
 
-        // Debug-only trades (发布默认隐藏)
         if (TradeConfig.DEBUG_TRADES) {
             addDebugOffers(offers);
         }
@@ -1199,175 +1203,965 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 variant != null ? variant.typeKey : "UNKNOWN", offers.size());
     }
 
+    private static int getPageRefreshNonce(int[] nonces, int pageIndex) {
+        if (nonces == null || pageIndex <= 0 || pageIndex > nonces.length) {
+            return 0;
+        }
+        return Math.max(0, nonces[pageIndex - 1]);
+    }
+
     /**
-     * PAGE 1 / BASE: 生存与基础 (18 条 emerald 交易)
-     * 经济规则：无 emerald->diamond/netherite，无 iron->emerald
+     * PAGE 1 / BASE: fixed 12 + shelf 6
      */
-    private void addPage1Offers(TradeOfferList offers) {
+    private void addPage1Offers(TradeOfferList offers, UUID playerUuid, int refreshNonce) {
         int pageStart = offers.size();
-        // P1-01: 1 Iron -> 64 Torch
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.TORCH, 64), 16, 5, 0.05f));
-        // P1-02: 1 Iron -> 64 Arrow
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.ARROW, 64), 12, 5, 0.05f));
-        // P1-03: 2 Iron -> 32 Bread
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.BREAD, 32), 12, 5, 0.05f));
-        // P1-04: 3 Iron -> 24 Cooked Beef
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.COOKED_BEEF, 24), 10, 5, 0.05f));
-        // P1-05: 2 Iron -> 32 Oak Log
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.OAK_LOG, 32), 10, 5, 0.05f));
-        // P1-06: 2 Iron -> 128 Oak Planks (2 stacks)
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.OAK_PLANKS, 64), 10, 5, 0.05f));
-        // P1-07: 2 Iron -> 64 Ladder
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.LADDER, 64), 12, 5, 0.05f));
-        // P1-08: 2 Iron -> 64 Glass
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GLASS, 64), 10, 5, 0.05f));
-        // P1-09: 2 Iron -> 64 Cobblestone
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.COBBLESTONE, 64), 10, 5, 0.05f));
-        // P1-10: 3 Iron -> 64 Stone Bricks
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.STONE_BRICKS, 64), 8, 5, 0.05f));
-        // P1-11: 2 Iron -> 64 Sand
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.SAND, 64), 8, 5, 0.05f));
-        // P1-12: 2 Iron -> 64 Gravel
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GRAVEL, 64), 8, 5, 0.05f));
-        // P1-13: 1 Iron -> 64 Dirt
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.DIRT, 64), 8, 5, 0.05f));
-        // P1-14: 1 Iron -> 64 Stick
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.STICK, 64), 12, 5, 0.05f));
-        // P1-15: 2 Iron -> 48 String
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.STRING, 48), 8, 5, 0.05f));
-        // P1-16: 2 Iron -> 64 Bone Meal
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.BONE_MEAL, 64), 8, 5, 0.05f));
-        // P1-17: 2 Iron -> 32 Leather
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.LEATHER, 32), 6, 5, 0.05f));
-        // P1-18: 3 Iron -> 32 Coal
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.COAL, 32), 8, 5, 0.05f));
+
+        // Fixed 12: high-frequency convenience
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.TORCH, 64), 16, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(Items.ARROW, 64), 14, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.BREAD, 32), 12, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.COOKED_BEEF, 24), 10, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.OAK_LOG, 32), 10, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GLASS, 64), 10, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.SMOOTH_STONE, 64), 10, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GLASS_PANE, 64), 10, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.RAIL, 48), 8, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.BRICKS, 64), 8, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.STRING, 48), 8, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.BONE_MEAL, 64), 8, 0, 0.05f));
+
+        ArrayList<TradeOffer> shelfCandidates = new ArrayList<>();
+        moveFixedOverflowToShelf(offers, pageStart, shelfCandidates);
+        deterministicShuffleBaseSegment(offers, pageStart, pageStart + PAGE_FIXED_COUNT, 1, mustSeeFixedOffsets());
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.OAK_PLANKS, 64), 10, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.LADDER, 64), 12, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.COBBLED_DEEPSLATE, 64), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.SCAFFOLDING, 48), 10, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.LEATHER, 32), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.STONE_BRICKS, 64), 10, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.COBBLESTONE, 64), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.SAND, 64), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GRAVEL, 64), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.COAL, 64), 8, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.MOSSY_STONE_BRICKS, 64), 6, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.POWERED_RAIL, 32), 6, 0, 0.05f));
+        injectVisibleSparkOffer(offers, pageStart, 1, refreshNonce, playerUuid, shelfCandidates);
+        addShelfOffersToPage(offers, pageStart, shelfCandidates, 1, refreshNonce, playerUuid, PAGE_SHELF_COUNT);
+
         logPageGateCostSummary("PAGE1", offers, pageStart);
     }
 
     /**
-     * PAGE 2 / BASE: 生产/附魔书服务/强化工具服务 (18 条)
-     * P2-01: 附魔书(Efficiency II)  P2-02: Redstone  P2-03: Lapis
-     * P2-04: 附魔书(Unbreaking II)  P2-05: Obsidian  P2-06: 附魔书(Efficiency III)
-     * P2-07: Bookshelf  P2-08: 附魔书(Unbreaking III)
-     * P2-09: 附魔书(Mending I)  P2-10: Name Tag
-     * P2-11..12: Iron 大宗便利
-     * P2-13..18: 附魔铁工具/弓服务
+     * PAGE 2 / BASE: fixed 12 + shelf 6
      */
-    private void addPage2Offers(TradeOfferList offers) {
+    private void addPage2Offers(TradeOfferList offers, UUID playerUuid, int refreshNonce) {
         int pageStart = offers.size();
 
-        // ---- Enchanted Book Service + Production (Emerald) ----
-        // P2-01: 6E + Book -> EnchBook(Efficiency II)
+        // Fixed 12
         addBaseOfferWithLoopGuard(offers, new TradeOffer(
                 new TradedItem(Items.EMERALD, 6),
                 Optional.of(new TradedItem(Items.BOOK, 1)),
                 createEnchantedBook(Enchantments.EFFICIENCY, 2),
-                4, 10, 0f), "p2_enchbook_efficiency_2");
-        // P2-02: 4E -> 32 Redstone
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 4), new ItemStack(Items.REDSTONE, 32), 10, 5, 0.05f));
-        // P2-03: 4E -> 32 Lapis
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 4), new ItemStack(Items.LAPIS_LAZULI, 32), 10, 5, 0.05f));
-        // P2-04: 6E + Book -> EnchBook(Unbreaking II)
+                4, 0, 0f), "p2_fixed_book_efficiency_2");
         addBaseOfferWithLoopGuard(offers, new TradeOffer(
                 new TradedItem(Items.EMERALD, 6),
                 Optional.of(new TradedItem(Items.BOOK, 1)),
                 createEnchantedBook(Enchantments.UNBREAKING, 2),
-                4, 10, 0f), "p2_enchbook_unbreaking_2");
-        // P2-05: 6E -> 8 Obsidian
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 6), new ItemStack(Items.OBSIDIAN, 8), 6, 5, 0.05f));
-        // P2-06: 10E + SilverNote -> EnchBook(Efficiency III)  (Book cost folded into E price; TradeOffer max 2 inputs)
+                4, 0, 0f), "p2_fixed_book_unbreaking_2");
         addBaseOfferWithLoopGuard(offers, new TradeOffer(
-                new TradedItem(Items.EMERALD, 10),
-                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
-                createEnchantedBook(Enchantments.EFFICIENCY, 3),
-                2, 15, 0f), "p2_enchbook_efficiency_3");
-        // P2-07: 5E -> 8 Bookshelf
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 5), new ItemStack(Items.BOOKSHELF, 8), 6, 5, 0.05f));
-        // P2-08: 10E + SilverNote -> EnchBook(Unbreaking III)  (Book cost folded into E price)
-        addBaseOfferWithLoopGuard(offers, new TradeOffer(
-                new TradedItem(Items.EMERALD, 10),
-                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
-                createEnchantedBook(Enchantments.UNBREAKING, 3),
-                2, 15, 0f), "p2_enchbook_unbreaking_3");
-
-        // ---- Enchanted Book Service (high tier) + Name Tag ----
-        // P2-09: 16E + 2 SilverNote -> EnchBook(Mending I)  (Book cost folded into E price)
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(Items.BOOK, 1)),
+                createEnchantedBook(Enchantments.FIRE_ASPECT, 2),
+                1, 0, 0f), "p2_fixed_book_fire_aspect_2");
         addBaseOfferWithLoopGuard(offers, new TradeOffer(
                 new TradedItem(Items.EMERALD, 16),
                 Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
                 createEnchantedBook(Enchantments.MENDING, 1),
-                1, 20, 0f), "p2_enchbook_mending_1");
-        // P2-10: 8E -> Name Tag x1
+                1, 0, 0f), "p2_fixed_book_mending_1");
         addBaseOfferWithLoopGuard(offers, new TradeOffer(
-                new TradedItem(Items.EMERALD, 8),
-                new ItemStack(Items.NAME_TAG, 1),
-                3, 10, 0f), "p2_name_tag");
-        // P2-11: 2I -> 64 Torch (bulk)
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.TORCH, 64), 8, 5, 0.05f));
-        // P2-12: 2I -> 64 Arrow (bulk)
-        offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.ARROW, 64), 8, 5, 0.05f));
-
-        // ---- Tool service (Emerald + Iron / SilverNote) ----
-        // P2-13: 6E + 4I -> Enchanted Iron Pickaxe (Eff II + Unbreaking I)
-        offers.add(new TradeOffer(
-                new TradedItem(Items.EMERALD, 6),
-                Optional.of(new TradedItem(Items.IRON_INGOT, 4)),
-                createEnchantedTool(Items.IRON_PICKAXE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
-                3, 10, 0.05f));
-        // P2-14: 6E + 4I -> Enchanted Iron Axe (Eff II + Unbreaking I)
-        offers.add(new TradeOffer(
-                new TradedItem(Items.EMERALD, 6),
-                Optional.of(new TradedItem(Items.IRON_INGOT, 4)),
-                createEnchantedTool(Items.IRON_AXE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
-                3, 10, 0.05f));
-        // P2-15: 6E + 4I -> Enchanted Iron Shovel (Eff II + Unbreaking I)
-        offers.add(new TradeOffer(
-                new TradedItem(Items.EMERALD, 6),
-                Optional.of(new TradedItem(Items.IRON_INGOT, 4)),
-                createEnchantedTool(Items.IRON_SHOVEL, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
-                3, 10, 0.05f));
-        // P2-16: 6E + 4I -> Enchanted Iron Sword (Sharp II + Unbreaking I)
-        offers.add(new TradeOffer(
-                new TradedItem(Items.EMERALD, 6),
-                Optional.of(new TradedItem(Items.IRON_INGOT, 4)),
-                createEnchantedTool(Items.IRON_SWORD, Enchantments.SHARPNESS, 2, Enchantments.UNBREAKING, 1),
-                3, 10, 0.05f));
-        // P2-17: 10E + 1 SilverNote -> Enchanted Iron Pickaxe+ (Eff III + Unbreaking II)
-        offers.add(new TradeOffer(
-                new TradedItem(Items.EMERALD, 10),
+                new TradedItem(Items.EMERALD, 12),
                 Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
-                createEnchantedTool(Items.IRON_PICKAXE, Enchantments.EFFICIENCY, 3, Enchantments.UNBREAKING, 2),
-                2, 15, 0.05f));
-        // P2-18: 10E + 1 SilverNote -> Enchanted Bow (Power II + Unbreaking II)
+                createEnchantedBook(Enchantments.SILK_TOUCH, 1),
+                1, 0, 0f), "p2_fixed_book_silk_touch_1");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 14),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.FORTUNE, 2),
+                1, 0, 0f), "p2_fixed_book_fortune_2");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 16),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                createEnchantedBook(Enchantments.FEATHER_FALLING, 4),
+                1, 0, 0f), "p2_fixed_book_feather_falling_4");
+        offers.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedTool(Items.IRON_PICKAXE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
+                3, 0, 0.05f));
+        offers.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedTool(Items.IRON_SWORD, Enchantments.SHARPNESS, 2, Enchantments.UNBREAKING, 1),
+                3, 0, 0.05f));
         offers.add(new TradeOffer(
                 new TradedItem(Items.EMERALD, 10),
                 Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
                 createEnchantedTool(Items.BOW, Enchantments.POWER, 2, Enchantments.UNBREAKING, 2),
-                2, 15, 0.05f));
+                2, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 6), new ItemStack(Items.OBSIDIAN, 8), 6, 0, 0.05f));
+        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 4), new ItemStack(Items.REDSTONE, 64), 6, 0, 0.05f));
+
+        ArrayList<TradeOffer> shelfCandidates = new ArrayList<>();
+        moveFixedOverflowToShelf(offers, pageStart, shelfCandidates);
+        deterministicShuffleBaseSegment(offers, pageStart, pageStart + PAGE_FIXED_COUNT, 2, mustSeeFixedOffsets());
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.LOOTING, 2),
+                2, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.FLAME, 1),
+                2, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.KNOCKBACK, 2),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 10),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.EFFICIENCY, 3),
+                2, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 10),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.UNBREAKING, 3),
+                2, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(Items.EMERALD, 12),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.SWEEPING_EDGE, 3),
+                1, 0, 0f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedTool(Items.IRON_AXE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
+                3, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedTool(Items.IRON_SHOVEL, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
+                3, 0, 0.05f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedTool(Items.IRON_HOE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1),
+                3, 0, 0.05f));
+        injectVisibleSparkOffer(offers, pageStart, 2, refreshNonce, playerUuid, shelfCandidates);
+        addShelfOffersToPage(offers, pageStart, shelfCandidates, 2, refreshNonce, playerUuid, PAGE_SHELF_COUNT);
 
         logPageGateCostSummary("PAGE2", offers, pageStart);
     }
 
     /**
+     * PAGE 3 / GATE: fixed 12 + shelf 6
+     */
+    private void addPage3Offers(TradeOfferList offers,
+            UUID playerUuid,
+            MerchantUnlockState.Progress progress,
+            String variantKey,
+            int refreshNonce) {
+        int pageStart = offers.size();
+
+        // Fixed 12: gate chain + workshop
+        offers.add(createSealedLedgerOffer());
+        offers.add(createUnsealOffer());
+        offers.add(new TradeOffer(
+                new TradedItem(ModItems.SILVER_NOTE, TradeConfig.PAGE2_SCROLL_SOURCE_SILVER_COST),
+                new ItemStack(ModItems.TRADE_SCROLL, 1),
+                TradeConfig.PAGE2_SCROLL_SOURCE_MAX_USES, 0, 0.0f));
+        offers.add(new TradeOffer(
+                new TradedItem(ModItems.SILVER_NOTE, TradeConfig.PAGE2_TICKET_SOURCE_SILVER_COST),
+                Optional.of(new TradedItem(Items.EMERALD, TradeConfig.PAGE2_TICKET_SOURCE_EMERALD_TAX)),
+                new ItemStack(ModItems.MERCHANT_MARK, 1),
+                TradeConfig.PAGE2_TICKET_SOURCE_MAX_USES, 0, 0.0f));
+
+        offers.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                new ItemStack(ModBlocks.MYSTERIOUS_ANVIL_ITEM, 1),
+                2, 0, 0.0f));
+        offers.add(new TradeOffer(
+                new TradedItem(Items.DIAMOND, 2),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(ModItems.SACRIFICE, 1),
+                4, 0, 0.0f));
+        offers.add(new TradeOffer(
+                new TradedItem(Items.NETHERITE_INGOT, 1),
+                new ItemStack(ModItems.SIGIL, 1),
+                1, 0, 0.0f));
+        offers.add(new TradeOffer(
+                new TradedItem(Items.BLAZE_ROD, 2),
+                new ItemStack(ModItems.SIGIL, 1),
+                2, 0, 0.0f));
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 12),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.SWEEPING_EDGE, 3),
+                1, 0, 0.0f), "p3_fixed_book_sweeping_edge_3");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 6),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                new ItemStack(TransitionalWeaponItems.ACER, 1),
+                3, 0, 0.0f), "p3_fixed_trans_weapon_acer");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                new ItemStack(TransitionalWeaponItems.VELOX, 1),
+                3, 0, 0.0f), "p3_fixed_trans_weapon_velox");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 10),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(TransitionalWeaponItems.FATALIS, 1),
+                2, 0, 0.0f), "p3_fixed_trans_weapon_fatalis");
+        addBaseOfferWithLoopGuard(offers, new TradeOffer(
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.KNOCKBACK, 2),
+                1, 0, 0.0f), "p3_fixed_book_knockback_2");
+
+        ArrayList<TradeOffer> shelfCandidates = new ArrayList<>();
+        moveFixedOverflowToShelf(offers, pageStart, shelfCandidates);
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.SMITE, 5),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.POWER, 4),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.SWEEPING_EDGE, 3),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.KNOCKBACK, 2),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.LOOTING, 3),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.EFFICIENCY, 4),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.UNBREAKING, 3),
+                1, 0, 0.0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                createEnchantedBook(Enchantments.FLAME, 1),
+                1, 0, 0.0f));
+
+        TradeOfferList variantCandidates = new TradeOfferList();
+        addVariantSpecialtyOffers(variantCandidates);
+        shelfCandidates.addAll(variantCandidates);
+
+        injectVisibleSparkOffer(offers, pageStart, 3, refreshNonce, playerUuid, shelfCandidates);
+        addShelfOffersToPage(offers, pageStart, shelfCandidates, 3, refreshNonce, playerUuid, PAGE_SHELF_COUNT);
+        logPageGateCostSummary("PAGE3", offers, pageStart);
+    }
+
+    private void addBaseOfferCandidate(ArrayList<TradeOffer> list, TradeOffer offer) {
+        if (!TradeConfig.DEBUG_TRADES && isReleaseForbiddenCoinMintOffer(offer)) {
+            return;
+        }
+        list.add(offer);
+    }
+
+    private void moveFixedOverflowToShelf(TradeOfferList offers, int pageStart, java.util.List<TradeOffer> shelfCandidates) {
+        int keepFixedCount = Math.max(1, Math.min(TRADE_PAGE_SIZE, TradeConfig.VISIBLE_TOP_SLOTS));
+        int overflowIndex = pageStart + keepFixedCount;
+        while (offers.size() > overflowIndex) {
+            TradeOffer overflow = offers.remove(overflowIndex);
+            if (overflow != null) {
+                shelfCandidates.add(overflow);
+            }
+        }
+    }
+
+    private Set<Integer> mustSeeFixedOffsets() {
+        Set<Integer> offsets = new HashSet<>();
+        int limit = Math.max(0, Math.min(3, TradeConfig.VISIBLE_TOP_SLOTS));
+        for (int i = 0; i < limit; i++) {
+            offsets.add(i);
+        }
+        return offsets;
+    }
+
+    private SparkTier pickSparkTier(Random random) {
+        int uncommonWeight = Math.max(0, TradeConfig.SPARK_UNCOMMON_WEIGHT);
+        int rareWeight = Math.max(0, TradeConfig.SPARK_RARE_WEIGHT);
+        int totalWeight = uncommonWeight + rareWeight;
+        if (totalWeight <= 0) {
+            return SparkTier.UNCOMMON;
+        }
+        int roll = random.nextInt(totalWeight);
+        return roll < rareWeight ? SparkTier.RARE : SparkTier.UNCOMMON;
+    }
+
+    private int normalizeSparkPageUi(int pageIndex) {
+        if (pageIndex >= 1 && pageIndex <= TRADE_TOTAL_PAGES) {
+            return pageIndex;
+        }
+        if (pageIndex >= 0 && pageIndex < TRADE_TOTAL_PAGES) {
+            return pageIndex + 1;
+        }
+        return 1;
+    }
+
+    private ArrayList<TradeOffer> buildUncommonSparkPoolForPage(int pageIndex) {
+        int pageUi = normalizeSparkPageUi(pageIndex);
+        ArrayList<TradeOffer> pool = new ArrayList<>();
+        if (pageUi == 1) {
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.IRON_INGOT, 4),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.EXPERIENCE_BOTTLE, 12),
+                    2, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.IRON_INGOT, 4),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.ENDER_PEARL, 6),
+                    2, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.IRON_INGOT, 5),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.BLAZE_POWDER, 12),
+                    2, 0, 0.0f));
+            return pool;
+        }
+        if (pageUi == 2) {
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.EMERALD, 12),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.EXPERIENCE_BOTTLE, 24),
+                    2, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.EMERALD, 10),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.ENDER_PEARL, 8),
+                    2, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.EMERALD, 10),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.BLAZE_POWDER, 16),
+                    2, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(Items.EMERALD, 8),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    createEnchantedTool(Items.IRON_PICKAXE, Enchantments.EFFICIENCY, 3, Enchantments.UNBREAKING, 2),
+                    1, 0, 0.0f));
+            return pool;
+        }
+        if (pageUi == 3) {
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.EXPERIENCE_BOTTLE, 24),
+                    1, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.ENDER_PEARL, 12),
+                    1, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    new ItemStack(Items.BLAZE_POWDER, 20),
+                    1, 0, 0.0f));
+            return pool;
+        }
+        pool.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(Items.EXPERIENCE_BOTTLE, 32),
+                1, 0, 0.0f));
+        pool.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(Items.ENDER_PEARL, 16),
+                1, 0, 0.0f));
+        pool.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                new ItemStack(Items.BLAZE_POWDER, 24),
+                1, 0, 0.0f));
+        return pool;
+    }
+
+    private ArrayList<TradeOffer> buildRareSparkPoolForPage(int pageIndex) {
+        int pageUi = normalizeSparkPageUi(pageIndex);
+        ArrayList<TradeOffer> pool = new ArrayList<>();
+        if (pageUi == 4) {
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                    Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                    createEnchantedBook(Enchantments.FIRE_ASPECT, 2),
+                    1, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                    Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                    createEnchantedBook(Enchantments.LOOTING, 2),
+                    1, 0, 0.0f));
+            pool.add(new TradeOffer(
+                    new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                    Optional.of(new TradedItem(ModItems.MYSTERIOUS_COIN, 1)),
+                    createEnchantedBook(Enchantments.FLAME, 1),
+                    1, 0, 0.0f));
+            return pool;
+        }
+        pool.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 14),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                createEnchantedBook(Enchantments.FIRE_ASPECT, 2),
+                1, 0, 0.0f));
+        pool.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 14),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                createEnchantedBook(Enchantments.FLAME, 1),
+                1, 0, 0.0f));
+        pool.add(new TradeOffer(
+                new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                createEnchantedBook(Enchantments.LOOTING, 2),
+                1, 0, 0.0f));
+        return pool;
+    }
+
+    private TradeOffer selectSparkOfferForPage(int pageIndex, SparkTier tier, Random random, Set<String> usedKeys) {
+        ArrayList<TradeOffer> sparkPool = tier == SparkTier.RARE
+                ? buildRareSparkPoolForPage(pageIndex)
+                : buildUncommonSparkPoolForPage(pageIndex);
+        Collections.shuffle(sparkPool, random);
+        for (TradeOffer sparkCandidate : sparkPool) {
+            if (sparkCandidate == null || !isReleaseSafeRefillOffer(sparkCandidate)) {
+                continue;
+            }
+            String key = exactOfferKey(sparkCandidate);
+            if (usedKeys.contains(key)) {
+                continue;
+            }
+            return sparkCandidate;
+        }
+        return null;
+    }
+
+    private void injectVisibleSparkOffer(TradeOfferList offers,
+            int pageStart,
+            int pageIndex,
+            int refreshNonce,
+            UUID playerUuid,
+            java.util.List<TradeOffer> shelfCandidates) {
+        if (TradeConfig.SPARK_SLOTS_PER_PAGE <= 0) {
+            return;
+        }
+        int pageOfferCount = Math.max(0, offers.size() - pageStart);
+        int visibleCount = Math.max(0, Math.min(TradeConfig.VISIBLE_TOP_SLOTS, pageOfferCount));
+        if (visibleCount <= 0) {
+            return;
+        }
+        Set<String> usedKeys = new HashSet<>();
+        for (int i = pageStart; i < offers.size(); i++) {
+            usedKeys.add(exactOfferKey(offers.get(i)));
+        }
+        for (TradeOffer shelfCandidate : shelfCandidates) {
+            usedKeys.add(exactOfferKey(shelfCandidate));
+        }
+        Random random = new Random(deriveShelfSeed(this.getUuid(), playerUuid, pageIndex, refreshNonce));
+        SparkTier sparkTier = pickSparkTier(random);
+        TradeOffer sparkOffer = selectSparkOfferForPage(pageIndex, sparkTier, random, usedKeys);
+        if (sparkOffer == null && sparkTier == SparkTier.RARE) {
+            sparkTier = SparkTier.UNCOMMON;
+            sparkOffer = selectSparkOfferForPage(pageIndex, sparkTier, random, usedKeys);
+        }
+        if (sparkOffer == null) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info("[MoonTrade] PAGE_SPARK_SLOT page={} tier={} inserted=0 reason=no_candidate",
+                        normalizeSparkPageUi(pageIndex), sparkTier.name());
+            }
+            return;
+        }
+        int sparkSlotIndex = pageStart + visibleCount - 1;
+        TradeOffer displaced = offers.get(sparkSlotIndex);
+        String displacedKey = exactOfferKey(displaced);
+        usedKeys.remove(displacedKey);
+        String sparkKey = exactOfferKey(sparkOffer);
+        if (!usedKeys.add(sparkKey)) {
+            return;
+        }
+        offers.set(sparkSlotIndex, sparkOffer);
+        if (!usedKeys.contains(displacedKey)) {
+            shelfCandidates.add(0, displaced);
+            usedKeys.add(displacedKey);
+        }
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.info("[MoonTrade] PAGE_SPARK_SLOT page={} tier={} inserted=1 topSlot={}",
+                    normalizeSparkPageUi(pageIndex), sparkTier.name(), sparkSlotIndex - pageStart);
+        }
+    }
+
+    private boolean tryAddShelfOffer(TradeOfferList offers, Set<String> usedKeys, TradeOffer candidate) {
+        if (candidate == null || !isReleaseSafeRefillOffer(candidate)) {
+            return false;
+        }
+        String key = exactOfferKey(candidate);
+        if (!usedKeys.add(key)) {
+            return false;
+        }
+        offers.add(candidate);
+        return true;
+    }
+
+    private void addShelfOffersToPage(TradeOfferList offers,
+            int pageStart,
+            java.util.List<TradeOffer> candidates,
+            int pageIndex,
+            int refreshNonce,
+            UUID playerUuid,
+            int shelfSlots) {
+        Random random = new Random(deriveShelfSeed(this.getUuid(), playerUuid, pageIndex, refreshNonce));
+        ArrayList<TradeOffer> shuffled = new ArrayList<>(candidates);
+        Collections.shuffle(shuffled, random);
+        Set<String> usedKeys = new HashSet<>();
+        for (int i = pageStart; i < offers.size(); i++) {
+            usedKeys.add(exactOfferKey(offers.get(i)));
+        }
+        int added = 0;
+        for (TradeOffer candidate : shuffled) {
+            if (!tryAddShelfOffer(offers, usedKeys, candidate)) {
+                continue;
+            }
+            added++;
+            if (added >= shelfSlots) {
+                break;
+            }
+        }
+        int serial = 0;
+        while (added < shelfSlots && serial < 64) {
+            TradeOffer fallback = createShelfFallbackOffer(pageIndex, serial++);
+            if (!tryAddShelfOffer(offers, usedKeys, fallback)) {
+                continue;
+            }
+            added++;
+        }
+        if (added < shelfSlots) {
+            LOGGER.warn("[MoonTrade] PAGE_SHELF_UNDERFILL page={} expected={} actual={}",
+                    pageIndex, shelfSlots, added);
+        }
+    }
+
+    private TradeOffer createShelfFallbackOffer(int pageIndex, int serial) {
+        int idx = Math.max(0, serial % 8);
+        if (pageIndex == 1) {
+            return switch (idx) {
+                case 0 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.LADDER, 64), 8, 0, 0.05f);
+                case 1 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.COBBLED_DEEPSLATE, 64), 8, 0, 0.05f);
+                case 2 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.SCAFFOLDING, 48), 8, 0, 0.05f);
+                case 3 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.RAIL, 48), 8, 0, 0.05f);
+                case 4 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 3), new ItemStack(Items.BRICKS, 64), 8, 0, 0.05f);
+                case 5 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.GLASS_PANE, 64), 8, 0, 0.05f);
+                case 6 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.STONE_BRICKS, 64), 8, 0, 0.05f);
+                default -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 2), new ItemStack(Items.OAK_PLANKS, 64), 8, 0, 0.05f);
+            };
+        }
+        if (pageIndex == 2) {
+            return switch (idx) {
+                case 0 -> new TradeOffer(new TradedItem(Items.EMERALD, 9), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedBook(Enchantments.KNOCKBACK, 2), 1, 0, 0f);
+                case 1 -> new TradeOffer(new TradedItem(Items.EMERALD, 9), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedBook(Enchantments.SMITE, 4), 1, 0, 0f);
+                case 2 -> new TradeOffer(new TradedItem(Items.EMERALD, 10), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedBook(Enchantments.PROTECTION, 3), 1, 0, 0f);
+                case 3 -> new TradeOffer(new TradedItem(Items.EMERALD, 10), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedBook(Enchantments.POWER, 3), 1, 0, 0f);
+                case 4 -> new TradeOffer(new TradedItem(Items.EMERALD, 6), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedTool(Items.IRON_AXE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1), 3, 0, 0.05f);
+                case 5 -> new TradeOffer(new TradedItem(Items.EMERALD, 6), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedTool(Items.IRON_SHOVEL, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1), 3, 0, 0.05f);
+                case 6 -> new TradeOffer(new TradedItem(Items.EMERALD, 6), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedTool(Items.IRON_HOE, Enchantments.EFFICIENCY, 2, Enchantments.UNBREAKING, 1), 3, 0, 0.05f);
+                default -> new TradeOffer(new TradedItem(Items.EMERALD, 10), Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                        createEnchantedBook(Enchantments.UNBREAKING, 3), 1, 0, 0f);
+            };
+        }
+        if (pageIndex == 3) {
+            return switch (idx) {
+                case 0 -> new TradeOffer(new TradedItem(ModItems.MYSTERIOUS_COIN, 1), createEnchantedBook(Enchantments.SWEEPING_EDGE, 3), 1, 0, 0f);
+                case 1 -> new TradeOffer(new TradedItem(ModItems.MYSTERIOUS_COIN, 1), createEnchantedBook(Enchantments.KNOCKBACK, 2), 1, 0, 0f);
+                case 2 -> new TradeOffer(new TradedItem(ModItems.MYSTERIOUS_COIN, 1), createEnchantedBook(Enchantments.LOOTING, 3), 1, 0, 0f);
+                case 3 -> new TradeOffer(new TradedItem(ModItems.MYSTERIOUS_COIN, 1), createEnchantedBook(Enchantments.EFFICIENCY, 4), 1, 0, 0f);
+                case 4 -> new TradeOffer(new TradedItem(Items.IRON_INGOT, 16), new ItemStack(ModItems.SIGIL, 1), 3, 0, 0f);
+                case 5 -> new TradeOffer(new TradedItem(Items.REDSTONE, 24), new ItemStack(ModItems.SIGIL, 1), 3, 0, 0f);
+                case 6 -> new TradeOffer(new TradedItem(ModItems.SILVER_NOTE, 12), Optional.of(new TradedItem(Items.EMERALD, 4)),
+                        new ItemStack(TransitionalArmorItems.CARGO_PANTS), 2, 0, 0.05f);
+                default -> new TradeOffer(new TradedItem(ModItems.SILVER_NOTE, 6),
+                        new ItemStack(TransitionalArmorItems.WRAPPED_LEGGINGS), 3, 0, 0.05f);
+            };
+        }
+        if (pageIndex == 4) {
+            return switch (idx) {
+                case 0 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                        createEnchantedBook(Enchantments.PROTECTION, 4),
+                        1, 0, 0f);
+                case 1 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                        createEnchantedBook(Enchantments.SHARPNESS, 4),
+                        1, 0, 0f);
+                case 2 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                        createEnchantedBook(Enchantments.EFFICIENCY, 4),
+                        1, 0, 0f);
+                case 3 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                        createEnchantedBook(Enchantments.UNBREAKING, 3),
+                        1, 0, 0f);
+                case 4 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.MYSTERIOUS_COIN, 1)),
+                        createEnchantedBook(Enchantments.SWEEPING_EDGE, 3),
+                        1, 0, 0f);
+                case 5 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.MYSTERIOUS_COIN, 1)),
+                        createEnchantedBook(Enchantments.KNOCKBACK, 2),
+                        1, 0, 0f);
+                case 6 -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                        new ItemStack(Items.EXPERIENCE_BOTTLE, 16),
+                        1, 0, 0f);
+                default -> new TradeOffer(
+                        new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                        Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                        new ItemStack(Items.END_CRYSTAL, 4),
+                        1, 0, 0f);
+            };
+        }
+        return null;
+    }
+
+    private static long deriveShelfSeed(UUID merchantUuid, UUID playerUuid, int pageIndex, int refreshNonce) {
+        long seed = derivePageShuffleSeed(merchantUuid, pageIndex);
+        long playerBits = playerUuid == null ? 0L
+                : playerUuid.getMostSignificantBits() ^ Long.rotateLeft(playerUuid.getLeastSignificantBits(), 13);
+        seed ^= Long.rotateLeft(playerBits, 23);
+        seed ^= (long) Math.max(0, refreshNonce) * 0xD6E8FEB86659FD93L;
+        return seed;
+    }
+
+    private void refillPageToExpectedSize(TradeOfferList offers, int pageStart, int logicalPage, int expectedSize) {
+        int safeStart = Math.max(0, pageStart);
+        int boundedEnd = Math.min(offers.size(), safeStart + Math.max(0, expectedSize));
+        int currentCount = Math.max(0, boundedEnd - safeStart);
+        if (currentCount >= expectedSize) {
+            return;
+        }
+
+        Set<String> existingKeys = new HashSet<>();
+        for (int i = safeStart; i < boundedEnd; i++) {
+            existingKeys.add(exactOfferKey(offers.get(i)));
+        }
+
+        int inserted = 0;
+        int serial = 0;
+        while (currentCount + inserted < expectedSize && serial < 256) {
+            TradeOffer fallback = createShelfFallbackOffer(logicalPage, serial++);
+            if (fallback == null) {
+                continue;
+            }
+            if (!isReleaseSafeRefillOffer(fallback)) {
+                continue;
+            }
+            String key = exactOfferKey(fallback);
+            if (!existingKeys.add(key)) {
+                continue;
+            }
+            int insertAt = Math.min(offers.size(), safeStart + currentCount + inserted);
+            offers.add(insertAt, fallback);
+            inserted++;
+        }
+        int emergencyAttempts = 0;
+        while (currentCount + inserted < expectedSize && emergencyAttempts < 256) {
+            emergencyAttempts++;
+            TradeOffer emergencyFallback = createEmergencyPageFallbackOffer(logicalPage);
+            if (!isReleaseSafeRefillOffer(emergencyFallback)) {
+                LOGGER.warn(
+                        "[MoonTrade] PAGE_REFILL_BLOCKED page={} reason=emergency_fallback_not_release_safe source=final_sanitize_refill",
+                        logicalPage);
+                break;
+            }
+            int insertAt = Math.min(offers.size(), safeStart + currentCount + inserted);
+            offers.add(insertAt, emergencyFallback);
+            inserted++;
+        }
+        if (inserted > 0) {
+            LOGGER.warn(
+                    "[MoonTrade] PAGE_REFILL_APPLY page={} expected={} inserted={} source=final_sanitize_refill",
+                    logicalPage,
+                    expectedSize,
+                    inserted);
+        }
+    }
+
+    private boolean isReleaseSafeRefillOffer(TradeOffer offer) {
+        if (offer == null) {
+            return false;
+        }
+        if (TradeConfig.DEBUG_TRADES) {
+            return true;
+        }
+        if (isReleaseForbiddenCoinOutput(offer)) {
+            return false;
+        }
+        if (isReleaseForbiddenCoinMintOffer(offer)) {
+            return false;
+        }
+        return !RELEASE_FORBIDDEN_OUTPUTS.contains(offer.getSellItem().getItem());
+    }
+
+    private TradeOffer createEmergencyPageFallbackOffer(int logicalPage) {
+        if (logicalPage == 2) {
+            return new TradeOffer(
+                    new TradedItem(Items.EMERALD, 10),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                    createEnchantedBook(Enchantments.UNBREAKING, 3),
+                    1, 0, 0f);
+        }
+        if (logicalPage == 3) {
+            return new TradeOffer(
+                    new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                    createEnchantedBook(Enchantments.LOOTING, 3),
+                    1, 0, 0f);
+        }
+        if (logicalPage == 4) {
+            return new TradeOffer(
+                    new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                    Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                    createEnchantedBook(Enchantments.PROTECTION, 4),
+                    1, 0, 0f);
+        }
+        return new TradeOffer(
+                new TradedItem(Items.IRON_INGOT, 2),
+                new ItemStack(Items.TORCH, 64),
+                8, 0, 0.05f);
+    }
+
+    private void refillAndVerifyFinalPages(TradeOfferList offers, int[] logicalPages) {
+        if (logicalPages == null || logicalPages.length == 0) {
+            return;
+        }
+        for (int i = 0; i < logicalPages.length; i++) {
+            int logicalPage = logicalPages[i];
+            int pageStart = i * TRADE_PAGE_SIZE;
+            refillPageToExpectedSize(offers, pageStart, logicalPage, TRADE_PAGE_SIZE);
+            verifyPageSize("PAGE" + logicalPage, offers, pageStart, TRADE_PAGE_SIZE);
+        }
+    }
+
+    private void verifyPageSize(String pageKey, TradeOfferList offers, int pageStart, int expectedSize) {
+        int safeStart = Math.max(0, pageStart);
+        int boundedEnd = Math.min(offers.size(), safeStart + Math.max(0, expectedSize));
+        int actual = Math.max(0, boundedEnd - safeStart);
+        if (actual != expectedSize) {
+            LOGGER.warn("[MoonTrade] PAGE_SIZE_MISMATCH page={} expected={} actual={}", pageKey, expectedSize, actual);
+        }
+    }
+
+    private void deterministicShuffleBaseSegment(TradeOfferList offers,
+            int startInclusive,
+            int endExclusive,
+            int pageIndex,
+            Set<Integer> fixedOffsets) {
+        int start = Math.max(0, startInclusive);
+        int end = Math.min(offers.size(), endExclusive);
+        int size = end - start;
+        if (size <= 1) {
+            return;
+        }
+        ArrayList<Integer> movableOffsets = new ArrayList<>();
+        ArrayList<TradeOffer> movableOffers = new ArrayList<>();
+        for (int offset = 0; offset < size; offset++) {
+            if (fixedOffsets.contains(offset)) {
+                continue;
+            }
+            movableOffsets.add(offset);
+            movableOffers.add(offers.get(start + offset));
+        }
+        if (movableOffers.size() <= 1) {
+            return;
+        }
+        Collections.shuffle(movableOffers, new Random(derivePageShuffleSeed(this.getUuid(), pageIndex)));
+        for (int i = 0; i < movableOffsets.size(); i++) {
+            offers.set(start + movableOffsets.get(i), movableOffers.get(i));
+        }
+    }
+
+    private static long derivePageShuffleSeed(UUID merchantUuid, int pageIndex) {
+        if (merchantUuid == null) {
+            return 0x9E3779B97F4A7C15L ^ (long) pageIndex;
+        }
+        long msb = merchantUuid.getMostSignificantBits();
+        long lsb = merchantUuid.getLeastSignificantBits();
+        long seed = 0x9E3779B97F4A7C15L;
+        seed ^= Long.rotateLeft(msb, 17);
+        seed ^= Long.rotateLeft(lsb, 41);
+        seed ^= (long) (pageIndex + 1) * 0xBF58476D1CE4E5B9L;
+        return seed;
+    }
+
+    private void normalizeMerchantExperienceInPlace(TradeOfferList offers) {
+        for (int i = 0; i < offers.size(); i++) {
+            TradeOffer offer = offers.get(i);
+            if (offer.getMerchantExperience() == 0) {
+                continue;
+            }
+            TradeOffer normalized = new TradeOffer(
+                    new TradedItem(offer.getOriginalFirstBuyItem().getItem(), offer.getOriginalFirstBuyItem().getCount()),
+                    offer.getSecondBuyItem().map(
+                            traded -> new TradedItem(traded.itemStack().getItem(), traded.itemStack().getCount())),
+                    offer.getSellItem().copy(),
+                    offer.getUses(),
+                    offer.getMaxUses(),
+                    0,
+                    offer.getPriceMultiplier(),
+                    offer.getDemandBonus());
+            normalized.setSpecialPrice(offer.getSpecialPrice());
+            offers.set(i, normalized);
+        }
+    }
+
+    private static Map<String, OfferUsageState> snapshotOfferUsageStates(TradeOfferList offers) {
+        Map<String, OfferUsageState> snapshot = new java.util.HashMap<>();
+        for (TradeOffer offer : offers) {
+            if (offer.getUses() <= 0 && offer.getDemandBonus() == 0 && offer.getSpecialPrice() == 0) {
+                continue;
+            }
+            snapshot.put(exactOfferKey(offer),
+                    new OfferUsageState(offer.getUses(), offer.getDemandBonus(), offer.getSpecialPrice()));
+        }
+        return snapshot;
+    }
+
+    private void restoreOfferUsageStatesInPlace(TradeOfferList offers, Map<String, OfferUsageState> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < offers.size(); i++) {
+            TradeOffer offer = offers.get(i);
+            OfferUsageState state = snapshot.get(exactOfferKey(offer));
+            if (state == null) {
+                continue;
+            }
+            int restoredUses = Math.min(Math.max(0, state.uses()), offer.getMaxUses());
+            TradeOffer restored = new TradeOffer(
+                    new TradedItem(offer.getOriginalFirstBuyItem().getItem(), offer.getOriginalFirstBuyItem().getCount()),
+                    offer.getSecondBuyItem().map(
+                            traded -> new TradedItem(traded.itemStack().getItem(), traded.itemStack().getCount())),
+                    offer.getSellItem().copy(),
+                    restoredUses,
+                    offer.getMaxUses(),
+                    offer.getMerchantExperience(),
+                    offer.getPriceMultiplier(),
+                    state.demandBonus());
+            restored.setSpecialPrice(state.specialPrice());
+            offers.set(i, restored);
+        }
+    }
+
+    private void sanitizeReleaseOffersInPlace(TradeOfferList offers, String sourceTag) {
+        if (TradeConfig.DEBUG_TRADES) {
+            return;
+        }
+        int removed = 0;
+        for (int i = 0; i < offers.size(); i++) {
+            TradeOffer offer = offers.get(i);
+            Item sellItem = offer.getSellItem().getItem();
+            if (!RELEASE_FORBIDDEN_OUTPUTS.contains(sellItem)) {
+                continue;
+            }
+            LOGGER.warn(
+                    "[MoonTrade] RELEASE_SANITIZE_REMOVE source={} sellItem={} offerKey={}",
+                    sourceTag, Registries.ITEM.getId(sellItem), exactOfferKey(offer));
+            offers.remove(i);
+            i--;
+            removed++;
+        }
+        int remain = countForbiddenReleaseOutputs(offers);
+        if (removed > 0 || remain > 0) {
+            LOGGER.warn("[MoonTrade] RELEASE_SANITIZE_SUMMARY source={} removed={} remainingForbidden={}",
+                    sourceTag, removed, remain);
+        }
+        if (remain > 0) {
+            for (int i = 0; i < offers.size(); i++) {
+                TradeOffer offer = offers.get(i);
+                Item sellItem = offer.getSellItem().getItem();
+                if (!RELEASE_FORBIDDEN_OUTPUTS.contains(sellItem)) {
+                    continue;
+                }
+                LOGGER.warn(
+                        "[MoonTrade] RELEASE_SANITIZE_FORCE_REMOVE source={} sellItem={} offerKey={}",
+                        sourceTag, Registries.ITEM.getId(sellItem), exactOfferKey(offer));
+                offers.remove(i);
+                i--;
+            }
+        }
+    }
+
+    /**
      * 创建带双附魔的工具 ItemStack（1.21.1 component API）。
      */
-    @SuppressWarnings("unchecked")
-    private static ItemStack createEnchantedTool(
+    private ItemStack createEnchantedTool(
             Item tool,
             RegistryKey<Enchantment> ench1Key, int level1,
             RegistryKey<Enchantment> ench2Key, int level2) {
         ItemStack stack = new ItemStack(tool, 1);
-        Registry<Enchantment> reg =
-                (Registry<Enchantment>) Registries.REGISTRIES
-                        .get(RegistryKeys.ENCHANTMENT.getValue());
+        if (this.getEntityWorld() == null) {
+            LOGGER.warn("[MoonTrade] Entity world unavailable, returning plain tool");
+            return stack;
+        }
+        Registry<Enchantment> reg = this.getEntityWorld().getRegistryManager().get(RegistryKeys.ENCHANTMENT);
         if (reg == null) {
-            LOGGER.warn("[MoonTrade] Enchantment registry unavailable, returning plain tool");
+            LOGGER.warn("[MoonTrade] Enchantment registry unavailable from world manager, returning plain tool");
             return stack;
         }
         ItemEnchantmentsComponent.Builder builder =
                 new ItemEnchantmentsComponent.Builder(ItemEnchantmentsComponent.DEFAULT);
-        reg.getEntry(ench1Key).ifPresent(e -> builder.add(e, level1));
-        reg.getEntry(ench2Key).ifPresent(e -> builder.add(e, level2));
+        boolean added = false;
+        Optional<? extends net.minecraft.registry.entry.RegistryEntry.Reference<Enchantment>> ench1 = reg.getEntry(ench1Key);
+        if (ench1.isPresent()) {
+            builder.add(ench1.get(), level1);
+            added = true;
+        }
+        Optional<? extends net.minecraft.registry.entry.RegistryEntry.Reference<Enchantment>> ench2 = reg.getEntry(ench2Key);
+        if (ench2.isPresent()) {
+            builder.add(ench2.get(), level2);
+            added = true;
+        }
+        if (!added) {
+            LOGGER.warn("[MoonTrade] No enchantments resolved for tool {}, returning plain stack",
+                    Registries.ITEM.getId(tool));
+            return stack;
+        }
         stack.set(DataComponentTypes.ENCHANTMENTS, builder.build());
         return stack;
     }
@@ -1376,19 +2170,25 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * 创建带 stored enchantment 的附魔书 ItemStack（1.21.1 component API）。
      * 使用 STORED_ENCHANTMENTS 而非 ENCHANTMENTS，与原版附魔书行为一致。
      */
-    @SuppressWarnings("unchecked")
-    private static ItemStack createEnchantedBook(RegistryKey<Enchantment> enchKey, int level) {
+    private ItemStack createEnchantedBook(RegistryKey<Enchantment> enchKey, int level) {
         ItemStack stack = new ItemStack(Items.ENCHANTED_BOOK, 1);
-        Registry<Enchantment> reg =
-                (Registry<Enchantment>) Registries.REGISTRIES
-                        .get(RegistryKeys.ENCHANTMENT.getValue());
+        if (this.getEntityWorld() == null) {
+            LOGGER.warn("[MoonTrade] Entity world unavailable, returning plain enchanted book");
+            return stack;
+        }
+        Registry<Enchantment> reg = this.getEntityWorld().getRegistryManager().get(RegistryKeys.ENCHANTMENT);
         if (reg == null) {
-            LOGGER.warn("[MoonTrade] Enchantment registry unavailable, returning plain enchanted book");
+            LOGGER.warn("[MoonTrade] Enchantment registry unavailable from world manager, returning plain enchanted book");
             return stack;
         }
         ItemEnchantmentsComponent.Builder builder =
                 new ItemEnchantmentsComponent.Builder(ItemEnchantmentsComponent.DEFAULT);
-        reg.getEntry(enchKey).ifPresent(e -> builder.add(e, level));
+        Optional<? extends net.minecraft.registry.entry.RegistryEntry.Reference<Enchantment>> ench = reg.getEntry(enchKey);
+        if (ench.isEmpty()) {
+            LOGGER.warn("[MoonTrade] Enchantment key {} not resolved, returning plain enchanted book", enchKey.getValue());
+            return stack;
+        }
+        builder.add(ench.get(), level);
         stack.set(DataComponentTypes.STORED_ENCHANTMENTS, builder.build());
         return stack;
     }
@@ -1398,10 +2198,18 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      * 发布版默认隐藏。
      */
     private void addDebugOffers(TradeOfferList offers) {
-        // D-01: 5E -> 1 Diamond (debug 快速验证)
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 5), new ItemStack(Items.DIAMOND, 1), 64, 1, 0.0f));
-        // D-02: 1E -> 64 Lapis (debug 附魔测试)
-        offers.add(new TradeOffer(new TradedItem(Items.EMERALD, 1), new ItemStack(Items.LAPIS_LAZULI, 64), 64, 1, 0.0f));
+        // D-01: 5E + Book -> EnchBook(Fire Aspect II)
+        offers.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 5),
+                Optional.of(new TradedItem(Items.BOOK, 1)),
+                createEnchantedBook(Enchantments.FIRE_ASPECT, 2),
+                64, 0, 0.0f));
+        // D-02: 5E + Book -> EnchBook(Looting II)
+        offers.add(new TradeOffer(
+                new TradedItem(Items.EMERALD, 5),
+                Optional.of(new TradedItem(Items.BOOK, 1)),
+                createEnchantedBook(Enchantments.LOOTING, 2),
+                64, 0, 0.0f));
         LOGGER.info("[MoonTrade] DEBUG_OFFERS_ADDED count=2");
     }
 
@@ -1485,11 +2293,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         } else {
             skippedClaimed++;
         }
-        // P3-08: Ticket + Silver -> 1 Netherite Scrap
+        // P3-08: Ticket + Silver -> 1 Ancient Debris
         if (addArcaneOfferIfUnclaimed(offers, progress, variantKey, ARCANE_REWARD_P3_08, new TradeOffer(
                 new TradedItem(ModItems.MERCHANT_MARK, TradeConfig.ARCANE_TICKET_COST),
                 Optional.of(new TradedItem(ModItems.SILVER_NOTE, TradeConfig.ARCANE_P3_08_SILVER_COST)),
-                new ItemStack(Items.NETHERITE_SCRAP, 1),
+                new ItemStack(Items.ANCIENT_DEBRIS, 1),
                 1, 30, 0.0f))) {
             added++;
         } else {
@@ -1533,8 +2341,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         new ItemStack(TransitionalArmorItems.WRAPPED_LEGGINGS), 3, 10, 0.05f),
                         "transitional_wrapped_leggings");
                 addBaseOfferWithLoopGuard(offers, new TradeOffer(
-                        new TradedItem(ModItems.SILVER_NOTE, 4),
-                        new ItemStack(Items.CLOCK, 1), 5, 5, 0.05f), "specialty_clock");
+                        new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
+                        createEnchantedBook(Enchantments.SWEEPING_EDGE, 3), 1, 0, 0.0f), "specialty_sweeping_edge_3");
             }
             case ARID -> {
                 addBaseOfferWithLoopGuard(offers, new TradeOffer(
@@ -1773,7 +2581,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 TradeConfig.ARCANE_TICKET_COST,
                 ModItems.SILVER_NOTE,
                 TradeConfig.ARCANE_P3_08_SILVER_COST,
-                Items.NETHERITE_SCRAP,
+                Items.ANCIENT_DEBRIS,
                 1)) {
             return ARCANE_REWARD_P3_08;
         }
@@ -1921,17 +2729,17 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     private int appendDebugScrollOffers(TradeOfferList offers) {
         int before = offers.size();
-        offers.add(new TradeOffer(new TradedItem(Items.STICK, 1), new ItemStack(Items.STRING, 1), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.ROTTEN_FLESH, 4), new ItemStack(Items.PAPER, 1), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.FLINT, 1), new ItemStack(Items.TORCH, 4), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.WHEAT_SEEDS, 8), new ItemStack(Items.APPLE, 1), 64, 1, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.STICK, 1), new ItemStack(Items.STRING, 1), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.ROTTEN_FLESH, 4), new ItemStack(Items.PAPER, 1), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.FLINT, 1), new ItemStack(Items.TORCH, 4), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.WHEAT_SEEDS, 8), new ItemStack(Items.APPLE, 1), 64, 0, 0.0f));
         offers.add(
-                new TradeOffer(new TradedItem(Items.COBBLESTONE, 16), new ItemStack(Items.CLAY_BALL, 2), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.DIRT, 16), new ItemStack(Items.BRICK, 1), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.SAND, 8), new ItemStack(Items.GLASS, 2), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.GRAVEL, 8), new ItemStack(Items.CLAY_BALL, 1), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.KELP, 8), new ItemStack(Items.DRIED_KELP, 2), 64, 1, 0.0f));
-        offers.add(new TradeOffer(new TradedItem(Items.BONE, 1), new ItemStack(Items.BONE_MEAL, 3), 64, 1, 0.0f));
+                new TradeOffer(new TradedItem(Items.COBBLESTONE, 16), new ItemStack(Items.CLAY_BALL, 2), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.DIRT, 16), new ItemStack(Items.BRICK, 1), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.SAND, 8), new ItemStack(Items.GLASS, 2), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.GRAVEL, 8), new ItemStack(Items.CLAY_BALL, 1), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.KELP, 8), new ItemStack(Items.DRIED_KELP, 2), 64, 0, 0.0f));
+        offers.add(new TradeOffer(new TradedItem(Items.BONE, 1), new ItemStack(Items.BONE_MEAL, 3), 64, 0, 0.0f));
         return offers.size() - before;
     }
 
@@ -1960,20 +2768,26 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             offers.add(new TradeOffer(
                     new TradedItem(Items.WHEAT_SEEDS, 1),
                     sellStack,
-                    64, 1, 0.0f));
+                    64, 0, 0.0f));
         }
         return offers.size() - before;
     }
 
     public OfferBuildAudit rebuildOffersForPlayer(ServerPlayerEntity player, OfferBuildSource source) {
+        return rebuildOffersForPlayer(player, source, -1);
+    }
+
+    public OfferBuildAudit rebuildOffersForPlayer(ServerPlayerEntity player, OfferBuildSource source, int refreshedPageIndex) {
         long startNanos = System.nanoTime();
         ensureVariantIdentityIfNeeded();
         String variantKey = getVariantKey();
         TradeOfferList offers = this.getOffers();
-        boolean eligible = false;
+        Map<String, OfferUsageState> usageSnapshot = snapshotOfferUsageStates(offers);
+        boolean eligible = true;
         boolean unlocked = false;
         long seedForLog = -1L;
         int refreshForThisMerchant = -1;
+        int[] pageRefreshNonces = new int[TRADE_TOTAL_PAGES];
         MerchantUnlockState state = null;
         MerchantUnlockState.Progress progress = null;
         KatanaOwnershipState ownershipState = null;
@@ -1983,37 +2797,24 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             state = MerchantUnlockState.getServerState(serverWorld);
             progress = state.getOrCreateProgress(player.getUuid(), variantKey);
             ownershipState = KatanaOwnershipState.getServerState(serverWorld);
-            eligible = progress.getTradeCount(variantKey) >= ELIGIBLE_TRADE_COUNT;
             unlocked = progress.isUnlockedKatanaHidden(variantKey);
             initSecretKatanaIdIfNeeded();
 
-            MerchantUnlockState.Progress.RefreshCountReadResult refreshRead = progress
-                    .readSigilRefreshSeen(this.getUuid());
-            refreshForThisMerchant = Math.max(0, refreshRead.count());
-            seedForLog = deriveSigilSeed(this.getUuid(), player.getUuid(), refreshForThisMerchant);
+            for (int page = 1; page <= TRADE_TOTAL_PAGES; page++) {
+                pageRefreshNonces[page - 1] = Math.max(0, progress.getShelfRefreshNonce(this.getUuid(), page));
+            }
+            refreshForThisMerchant = pageRefreshNonces[0] + pageRefreshNonces[1] + pageRefreshNonces[2] + pageRefreshNonces[3];
+            int seedPage = refreshedPageIndex >= 0 ? (refreshedPageIndex + 1) : 1;
+            seedForLog = deriveShelfSeed(this.getUuid(), player.getUuid(), seedPage, refreshForThisMerchant);
         }
 
         offers.clear();
-        addBaseOffers(offers);
+        addBaseOffers(offers, player.getUuid(), progress, variantKey, pageRefreshNonces);
 
         if (state != null && progress != null) {
-            if (eligible) {
-                int normalStartSize = offers.size();
-                offers.add(createSealedLedgerOffer());
-                offers.add(createUnsealOffer());
-                addSigilOffers(offers, seedForLog, refreshForThisMerchant);
-                int chosenSigilTrades = offers.size() - normalStartSize - 2; // subtract N1 + N2
-                LOGGER.info("[MoonTrade] NORMAL_BUILD chosenSigilTrades={} totalNormalOffers={}",
-                        chosenSigilTrades, offers.size() - normalStartSize);
-            }
-
             if (unlocked) {
-                addKatanaHiddenOffers(offers, player, progress, variantKey);
+                addPage4Offers(offers, player, progress, variantKey, getPageRefreshNonce(pageRefreshNonces, 4));
             }
-        }
-
-        if (ownershipState != null) {
-            applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
         }
 
         int injectedCount = 0;
@@ -2029,10 +2830,19 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             LOGGER.info("[MoonTrade] MM_DEBUG_REFRESH_INJECT refreshSeenCount={} debugAdded={}",
                     refreshForThisMerchant, debugRefreshAdded);
         }
+
+        normalizeMerchantExperienceInPlace(offers);
+
         int exactDuplicateRemoved = dedupeExactOffersInPlace(offers);
         if (exactDuplicateRemoved > 0) {
             LOGGER.warn("[MoonTrade] MM_TRADE_DEDUP_EXACT removed={} source={} merchant={}",
                     exactDuplicateRemoved, source, this.getUuid());
+        }
+        sanitizeReleaseOffersInPlace(offers, source.name());
+        refillAndVerifyFinalPages(offers, unlocked ? new int[] { 1, 2, 3, 4 } : new int[] { 1, 2, 3 });
+        restoreOfferUsageStatesInPlace(offers, usageSnapshot);
+        if (ownershipState != null) {
+            applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
         }
 
         OfferCounters counters = classifyOffers(offers);
@@ -2104,6 +2914,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         ensureVariantIdentityIfNeeded();
         String variantKey = getVariantKey();
         TradeOfferList offers = this.getOffers();
+        Map<String, OfferUsageState> usageSnapshot = snapshotOfferUsageStates(offers);
         offers.clear();
 
         if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
@@ -2123,19 +2934,24 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // Keep the katana trade chain intact; sold-out is visual-only via disable().
         addKatanaHiddenOffers(offers, player, progress, variantKey);
 
-        applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
-
         int injectedCount = 0;
         if (DEBUG_SCROLL_INJECT && unlocked) {
             injectedCount = appendDebugScrollOffers(offers);
         }
         LOGGER.debug("[MoonTrade] MM_SCROLL_INJECT enabled={} added={}",
                 DEBUG_SCROLL_INJECT, injectedCount);
+
+        normalizeMerchantExperienceInPlace(offers);
+
         int exactDuplicateRemoved = dedupeExactOffersInPlace(offers);
         if (exactDuplicateRemoved > 0) {
             LOGGER.warn("[MoonTrade] MM_TRADE_DEDUP_EXACT removed={} source=OPEN_SECRET merchant={}",
                     exactDuplicateRemoved, this.getUuid());
         }
+        sanitizeReleaseOffersInPlace(offers, OfferBuildSource.OPEN_SECRET.name());
+        refillAndVerifyFinalPages(offers, new int[] { 4 });
+        restoreOfferUsageStatesInPlace(offers, usageSnapshot);
+        applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
 
         // P0-C FIX: Structured HIDDEN_BUILD log
         String resolvedItem = "EMPTY";
@@ -2154,7 +2970,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 new TradedItem(ModItems.MYSTERIOUS_COIN, 1),
                 new ItemStack(ModItems.SEALED_LEDGER, 1),
                 1,
-                25,
+                0,
                 0.0f);
     }
 
@@ -2164,7 +2980,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 Optional.of(new TradedItem(ModItems.SIGIL, TradeConfig.UNSEAL_SIGIL_COST)),
                 new ItemStack(ModItems.ARCANE_LEDGER, 1),
                 1,
-                50,
+                0,
                 0.0f);
     }
 
@@ -2229,39 +3045,129 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             ServerPlayerEntity player,
             MerchantUnlockState.Progress progress,
             String variantKey) {
+        int refreshNonce = progress == null ? 0 : Math.max(0, progress.getShelfRefreshNonce(this.getUuid(), 4));
+        addPage4Offers(offers, player, progress, variantKey, refreshNonce);
+    }
+
+    private void addPage4Offers(TradeOfferList offers,
+            ServerPlayerEntity player,
+            MerchantUnlockState.Progress progress,
+            String variantKey,
+            int refreshNonce) {
         int pageStart = offers.size();
-        // P0-3: 确保 ID 已初始化
         initSecretKatanaIdIfNeeded();
 
-        // Page 3 解锁奖励交易（arcane 解锁后可见）
-        addArcaneBaseOffers(offers, progress, variantKey);
-
-        if (this.secretKatanaId == null || this.secretKatanaId.isEmpty()) {
-            LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=id_still_empty",
-                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
-            logPageGateCostSummary("PAGE3", offers, pageStart);
-            return;
-        }
-
         java.util.List<TradeOffer> katanaOffers = createKatanaOffers(player);
-        if (katanaOffers.isEmpty()) {
-            LOGGER.warn("[MoonTrade] KATANA_BUILD_SKIP player={} merchant={} secretKatanaId={} reason=resolve_failed",
-                    getCurrentPlayerForLog(), this.getUuid(), this.secretKatanaId);
-            logPageGateCostSummary("PAGE3", offers, pageStart);
-            return;
-        }
+        int fixedAdded = 0;
         for (TradeOffer katanaOffer : katanaOffers) {
             offers.add(katanaOffer);
+            fixedAdded++;
+            if (fixedAdded >= 2) {
+                break;
+            }
         }
-        LOGGER.info("[MoonTrade] KATANA_ROUTE_BUILD player={} merchant={} katanaId={} routes={}",
-                player.getUuid(), this.getUuid(), this.secretKatanaId, katanaOffers.size());
+        TradeOffer reclaim = tryCreateReclaimOffer(player);
+        if (reclaim != null) {
+            offers.add(reclaim);
+            fixedAdded++;
+        }
+        while (fixedAdded < HIDDEN_FIXED_COUNT) {
+            TradeOffer fallback = createShelfFallbackOffer(4, fixedAdded);
+            if (fallback != null) {
+                offers.add(fallback);
+                fixedAdded++;
+            } else {
+                break;
+            }
+        }
 
-        // Add reclaim offer if eligible
-        addReclaimOffer(offers, player);
+        ArrayList<TradeOffer> shelfCandidates = new ArrayList<>();
 
-        // ---- Variant Anchors: B 招牌锚点（固定必出） + 随机层 1 件 B ----
-        addVariantBAnchorAndRandom(offers, player);
-        logPageGateCostSummary("PAGE3", offers, pageStart);
+        TradeOfferList arcaneCandidates = new TradeOfferList();
+        addArcaneBaseOffers(arcaneCandidates, progress, variantKey);
+        shelfCandidates.addAll(arcaneCandidates);
+
+        MerchantVariant variant = variantOf(this.getType());
+        String variantName = variant.name();
+        Item bAnchorItem = TradeConfig.variantBAnchor().get(variantName);
+        if (bAnchorItem != null) {
+            shelfCandidates.add(new TradeOffer(
+                    new TradedItem(ModItems.MERCHANT_MARK, TradeConfig.B_ARMOR_TICKET_COST),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, TradeConfig.B_ARMOR_SILVER_COST)),
+                    new ItemStack(bAnchorItem),
+                    TradeConfig.B_ARMOR_MAX_USES, 0, 0.05f));
+        }
+        java.util.List<Item> randomPool = TradeConfig.variantBRandomPool().getOrDefault(variantName, java.util.List.of());
+        for (Item item : randomPool) {
+            shelfCandidates.add(new TradeOffer(
+                    new TradedItem(ModItems.MERCHANT_MARK, TradeConfig.B_RANDOM_TICKET_COST),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, TradeConfig.B_RANDOM_SILVER_COST)),
+                    new ItemStack(item),
+                    TradeConfig.B_ARMOR_MAX_USES, 0, 0.05f));
+        }
+        java.util.List<Item> guidedPool = TradeConfig.variantBScrollGuidedPool().getOrDefault(variantName, java.util.List.of());
+        for (Item item : guidedPool) {
+            shelfCandidates.add(new TradeOffer(
+                    new TradedItem(ModItems.TRADE_SCROLL, TradeConfig.B_RANDOM_SCROLL_COST),
+                    Optional.of(new TradedItem(ModItems.SILVER_NOTE, TradeConfig.B_RANDOM_SILVER_COST)),
+                    new ItemStack(item),
+                    TradeConfig.B_ARMOR_MAX_USES, 0, 0.05f));
+        }
+
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.PROTECTION, 4),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.SHARPNESS, 4),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.EFFICIENCY, 4),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.UNBREAKING, 3),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.LOOTING, 3),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.TRADE_SCROLL, 1)),
+                createEnchantedBook(Enchantments.FIRE_ASPECT, 2),
+                1, 0, 0f));
+        addBaseOfferCandidate(shelfCandidates, new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.MERCHANT_MARK, 1)),
+                createEnchantedBook(Enchantments.MENDING, 1),
+                1, 0, 0f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(Items.END_CRYSTAL, 4),
+                1, 0, 0.0f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(Items.EXPERIENCE_BOTTLE, 16),
+                1, 0, 0.0f));
+        shelfCandidates.add(new TradeOffer(
+                new TradedItem(ModItems.ARCANE_LEDGER, 1),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(Items.GOLDEN_APPLE, 2),
+                1, 0, 0.0f));
+
+        injectVisibleSparkOffer(offers, pageStart, 4, refreshNonce, player.getUuid(), shelfCandidates);
+        addShelfOffersToPage(offers, pageStart, shelfCandidates, 4, refreshNonce, player.getUuid(), HIDDEN_SHELF_COUNT);
+        logPageGateCostSummary("PAGE4", offers, pageStart);
     }
 
     /**
@@ -2380,46 +3286,36 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
-    /**
-     * Add a reclaim trade offer if the player has previously owned this merchant variant's katana,
-     * has arcane access, and the reclaim cooldown has passed.
-     */
-    private void addReclaimOffer(TradeOfferList offers, ServerPlayerEntity player) {
-        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) return;
+    private TradeOffer tryCreateReclaimOffer(ServerPlayerEntity player) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) return null;
 
         String katanaType = resolveKatanaType();
-        if (katanaType == null) return;
+        if (katanaType == null) return null;
 
         KatanaOwnershipState ownershipState = KatanaOwnershipState.getServerState(serverWorld);
         UUID playerUuid = player.getUuid();
 
-        // Must have owned this katana type before
-        if (!ownershipState.hasOwned(playerUuid, katanaType)) return;
+        if (!ownershipState.hasOwned(playerUuid, katanaType)) return null;
 
-        // Must have arcane unlock for this variant
         MerchantUnlockState unlockState = MerchantUnlockState.getServerState(serverWorld);
         String variantKey = getVariantKey();
         MerchantUnlockState.Progress progress = unlockState.getOrCreateProgress(playerUuid, variantKey);
-        if (!progress.isUnlockedKatanaHidden(variantKey)) return;
+        if (!progress.isUnlockedKatanaHidden(variantKey)) return null;
 
-        // Check reclaim cooldown
         long lastReclaim = ownershipState.getLastReclaimTick(playerUuid, katanaType);
         long nowTick = serverWorld.getTime();
         if (lastReclaim > 0 && (nowTick - lastReclaim) < TradeConfig.RECLAIM_CD_TICKS) {
             LOGGER.info("[MoonTrade] RECLAIM_COOLDOWN player={} type={} remaining={}",
                     playerUuid, katanaType, TradeConfig.RECLAIM_CD_TICKS - (nowTick - lastReclaim));
-            return;
+            return null;
         }
 
-        // Resolve the katana item
         Item katanaItem = KATANA_WHITELIST.get(katanaType);
-        if (katanaItem == null) return;
+        if (katanaItem == null) return null;
 
         ItemStack reclaimStack = new ItemStack(katanaItem, 1);
-        // Write contract data + reclaim marker
         UUID instanceId = UUID.randomUUID();
         KatanaContractUtil.writeKatanaContract(reclaimStack, playerUuid, katanaType, instanceId);
-        // Also write legacy markers for compat
         NbtComponent component = reclaimStack.get(DataComponentTypes.CUSTOM_DATA);
         NbtCompound nbt = component == null ? new NbtCompound() : component.copyNbt();
         nbt.putBoolean(NBT_SECRET_MARKER, true);
@@ -2427,17 +3323,25 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putBoolean(KatanaContractUtil.NBT_RECLAIM, true);
         reclaimStack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
 
-        TradeOffer reclaimOffer = new TradeOffer(
+        LOGGER.info("[MoonTrade] RECLAIM_OFFER_ADDED player={} type={} instanceId={} merchant={}",
+                playerUuid, katanaType, instanceId, this.getUuid());
+        return new TradeOffer(
                 new TradedItem(Items.NETHERITE_INGOT, TradeConfig.RECLAIM_COST_NETHERITE),
                 Optional.of(new TradedItem(Items.DIAMOND, TradeConfig.RECLAIM_COST_DIAMONDS)),
                 reclaimStack,
                 RECLAIM_OFFER_MAX_USES,
                 80,
                 0.0f);
-        offers.add(reclaimOffer);
+    }
 
-        LOGGER.info("[MoonTrade] RECLAIM_OFFER_ADDED player={} type={} instanceId={} merchant={}",
-                playerUuid, katanaType, instanceId, this.getUuid());
+    /**
+     * Add reclaim offer if eligible.
+     */
+    private void addReclaimOffer(TradeOfferList offers, ServerPlayerEntity player) {
+        TradeOffer reclaimOffer = tryCreateReclaimOffer(player);
+        if (reclaimOffer != null) {
+            offers.add(reclaimOffer);
+        }
     }
 
     private void applyKatanaOwnershipSoldOut(TradeOfferList offers, java.util.UUID playerUuid,
@@ -2589,13 +3493,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         ArrayList<SigilOfferEntry> pool = new ArrayList<>();
 
         pool.add(new SigilOfferEntry("A1", SigilTier.A, new TradeOffer(
-                new TradedItem(Items.EMERALD, 64),
-                new ItemStack(ModItems.SIGIL, 1),
-                1, 40, 0.0f)));
+                new TradedItem(Items.EMERALD, 8),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 1)),
+                new ItemStack(ModBlocks.MYSTERIOUS_ANVIL_ITEM, 1),
+                2, 0, 0.0f)));
         pool.add(new SigilOfferEntry("A2", SigilTier.A, new TradeOffer(
-                new TradedItem(Items.DIAMOND, 8),
-                new ItemStack(ModItems.SIGIL, 1),
-                1, 40, 0.0f)));
+                new TradedItem(Items.DIAMOND, 2),
+                Optional.of(new TradedItem(ModItems.SILVER_NOTE, 2)),
+                new ItemStack(ModItems.SACRIFICE, 1),
+                4, 0, 0.0f)));
         pool.add(new SigilOfferEntry("A3", SigilTier.A, new TradeOffer(
                 new TradedItem(Items.NETHERITE_INGOT, 1),
                 new ItemStack(ModItems.SIGIL, 1),

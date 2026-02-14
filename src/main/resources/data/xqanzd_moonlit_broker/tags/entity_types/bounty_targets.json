@@ -1,0 +1,17 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:blaze",
+    "minecraft:breeze",
+    "minecraft:elder_guardian",
+    "minecraft:enderman",
+    "minecraft:evoker",
+    "minecraft:ghast",
+    "minecraft:piglin_brute",
+    "minecraft:ravager",
+    "minecraft:shulker",
+    "minecraft:warden",
+    "minecraft:wither_skeleton",
+    "minecraft:zombified_piglin"
+  ]
+}

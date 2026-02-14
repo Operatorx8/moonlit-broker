@@ -1,14 +1,12 @@
 package dev.xqanzd.moonlitbroker.armor.mixin;
 
 import dev.xqanzd.moonlitbroker.armor.effect.OldMarketHandler;
-import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
 import dev.xqanzd.moonlitbroker.trade.KatanaIdUtil;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import dev.xqanzd.moonlitbroker.world.KatanaOwnershipState;
-import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -102,11 +100,6 @@ public class TradeOutputSlotMixin {
             }
         }
 
-        // Trade System: 声望增加（仅神秘商人）
-        if (merchant instanceof MysteriousMerchantEntity) {
-            incrementReputation(serverPlayer);
-        }
-
         TradeOffer offer = merchantInventory.getTradeOffer();
         if (offer == null) {
             return;
@@ -131,31 +124,6 @@ public class TradeOutputSlotMixin {
         int bonusXp = OldMarketHandler.onTradeComplete(serverPlayer, merchantId, tradeIndex, baseXp, currentTick);
         if (bonusXp > 0 && serverPlayer.getWorld() instanceof ServerWorld serverWorld) {
             OldMarketHandler.spawnBonusXp(serverWorld, serverPlayer, bonusXp);
-        }
-    }
-
-    private void incrementReputation(ServerPlayerEntity player) {
-        if (!(player.getWorld() instanceof ServerWorld serverWorld)) {
-            return;
-        }
-
-        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
-        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-
-        progress.incrementReputation();
-        state.markDirty();
-
-        int newRep = progress.getReputation();
-
-        if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] REP_INCREMENT player={} newRep={}",
-                    player.getName().getString(), newRep);
-        }
-
-        // 达到门槛时提示
-        if (newRep == TradeConfig.SECRET_REP_THRESHOLD) {
-            LOGGER.info("[MoonTrade] REP_THRESHOLD_REACHED player={} rep={}",
-                    player.getName().getString(), newRep);
         }
     }
 

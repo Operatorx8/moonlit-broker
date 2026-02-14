@@ -1,24 +1,35 @@
 package dev.xqanzd.moonlitbroker.trade.loot;
 
+import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
+import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
 import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.mob.Angerable;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 /**
  * Bounty v2: 怪物击杀 → 掉落悬赏契约
- * 0.5% 基础概率，需持有 MerchantMark，背包中无契约时才掉落
+ * Tag 驱动目标池 + 低概率掉落，需持有 MerchantMark，背包中无契约时才掉落
  *
  * --- 测试步骤 ---
  * 1) /give @p xqanzd_moonlit_broker:merchant_mark   (或首次右键商人自动获得)
@@ -38,20 +49,8 @@ public class BountyDropHandler {
     private static final Random RANDOM = new Random();
 
     private static final float BASE_DROP_CHANCE = 0.005f; // 0.5%
-
-    private record RequiredRange(int min, int max) {
-        private int roll(Random random) {
-            return min + random.nextInt(max - min + 1);
-        }
-    }
-
-    // 仅对这 5 类目标生效，required 按目标类型区间随机
-    private static final Map<String, RequiredRange> TARGET_REQUIRED_RANGES = Map.of(
-            "minecraft:zombie", new RequiredRange(3, 6),
-            "minecraft:skeleton", new RequiredRange(3, 6),
-            "minecraft:spider", new RequiredRange(4, 7),
-            "minecraft:creeper", new RequiredRange(3, 5),
-            "minecraft:enderman", new RequiredRange(2, 4));
+    private static final float LOOTING_BONUS_PER_LEVEL = 0.001f; // +0.1% / level
+    private static final float MAX_DROP_CHANCE = 0.02f; // 2%
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register(BountyDropHandler::onMobDeath);
@@ -61,11 +60,21 @@ public class BountyDropHandler {
     private static void onMobDeath(LivingEntity entity, DamageSource source) {
         // 仅玩家击杀
         if (!(source.getAttacker() instanceof ServerPlayerEntity player)) return;
+        if (!(entity.getWorld() instanceof ServerWorld world)) return;
         Identifier mobId = Registries.ENTITY_TYPE.getId(entity.getType());
-        String mobKey = mobId.toString();
-        RequiredRange requiredRange = TARGET_REQUIRED_RANGES.get(mobKey);
-        // 仅目标池内生物参与悬赏掉落
-        if (requiredRange == null) return;
+
+        // 改为 tag 驱动，不再写死目标白名单。
+        if (!entity.getType().isIn(ModEntityTypeTags.BOUNTY_TARGETS)) return;
+
+        // neutral 目标只有“正在对该玩家仇恨/激怒”时才允许掉落
+        if (entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS) && !isAngeredAtPlayer(entity, player)) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info(
+                        "[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=SKIP_NEUTRAL_NOT_ANGRY mob={} player={} dim={}",
+                        mobId, player.getName().getString(), world.getRegistryKey().getValue());
+            }
+            return;
+        }
 
         // Gate: 需持有 MerchantMark
         if (!MerchantMarkItem.playerHasValidMark(player)) return;
@@ -74,17 +83,29 @@ public class BountyDropHandler {
         if (playerHasBountyContract(player)) return;
 
         // 概率判定
+        int lootingLevel = getLootingLevel(world, player);
+        float chance = Math.min(MAX_DROP_CHANCE, BASE_DROP_CHANCE + lootingLevel * LOOTING_BONUS_PER_LEVEL);
         float roll = RANDOM.nextFloat();
-        if (roll >= BASE_DROP_CHANCE) return;
-        int required = requiredRange.roll(RANDOM);
+        if (roll >= chance) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info(
+                        "[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=MISS mob={} roll={} chance={} looting={} player={} dim={}",
+                        mobId, roll, chance, lootingLevel, player.getName().getString(),
+                        world.getRegistryKey().getValue());
+            }
+            return;
+        }
+        int required = rollRequired(entity);
 
         // 生成契约
         ItemStack contract = new ItemStack(ModItems.BOUNTY_CONTRACT, 1);
-        BountyContractItem.initialize(contract, mobKey, required);
+        BountyContractItem.initialize(contract, mobId.toString(), required);
         entity.dropStack(contract);
 
-        LOGGER.info("[MoonTrade] action=BOUNTY_CONTRACT_DROP mob={} required={} roll={} side=S player={}",
-                mobKey, required, roll, player.getName().getString());
+        LOGGER.info(
+                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} roll={} chance={} looting={} side=S player={} dim={}",
+                mobId, required, roll, chance, lootingLevel, player.getName().getString(),
+                world.getRegistryKey().getValue());
     }
 
     private static boolean playerHasBountyContract(ServerPlayerEntity player) {
@@ -93,6 +114,38 @@ public class BountyDropHandler {
         }
         for (ItemStack stack : player.getInventory().offHand) {
             if (stack.isOf(ModItems.BOUNTY_CONTRACT)) return true;
+        }
+        return false;
+    }
+
+    private static int rollRequired(LivingEntity entity) {
+        // 高血量目标给更低 required，避免过长追猎链。
+        double maxHealth = entity.getAttributeValue(EntityAttributes.GENERIC_MAX_HEALTH);
+        if (maxHealth >= 30.0) {
+            return 2 + RANDOM.nextInt(3); // 2-4
+        }
+        return 3 + RANDOM.nextInt(4); // 3-6
+    }
+
+    private static int getLootingLevel(ServerWorld world, ServerPlayerEntity player) {
+        Registry<Enchantment> enchantmentRegistry = world.getRegistryManager().get(RegistryKeys.ENCHANTMENT);
+        if (enchantmentRegistry == null) {
+            return 0;
+        }
+        Optional<? extends net.minecraft.registry.entry.RegistryEntry.Reference<Enchantment>> looting = enchantmentRegistry
+                .getEntry(Enchantments.LOOTING);
+        return looting.map(entry -> EnchantmentHelper.getEquipmentLevel(entry, player)).orElse(0);
+    }
+
+    private static boolean isAngeredAtPlayer(LivingEntity entity, ServerPlayerEntity player) {
+        if (entity instanceof MobEntity mobEntity) {
+            LivingEntity target = mobEntity.getTarget();
+            if (target != null && target.getUuid().equals(player.getUuid())) {
+                return true;
+            }
+        }
+        if (entity instanceof Angerable angerable) {
+            return player.getUuid().equals(angerable.getAngryAt());
         }
         return false;
     }

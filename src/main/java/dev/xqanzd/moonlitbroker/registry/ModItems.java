@@ -32,7 +32,7 @@ public final class ModItems {
                         MYSTERIOUS_COIN_ID,
                         new Item(new Item.Settings()
                                         .maxCount(64)
-                                        .rarity(Rarity.UNCOMMON)));
+                                        .rarity(Rarity.EPIC)));
 
         // ========== Phase 8: 解封卷轴系统物品 ==========
 
@@ -68,7 +68,9 @@ public final class ModItems {
         public static final Item SACRIFICE = Registry.register(
                         Registries.ITEM,
                         SACRIFICE_ID,
-                        new Item(new Item.Settings()));
+                        new Item(new Item.Settings()
+                                        .maxCount(64)
+                                        .rarity(Rarity.RARE)));
 
         // ========== Trade System: 交易系统物品 ==========
 
@@ -97,7 +99,7 @@ public final class ModItems {
                         SILVER_NOTE_ID,
                         new SilverNoteItem(new Item.Settings()
                                         .maxCount(64)
-                                        .rarity(Rarity.COMMON)));
+                                        .rarity(Rarity.UNCOMMON)));
 
         /** 指南卷轴 - 首次见面赠送 */
         public static final Identifier GUIDE_SCROLL_ID = Identifier.of(MOD_ID, "guide_scroll");

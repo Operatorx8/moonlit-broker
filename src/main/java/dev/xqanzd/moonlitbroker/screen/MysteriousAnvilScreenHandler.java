@@ -13,6 +13,8 @@ import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.ScreenHandlerContext;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,7 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
     private static final float REPAIR_PERCENT_PER_SACRIFICE = 0.25f;
     private static final boolean DEBUG = Boolean.getBoolean("mm.anvil.debug");
 
+    private final ScreenHandlerContext context;
     private int sacrificeUsage;
 
     public MysteriousAnvilScreenHandler(int syncId, PlayerInventory inventory) {
@@ -30,6 +33,7 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
 
     public MysteriousAnvilScreenHandler(int syncId, PlayerInventory inventory, ScreenHandlerContext context) {
         super(syncId, inventory, context);
+        this.context = context;
     }
 
     @Override
@@ -75,6 +79,13 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         } else {
             this.input.setStack(1, ItemStack.EMPTY);
         }
+        this.context.run((world, pos) -> world.playSound(
+                null,
+                pos,
+                SoundEvents.BLOCK_ANVIL_USE,
+                SoundCategory.BLOCKS,
+                1.0F,
+                1.0F));
         clearResultState();
     }
 

@@ -183,6 +183,13 @@ public final class TradeConfig {
     public static final int ARCANE_P3_07_SILVER_COST = 8;
     public static final int ARCANE_P3_08_SILVER_COST = 24;
 
+    // ========== Shelf Spark / Visible Top Slots ==========
+    public static final int VISIBLE_TOP_SLOTS = 7;
+    public static final int SPARK_SLOTS_PER_PAGE = 1;
+    public static final int SPARK_COMMON_WEIGHT = 0;
+    public static final int SPARK_UNCOMMON_WEIGHT = 95;
+    public static final int SPARK_RARE_WEIGHT = 5;
+
     // ========== 卷轴等级 ==========
     public static final String GRADE_NORMAL = "NORMAL";
     public static final String GRADE_SEALED = "SEALED";

@@ -35,7 +35,9 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
 
     private static final int BOOK_WIDTH = 320;
     private static final int BOOK_HEIGHT = 200;
-    private static final int PAGE_SIZE = 7;
+    private static final int LOGICAL_PAGE_SIZE = 18;
+    private static final int VISIBLE_ROWS = 7;
+    private static final int MAX_LOGICAL_PAGES = 4;
 
     private static final Identifier SLOT_TEXTURE = Identifier.of(
             "xqanzd_moonlit_broker", "textures/gui/merchant/slot_18.png");
@@ -105,7 +107,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         this.refreshButton.setAlpha(0.0F);
 
         this.tradeRowButtons.clear();
-        for (int row = 0; row < PAGE_SIZE; row++) {
+        for (int row = 0; row < VISIBLE_ROWS; row++) {
             final int rowIndex = row;
             ButtonWidget rowBtn = addDrawableChild(
                     ButtonWidget.builder(Text.empty(), btn -> onTradeRowClicked(rowIndex))
@@ -189,7 +191,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         }
         if (!this.initialOfferSyncDone && offersTotal > 0) {
             this.selectedIndex = MathHelper.clamp(this.selectedIndex, 0, offersTotal - 1);
-            this.indexStartOffset = (this.selectedIndex / PAGE_SIZE) * PAGE_SIZE;
+            this.indexStartOffset = (this.selectedIndex / LOGICAL_PAGE_SIZE) * LOGICAL_PAGE_SIZE;
             clampOffsetToOfferCount();
             // Keep UI selection stable after first offer sync, but avoid auto-fill.
             syncSelectedOffer(false, false);
@@ -213,7 +215,26 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        // Consume wheel input so it can never trigger merchant auto-fill side effects.
+        int offersTotal = this.handler.getRecipes().size();
+        if (offersTotal <= 0) {
+            return true;
+        }
+        int pageStart = getCurrentPage() * LOGICAL_PAGE_SIZE;
+        int pageItemCount = Math.max(0, Math.min(LOGICAL_PAGE_SIZE, offersTotal - pageStart));
+        int maxOffset = Math.max(0, pageItemCount - VISIBLE_ROWS);
+        if (maxOffset <= 0) {
+            return true;
+        }
+        int currentOffset = this.indexStartOffset - pageStart;
+        int step = verticalAmount < 0 ? 1 : (verticalAmount > 0 ? -1 : 0);
+        if (step == 0) {
+            return true;
+        }
+        int targetOffset = MathHelper.clamp(currentOffset + step, 0, maxOffset);
+        if (targetOffset != currentOffset) {
+            this.indexStartOffset = pageStart + targetOffset;
+            updateControlState();
+        }
         return true;
     }
 
@@ -247,9 +268,9 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
             this.hasManualTradeSelection = false;
             return;
         }
-        int currentPage = this.indexStartOffset / PAGE_SIZE;
+        int currentPage = getCurrentPage();
         int targetPage = MathHelper.clamp(currentPage + delta, 0, pages - 1);
-        this.indexStartOffset = targetPage * PAGE_SIZE;
+        this.indexStartOffset = targetPage * LOGICAL_PAGE_SIZE;
         clampSelectedIndexToPage(offersTotal);
         // Page switch is visual-only. Do not change active trade server-side.
         this.hasManualTradeSelection = false;
@@ -260,7 +281,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         if (this.client == null || this.client.player == null) {
             return;
         }
-        ClientPlayNetworking.send(new TradeActionC2SPacket(TradeAction.REFRESH.ordinal(), -1));
+        ClientPlayNetworking.send(new TradeActionC2SPacket(TradeAction.REFRESH.ordinal(), -1, getCurrentPage()));
         LOGGER.info("[MoonTrade] action=REFRESH_REQUEST side=C player={} page={}",
                 this.client.player.getName().getString(), getCurrentPage());
     }
@@ -269,7 +290,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         int offersTotal = this.handler.getRecipes().size();
         int totalPages = getTotalPages(offersTotal);
         int currentPage = getCurrentPage();
-        boolean showPager = offersTotal > PAGE_SIZE;
+        boolean showPager = offersTotal > LOGICAL_PAGE_SIZE;
 
         if (this.prevButton != null) {
             this.prevButton.visible = showPager;
@@ -302,7 +323,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         TradeOfferList offers = this.handler.getRecipes();
         int offersTotal = offers.size();
 
-        for (int row = 0; row < PAGE_SIZE; row++) {
+        for (int row = 0; row < VISIBLE_ROWS; row++) {
             int globalIndex = this.indexStartOffset + row;
             if (globalIndex >= offersTotal) {
                 // Do not render placeholder/empty rows; avoid "shadow list" at page tail.
@@ -400,10 +421,18 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
 
     private void clampOffsetToOfferCount() {
         int offersTotal = this.handler.getRecipes().size();
+        if (offersTotal <= 0) {
+            this.indexStartOffset = 0;
+            this.selectedIndex = 0;
+            return;
+        }
         int pages = getTotalPages(offersTotal);
-        int lastStart = Math.max(0, (pages - 1) * PAGE_SIZE);
-        this.indexStartOffset = MathHelper.clamp(this.indexStartOffset, 0, lastStart);
-        this.indexStartOffset = (this.indexStartOffset / PAGE_SIZE) * PAGE_SIZE;
+        int currentPage = MathHelper.clamp(this.indexStartOffset / LOGICAL_PAGE_SIZE, 0, Math.max(0, pages - 1));
+        int pageStart = currentPage * LOGICAL_PAGE_SIZE;
+        int pageItemCount = Math.max(0, Math.min(LOGICAL_PAGE_SIZE, offersTotal - pageStart));
+        int maxOffset = Math.max(0, pageItemCount - VISIBLE_ROWS);
+        int pageOffset = MathHelper.clamp(this.indexStartOffset - pageStart, 0, maxOffset);
+        this.indexStartOffset = pageStart + pageOffset;
         clampSelectedIndexToPage(offersTotal);
     }
 
@@ -412,8 +441,8 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
             this.selectedIndex = 0;
             return;
         }
-        int pageStart = this.indexStartOffset;
-        int pageEnd = Math.min(pageStart + PAGE_SIZE, offersTotal) - 1;
+        int pageStart = getCurrentPage() * LOGICAL_PAGE_SIZE;
+        int pageEnd = Math.min(pageStart + LOGICAL_PAGE_SIZE, offersTotal) - 1;
         if (this.selectedIndex < pageStart || this.selectedIndex > pageEnd) {
             this.selectedIndex = pageStart;
         }
@@ -421,14 +450,15 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
     }
 
     private int getCurrentPage() {
-        return Math.max(0, this.indexStartOffset / PAGE_SIZE);
+        return Math.max(0, this.indexStartOffset / LOGICAL_PAGE_SIZE);
     }
 
     private int getTotalPages(int offersTotal) {
         if (offersTotal <= 0) {
             return 1;
         }
-        return (offersTotal + PAGE_SIZE - 1) / PAGE_SIZE;
+        int pages = (offersTotal + LOGICAL_PAGE_SIZE - 1) / LOGICAL_PAGE_SIZE;
+        return Math.max(1, Math.min(MAX_LOGICAL_PAGES, pages));
     }
 
     private int countRefreshScrollsClient() {
@@ -485,7 +515,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
     private boolean drawTradePreviewTooltip(DrawContext context, int mouseX, int mouseY) {
         TradeOfferList offers = this.handler.getRecipes();
         int offersTotal = offers.size();
-        for (int row = 0; row < PAGE_SIZE; row++) {
+        for (int row = 0; row < VISIBLE_ROWS; row++) {
             int globalIndex = this.indexStartOffset + row;
             if (globalIndex >= offersTotal) {
                 continue;

@@ -14,6 +14,8 @@ import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtString;
 
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
@@ -88,15 +90,18 @@ public class MerchantUnlockState extends PersistentState {
     public static class Progress {
         private static final String NBT_REFRESH_LEGACY = "RefreshSeenCount";
         private static final String NBT_REFRESH_MAP = "SigilRefreshByMerchant";
+        private static final String NBT_PAGE_REFRESH_MAP = "ShelfRefreshByMerchant";
         private static final String NBT_LAST_SIGIL_HASH_LEGACY = "LastSigilOffersHash";
         private static final String NBT_LAST_SIGIL_HASH_MAP = "LastSigilOffersHashByMerchant";
         private static final String NBT_VARIANT_UNLOCK_MAP = "VariantUnlockByKey";
         private static final String NBT_PURCHASED_SECRET_IDS = "PurchasedSecretKatanaIds";
         private static final String NBT_ARCANE_REWARD_CLAIMS = "ArcaneRewardClaims";
         private static final String NBT_LAST_SUMMON_TICK = "LastSummonTick";
+        private static final int TRADE_TOTAL_PAGES = 4;
         // Cap is intentionally bounded to avoid unbounded save growth.
         // When exceeded, oldest UUID-ordered tail entries are truncated by design.
         private static final int MAX_PER_MERCHANT_ENTRIES = 2048;
+        private static final int MAX_SHELF_REFRESH_ENTRIES = 128;
         private static final int MAX_VARIANT_ENTRIES = 16;
         private static final int MAX_PURCHASED_SECRET_IDS = 1024;
         private static final int MAX_ARCANE_REWARD_CLAIMS = 64;
@@ -118,6 +123,8 @@ public class MerchantUnlockState extends PersistentState {
         // ========== Per-merchant refresh count (replaces global refreshSeenCount) ==========
         /** Per-(player,merchant) refresh seen count map. Key = merchantUuid */
         private final Map<UUID, Integer> sigilRefreshSeenByMerchant = new HashMap<>();
+        /** Per-(player,merchant,page) shelf refresh nonce. Key=merchantUuid, value=[p1,p2,p3,p4]. */
+        private final Map<UUID, int[]> shelfRefreshNonceByMerchant = new LinkedHashMap<>();
         /** Legacy global refreshSeenCount - used as fallback for old saves migration */
         private int legacyRefreshSeenCount = -1; // -1 = no legacy data
         
@@ -150,6 +157,7 @@ public class MerchantUnlockState extends PersistentState {
         private boolean invalidRefreshUuidWarned = false;
         private boolean invalidHashUuidWarned = false;
         private boolean refreshCapWarned = false;
+        private boolean shelfRefreshCapWarned = false;
         private boolean hashCapWarned = false;
         private boolean variantCapWarned = false;
         private boolean purchasedCapWarned = false;
@@ -487,6 +495,100 @@ public class MerchantUnlockState extends PersistentState {
             sigilRefreshSeenByMerchant.put(merchantUuid, Math.max(0, value));
         }
 
+        private static int normalizePageIndex(int pageIndex) {
+            return Math.max(1, Math.min(TRADE_TOTAL_PAGES, pageIndex));
+        }
+
+        private void evictOldestShelfRefreshNonceIfNeeded() {
+            if (this.shelfRefreshNonceByMerchant.size() < MAX_SHELF_REFRESH_ENTRIES) {
+                return;
+            }
+            Iterator<Map.Entry<UUID, int[]>> iterator = this.shelfRefreshNonceByMerchant.entrySet().iterator();
+            if (!iterator.hasNext()) {
+                return;
+            }
+            UUID evictedMerchantUuid = iterator.next().getKey();
+            iterator.remove();
+            if (!shelfRefreshCapWarned) {
+                shelfRefreshCapWarned = true;
+                LOGGER.warn(
+                    "[MoonTrade] SHELF_REFRESH_MAP_CAP_EVICT cap={} evictedMerchantUuid={} source=runtime_insert",
+                    MAX_SHELF_REFRESH_ENTRIES,
+                    evictedMerchantUuid);
+            }
+        }
+
+        private void trimShelfRefreshNonceMapToCap() {
+            while (this.shelfRefreshNonceByMerchant.size() > MAX_SHELF_REFRESH_ENTRIES) {
+                Iterator<Map.Entry<UUID, int[]>> iterator = this.shelfRefreshNonceByMerchant.entrySet().iterator();
+                if (!iterator.hasNext()) {
+                    return;
+                }
+                iterator.next();
+                iterator.remove();
+            }
+        }
+
+        private int[] getOrCreateShelfRefreshNonce(UUID merchantUuid) {
+            if (merchantUuid == null) {
+                return new int[TRADE_TOTAL_PAGES];
+            }
+            int[] existing = shelfRefreshNonceByMerchant.get(merchantUuid);
+            if (existing != null) {
+                return existing;
+            }
+            evictOldestShelfRefreshNonceIfNeeded();
+            int[] created = new int[TRADE_TOTAL_PAGES];
+            shelfRefreshNonceByMerchant.put(merchantUuid, created);
+            return created;
+        }
+
+        /**
+         * Read shelf refresh nonce by (merchant,page). Missing entries default to 0.
+         * Migration fallback: page 3 falls back to legacy sigil refresh count.
+         */
+        public int getShelfRefreshNonce(UUID merchantUuid, int pageIndex) {
+            int normalizedPage = normalizePageIndex(pageIndex);
+            if (merchantUuid == null) {
+                if (normalizedPage == 3) {
+                    return Math.max(0, getSigilRefreshSeen(null));
+                }
+                return 0;
+            }
+            int[] nonces = shelfRefreshNonceByMerchant.get(merchantUuid);
+            if (nonces != null && normalizedPage - 1 < nonces.length) {
+                return Math.max(0, nonces[normalizedPage - 1]);
+            }
+            if (normalizedPage == 3) {
+                return Math.max(0, getSigilRefreshSeen(merchantUuid));
+            }
+            return 0;
+        }
+
+        /**
+         * Increment shelf refresh nonce by (merchant,page) and return incremented value.
+         */
+        public int incShelfRefreshNonce(UUID merchantUuid, int pageIndex) {
+            int normalizedPage = normalizePageIndex(pageIndex);
+            int[] nonces = getOrCreateShelfRefreshNonce(merchantUuid);
+            int idx = normalizedPage - 1;
+            int before = idx < nonces.length ? Math.max(0, nonces[idx]) : 0;
+            int after = before + 1;
+            if (idx < nonces.length) {
+                nonces[idx] = after;
+            }
+            return after;
+        }
+
+        public void setShelfRefreshNonce(UUID merchantUuid, int pageIndex, int value) {
+            int normalizedPage = normalizePageIndex(pageIndex);
+            int[] nonces = getOrCreateShelfRefreshNonce(merchantUuid);
+            int idx = normalizedPage - 1;
+            if (idx < nonces.length) {
+                nonces[idx] = Math.max(0, value);
+            }
+        }
+
         // ========== Trade System 新增方法 ==========
         
         public int getReputation() {
@@ -635,6 +737,30 @@ public class MerchantUnlockState extends PersistentState {
                 refreshList.add(entryNbt);
                 });
             nbt.put(NBT_REFRESH_MAP, refreshList);
+            int shelfRefreshDrop = Math.max(0, this.shelfRefreshNonceByMerchant.size() - MAX_SHELF_REFRESH_ENTRIES);
+            trimShelfRefreshNonceMapToCap();
+            if (shelfRefreshDrop > 0 && !shelfRefreshCapWarned) {
+                shelfRefreshCapWarned = true;
+                LOGGER.warn("[MoonTrade] SHELF_REFRESH_MAP_CAP_TRUNCATE playerUuid={} cap={} drop={} source=save",
+                    playerUuid, MAX_SHELF_REFRESH_ENTRIES, shelfRefreshDrop);
+            }
+            NbtList pageRefreshList = new NbtList();
+            int shelfRefreshWritten = 0;
+            for (Map.Entry<UUID, int[]> entry : this.shelfRefreshNonceByMerchant.entrySet()) {
+                if (shelfRefreshWritten >= MAX_SHELF_REFRESH_ENTRIES) {
+                    break;
+                }
+                NbtCompound entryNbt = new NbtCompound();
+                entryNbt.putString("merchant", entry.getKey().toString());
+                int[] nonces = entry.getValue();
+                entryNbt.putInt("p1", nonces.length > 0 ? Math.max(0, nonces[0]) : 0);
+                entryNbt.putInt("p2", nonces.length > 1 ? Math.max(0, nonces[1]) : 0);
+                entryNbt.putInt("p3", nonces.length > 2 ? Math.max(0, nonces[2]) : 0);
+                entryNbt.putInt("p4", nonces.length > 3 ? Math.max(0, nonces[3]) : 0);
+                pageRefreshList.add(entryNbt);
+                shelfRefreshWritten++;
+            }
+            nbt.put(NBT_PAGE_REFRESH_MAP, pageRefreshList);
             // Trade System 新增字段
             nbt.putInt("Reputation", this.reputation);
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
@@ -731,6 +857,35 @@ public class MerchantUnlockState extends PersistentState {
                     } catch (IllegalArgumentException e) {
                         LOGGER.warn("[MerchantUnlockState] Invalid merchant UUID in SigilRefreshByMerchant: {}", entryNbt.getString("merchant"));
                     }
+                }
+            }
+            if (nbt.contains(NBT_PAGE_REFRESH_MAP, NbtElement.LIST_TYPE)) {
+                NbtList pageRefreshList = nbt.getList(NBT_PAGE_REFRESH_MAP, NbtElement.COMPOUND_TYPE);
+                int droppedByCap = 0;
+                for (int i = 0; i < pageRefreshList.size(); i++) {
+                    NbtCompound entryNbt = pageRefreshList.getCompound(i);
+                    try {
+                        UUID merchantUuid = UUID.fromString(entryNbt.getString("merchant"));
+                        int[] nonces = new int[TRADE_TOTAL_PAGES];
+                        nonces[0] = Math.max(0, entryNbt.getInt("p1"));
+                        nonces[1] = Math.max(0, entryNbt.getInt("p2"));
+                        nonces[2] = Math.max(0, entryNbt.getInt("p3"));
+                        nonces[3] = Math.max(0, entryNbt.getInt("p4"));
+                        if (progress.shelfRefreshNonceByMerchant.size() >= MAX_SHELF_REFRESH_ENTRIES
+                                && !progress.shelfRefreshNonceByMerchant.containsKey(merchantUuid)) {
+                            droppedByCap++;
+                            continue;
+                        }
+                        progress.shelfRefreshNonceByMerchant.put(merchantUuid, nonces);
+                    } catch (IllegalArgumentException e) {
+                        LOGGER.warn("[MerchantUnlockState] Invalid merchant UUID in ShelfRefreshByMerchant: {}", entryNbt.getString("merchant"));
+                    }
+                }
+                progress.trimShelfRefreshNonceMapToCap();
+                if (droppedByCap > 0) {
+                    progress.shelfRefreshCapWarned = true;
+                    LOGGER.warn("[MoonTrade] SHELF_REFRESH_MAP_CAP_TRUNCATE cap={} drop={} source=load",
+                        MAX_SHELF_REFRESH_ENTRIES, droppedByCap);
                 }
             }
             // Trade System 新增字段

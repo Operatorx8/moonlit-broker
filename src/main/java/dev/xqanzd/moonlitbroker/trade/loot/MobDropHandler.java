@@ -1,5 +1,6 @@
 package dev.xqanzd.moonlitbroker.trade.loot;
 
+import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
@@ -9,15 +10,24 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.mob.Angerable;
 import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -27,6 +37,9 @@ import java.util.Random;
 public class MobDropHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(MobDropHandler.class);
     private static final Random RANDOM = new Random();
+    private static final float SILVER_BASE_DROP_CHANCE = 0.05f;
+    private static final float SILVER_LOOTING_BONUS_PER_LEVEL = 0.01f;
+    private static final float SILVER_MAX_DROP_CHANCE = 0.25f;
 
     /**
      * 注册怪物死亡事件
@@ -37,27 +50,23 @@ public class MobDropHandler {
     }
 
     private static void onMobDeath(LivingEntity entity, DamageSource source) {
-        // 只处理敌对生物
-        if (!(entity instanceof HostileEntity)) {
-            return;
-        }
-
         // 只处理玩家击杀
         if (!(source.getAttacker() instanceof ServerPlayerEntity player)) {
             return;
         }
 
-        ServerWorld world = (ServerWorld) entity.getWorld();
+        if (!(entity.getWorld() instanceof ServerWorld world)) {
+            return;
+        }
 
-        // 检查掉落条件
-        boolean shouldDrop = checkDropCondition(entity, world);
-        
-        if (shouldDrop) {
+        // Scroll 掉落保留原有规则（hostile + 条件门槛）
+        if (entity instanceof HostileEntity && checkDropCondition(entity, world)) {
             // 尝试掉落交易卷轴
             tryDropScroll(entity, player, world);
-            // 尝试掉落银币
-            tryDropSilver(entity, player, world);
         }
+
+        // Silver 改为 entity type tag 驱动，不再写死白名单。
+        tryDropSilver(entity, player, world);
     }
 
     /**
@@ -146,28 +155,55 @@ public class MobDropHandler {
     }
 
     /**
-     * 尝试掉落银币（带限流）
+     * 尝试掉落银币（tag 驱动 + neutral 仇恨判定 + looting 概率加成 + 限流）
      */
     private static void tryDropSilver(LivingEntity entity, ServerPlayerEntity player, ServerWorld world) {
-        // 银币掉率比卷轴高一些
-        if (RANDOM.nextFloat() >= 0.05f) { // 5% 基础掉率
+        Identifier mobId = Registries.ENTITY_TYPE.getId(entity.getType());
+        boolean inRegularTag = entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_DROPPERS);
+        boolean inNeutralTag = entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS);
+        if (!inRegularTag && !inNeutralTag) {
+            return;
+        }
+
+        // neutral 目标只有“正在对该玩家仇恨/激怒”时才允许掉落
+        if (inNeutralTag && !isAngeredAtPlayer(entity, player)) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info(
+                        "[MoonTrade] action=SILVER_DROP_CHECK result=SKIP_NEUTRAL_NOT_ANGRY mob={} player={} dim={}",
+                        mobId, player.getName().getString(), world.getRegistryKey().getValue());
+            }
+            return;
+        }
+
+        int lootingLevel = getLootingLevel(world, player);
+        float chance = Math.min(SILVER_MAX_DROP_CHANCE,
+                SILVER_BASE_DROP_CHANCE + lootingLevel * SILVER_LOOTING_BONUS_PER_LEVEL);
+        float roll = RANDOM.nextFloat();
+        if (roll >= chance) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info(
+                        "[MoonTrade] action=SILVER_DROP_CHECK result=MISS mob={} roll={} chance={} looting={} player={} dim={}",
+                        mobId, roll, chance, lootingLevel, player.getName().getString(), world.getRegistryKey().getValue());
+            }
             return;
         }
 
         // 检查限流
         MerchantUnlockState state = MerchantUnlockState.getServerState(world);
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-        
+
         long currentTime = world.getTime();
-        if (!progress.tryRecordSilverDrop(currentTime, 
-                TradeConfig.SILVER_CAP_WINDOW_TICKS, 
+        if (!progress.tryRecordSilverDrop(currentTime,
+                TradeConfig.SILVER_CAP_WINDOW_TICKS,
                 TradeConfig.SILVER_MOB_DROP_CAP)) {
             if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] SILVER_THROTTLED player={}", player.getName().getString());
+                LOGGER.info(
+                        "[MoonTrade] action=SILVER_DROP_CHECK result=THROTTLED mob={} roll={} chance={} looting={} player={} dim={}",
+                        mobId, roll, chance, lootingLevel, player.getName().getString(), world.getRegistryKey().getValue());
             }
             return;
         }
-        
+
         state.markDirty();
 
         // 掉落 1-3 个银币
@@ -176,8 +212,35 @@ public class MobDropHandler {
         entity.dropStack(silver);
 
         if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[MoonTrade] SILVER_DROP player={} amount={} dropCount={}", 
-                player.getName().getString(), amount, progress.getSilverDropCount());
+            LOGGER.info(
+                    "[MoonTrade] action=SILVER_DROP_CHECK result=DROP mob={} roll={} chance={} looting={} amount={} player={} dim={} dropCount={}",
+                    mobId, roll, chance, lootingLevel, amount, player.getName().getString(),
+                    world.getRegistryKey().getValue(), progress.getSilverDropCount());
         }
+    }
+
+    private static int getLootingLevel(ServerWorld world, ServerPlayerEntity player) {
+        Registry<Enchantment> enchantmentRegistry = world.getRegistryManager().get(RegistryKeys.ENCHANTMENT);
+        if (enchantmentRegistry == null) {
+            return 0;
+        }
+        Optional<? extends net.minecraft.registry.entry.RegistryEntry.Reference<Enchantment>> looting = enchantmentRegistry
+                .getEntry(Enchantments.LOOTING);
+        return looting.map(entry -> EnchantmentHelper.getEquipmentLevel(entry, player)).orElse(0);
+    }
+
+    private static boolean isAngeredAtPlayer(LivingEntity entity, ServerPlayerEntity player) {
+        if (entity instanceof MobEntity mobEntity) {
+            LivingEntity target = mobEntity.getTarget();
+            if (target != null && target.getUuid().equals(player.getUuid())) {
+                return true;
+            }
+        }
+
+        if (entity instanceof Angerable angerable) {
+            return player.getUuid().equals(angerable.getAngryAt());
+        }
+
+        return false;
     }
 }

@@ -37,6 +37,7 @@ public final class ModItemGroups {
                         entries.add(ModItems.TRADE_SCROLL);
                         entries.add(ModItems.SILVER_NOTE);
                         entries.add(ModItems.GUIDE_SCROLL);
+                        entries.add(ModItems.BOUNTY_CONTRACT);
                         entries.add(ModBlocks.MYSTERIOUS_ANVIL_ITEM);
                         entries.add(ModItems.MYSTERIOUS_MERCHANT_SPAWN_EGG);
                         entries.add(ModItems.MYSTERIOUS_MERCHANT_ARID_SPAWN_EGG);

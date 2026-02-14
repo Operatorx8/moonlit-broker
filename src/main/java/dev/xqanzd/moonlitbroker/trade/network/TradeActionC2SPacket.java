@@ -9,9 +9,10 @@ import net.minecraft.util.Identifier;
 
 /**
  * C2S 交易页面操作包
- * 客户端发送到服务端请求页面操作
+ * 客户端发送到服务端请求页面操作。
+ * pageIndex 为逻辑页索引（0-based），仅 REFRESH 使用，其余动作可传 -1。
  */
-public record TradeActionC2SPacket(int action, int merchantId) implements CustomPayload {
+public record TradeActionC2SPacket(int action, int merchantId, int pageIndex) implements CustomPayload {
     
     public static final Identifier PACKET_ID = Identifier.of("xqanzd_moonlit_broker", "trade_action");
     public static final Id<TradeActionC2SPacket> ID = new Id<>(PACKET_ID);
@@ -19,6 +20,7 @@ public record TradeActionC2SPacket(int action, int merchantId) implements Custom
     public static final PacketCodec<RegistryByteBuf, TradeActionC2SPacket> CODEC = PacketCodec.tuple(
         PacketCodecs.VAR_INT, TradeActionC2SPacket::action,
         PacketCodecs.VAR_INT, TradeActionC2SPacket::merchantId,
+        PacketCodecs.VAR_INT, TradeActionC2SPacket::pageIndex,
         TradeActionC2SPacket::new
     );
     

@@ -380,7 +380,7 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
             return;
         }
 
-        ClientPlayNetworking.send(new TradeActionC2SPacket(TradeAction.REFRESH.ordinal(), -1));
+        ClientPlayNetworking.send(new TradeActionC2SPacket(TradeAction.REFRESH.ordinal(), -1, -1));
         MYMODTEST$LOGGER.info("[MoonTrade] action=REFRESH_REQUEST side=C player={} merchant={} page={} offersHash={}",
             xqanzd_moonlit_broker$playerTag(), xqanzd_moonlit_broker$merchantTag(), xqanzd_moonlit_broker$getCurrentPage(),
             Integer.toHexString(xqanzd_moonlit_broker$computeOfferHash(this.handler.getRecipes())));

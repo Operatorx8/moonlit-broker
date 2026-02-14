@@ -9,6 +9,7 @@ import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Rarity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ public final class ModBlocks {
     public static final Item MYSTERIOUS_ANVIL_ITEM = Registry.register(
         Registries.ITEM,
         MYSTERIOUS_ANVIL_ID,
-        new BlockItem(MYSTERIOUS_ANVIL, new Item.Settings())
+        new BlockItem(MYSTERIOUS_ANVIL, new Item.Settings().rarity(Rarity.RARE))
     );
 
     private ModBlocks() {}
