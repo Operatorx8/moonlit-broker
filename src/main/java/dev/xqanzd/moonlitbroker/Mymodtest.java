@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker;
 
 import dev.xqanzd.moonlitbroker.armor.ArmorInit;
+import dev.xqanzd.moonlitbroker.armor.item.ArmorDyeSupport;
 import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorInit;
 import dev.xqanzd.moonlitbroker.entity.spawn.MysteriousMerchantSpawner;
 import dev.xqanzd.moonlitbroker.katana.KatanaInit;
@@ -55,6 +56,9 @@ public class Mymodtest implements ModInitializer {
 
         // 初始化过渡护甲子系统
         TransitionalArmorInit.init();
+
+        // 将所有借用皮革模型的护甲绑定到炼药锅清洗行为
+        ArmorDyeSupport.registerCauldronCleaningBehavior();
 
         // 注册创造模式物品分组
         ModItemGroups.init();
