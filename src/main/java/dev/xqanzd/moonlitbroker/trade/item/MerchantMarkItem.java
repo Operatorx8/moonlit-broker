@@ -11,9 +11,11 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.ItemUsageContext;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.registry.tag.StructureTags;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +28,8 @@ import java.util.UUID;
  */
 public class MerchantMarkItem extends Item {
     private static final Logger LOGGER = LoggerFactory.getLogger(MerchantMarkItem.class);
+    private static final int VILLAGE_DETECTION_RANGE_CHUNKS = 8;
+    private static final int VILLAGE_DETECTION_RANGE_BLOCKS = VILLAGE_DETECTION_RANGE_CHUNKS * 16;
 
     public MerchantMarkItem(Settings settings) {
         super(settings);
@@ -60,6 +64,11 @@ public class MerchantMarkItem extends Item {
         if (serverWorld.getRegistryKey() != World.OVERWORLD) {
             logBlocked(player, "NOT_OVERWORLD", "dimension=" + serverWorld.getRegistryKey().getValue());
             player.sendMessage(Text.literal("只能在主世界的钟上发起召唤预约。"), true);
+            return ActionResult.FAIL;
+        }
+        if (!isNearVillage(serverWorld, context.getBlockPos())) {
+            logBlocked(player, "NOT_NEAR_VILLAGE", "bellPos=" + context.getBlockPos().toShortString());
+            player.sendMessage(Text.literal("只能在村庄附近的钟上发起召唤预约。"), true);
             return ActionResult.FAIL;
         }
 
@@ -133,6 +142,22 @@ public class MerchantMarkItem extends Item {
             return currentTick + TradeConfig.SUMMON_AFTER_DUSK_DELAY_TICKS;
         }
         return currentTick + (TradeConfig.SUMMON_DUSK_START_TICK - dayTime);
+    }
+
+    private static boolean isNearVillage(ServerWorld world, BlockPos pos) {
+        BlockPos villagePos = world.locateStructure(
+            StructureTags.VILLAGE,
+            pos,
+            VILLAGE_DETECTION_RANGE_CHUNKS,
+            false
+        );
+
+        if (villagePos != null) {
+            double distance = Math.sqrt(pos.getSquaredDistance(villagePos));
+            return distance <= VILLAGE_DETECTION_RANGE_BLOCKS;
+        }
+
+        return false;
     }
 
     private static boolean isSilverNoteStack(ItemStack stack) {

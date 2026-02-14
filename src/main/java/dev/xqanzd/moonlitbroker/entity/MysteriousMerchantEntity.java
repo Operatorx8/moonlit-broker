@@ -845,6 +845,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             if (!player.giveItemStack(merchantMark)) {
                 player.dropItem(merchantMark, false);
             }
+            if (serverWorld.getRegistryKey() == World.OVERWORLD) {
+                MerchantSpawnerState spawnerState = MerchantSpawnerState.getServerState(serverWorld);
+                spawnerState.markBootstrapComplete(serverWorld, player.getUuid());
+            }
 
             // 发送消息
             player.sendMessage(

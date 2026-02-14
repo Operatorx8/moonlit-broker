@@ -7,6 +7,7 @@ import dev.xqanzd.moonlitbroker.world.MerchantSpawnerState;
 import net.minecraft.entity.EntityType;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.StructureTags;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.TypeFilter;
 import net.minecraft.util.math.BlockPos;
@@ -19,6 +20,8 @@ import net.minecraft.world.biome.Biome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -51,31 +54,14 @@ public class MysteriousMerchantSpawner {
     public static final boolean DEBUG = TradeConfig.SPAWN_DEBUG;
 
     // ========== 生成常量 ==========
-    /**
-     * 检测村庄的范围（区块数）
-     * locateStructure 的 radius 参数单位是 chunk，不是 block
-     */
-    private static final int VILLAGE_DETECTION_RANGE_CHUNKS = 8;  // 8 chunks = 128 blocks
-    /** 检测村庄的范围（格）- 用于二次距离验证 */
-    private static final int VILLAGE_DETECTION_RANGE_BLOCKS = VILLAGE_DETECTION_RANGE_CHUNKS * 16;  // 128 blocks
-    /**
-     * 每次检查的生成概率 (0.0 ~ 1.0)
-     *
-     * 概率换算：
-     * - checksPerDay = 24000 / NORMAL_CHECK_INTERVAL = 24000 / 3600 ≈ 6.67 次/天
-     * - dailyChance ≈ 1 - (1 - SPAWN_CHANCE_PER_CHECK)^checksPerDay
-     * - 当前值 0.02 → dailyChance ≈ 1 - 0.98^6.67 ≈ 12.7%/天（满足其他条件时）
-     * - 考虑下雨概率约 15%，实际约 1.9%/天
-     */
-    private static final float SPAWN_CHANCE_PER_CHECK = 0.02f;
-    /** 调试模式：每 600 ticks (30秒) 检查一次 */
+    /** 调试模式下保留旧的快速检查节奏（30秒） */
     private static final int DEBUG_CHECK_INTERVAL = 600;
-    /** 正常模式：每 3600 ticks (3分钟) 检查一次 */
-    private static final int NORMAL_CHECK_INTERVAL = 3600;
-    /** 是否需要下雨才能生成（发布版保持 true 增加稀有感） */
-    private static final boolean REQUIRE_RAIN = true;
+    /** 调试模式下保留旧的基准概率（兼容原有调试体验） */
+    private static final float SPAWN_CHANCE_PER_CHECK = 0.02f;
     /** 调试模式下是否跳过下雨检测 */
     private static final boolean DEBUG_SKIP_RAIN_CHECK = true;
+    /** 村庄附近玩家探测的最大玩家样本（性能友好） */
+    private static final int MAX_PLAYER_VILLAGE_PROBES = 6;
     /** 生成尝试的最大次数 */
     private static final int MAX_SPAWN_ATTEMPTS = 10;
     /** 生成位置搜索范围 */
@@ -109,6 +95,9 @@ public class MysteriousMerchantSpawner {
     ) {
     }
 
+    private record VillageProbeResult(ServerPlayerEntity player, BlockPos villagePos) {
+    }
+
     // ========== 内存状态（仅用于检查间隔，不影响持久化） ==========
     private long lastCheckTick = 0;
 
@@ -124,19 +113,33 @@ public class MysteriousMerchantSpawner {
         }
 
         long currentTick = world.getTime();
-        int checkInterval = DEBUG ? DEBUG_CHECK_INTERVAL : NORMAL_CHECK_INTERVAL;
+        MerchantSpawnerState state = MerchantSpawnerState.getServerState(world);
+        state.tick(world);
+        boolean bootstrap = !state.isBootstrapComplete();
+        long phaseInterval = bootstrap ? TradeConfig.BOOTSTRAP_CHECK_INTERVAL : TradeConfig.NORMAL_CHECK_INTERVAL;
+        float phaseBaseChance = bootstrap ? TradeConfig.BOOTSTRAP_SPAWN_CHANCE : TradeConfig.NORMAL_SPAWN_CHANCE;
+        boolean requireRain = bootstrap ? TradeConfig.BOOTSTRAP_REQUIRE_RAIN : TradeConfig.NORMAL_REQUIRE_RAIN;
+        long checkInterval = DEBUG ? DEBUG_CHECK_INTERVAL : phaseInterval;
+        float baseChance = DEBUG ? SPAWN_CHANCE_PER_CHECK : phaseBaseChance;
+        boolean isRaining = world.isRaining();
+        float effectiveChance = baseChance * (isRaining ? TradeConfig.RAIN_MULTIPLIER : 1.0f);
+        effectiveChance = Math.max(0.0f, Math.min(1.0f, effectiveChance));
 
         // 检查是否到达检查间隔（内存级别，用于减少检查频率）
         if (currentTick - lastCheckTick < checkInterval) {
+            if (DEBUG) {
+                long elapsed = currentTick - lastCheckTick;
+                LOGGER.debug("[Spawner] SKIP_INTERVAL elapsed={} interval={} remaining={} worldTime={}",
+                    elapsed, checkInterval, (checkInterval - elapsed), currentTick);
+            }
             return;
         }
         lastCheckTick = currentTick;
 
-        // 1. 获取持久化状态
-        MerchantSpawnerState state = MerchantSpawnerState.getServerState(world);
-
         if (DEBUG) {
             LOGGER.debug("[Spawner] CHECK_START worldTime={} state={{{}}}", currentTick, state.toDebugString());
+            LOGGER.debug("[Spawner] PHASE phase={} interval={} baseChance={} effectiveChance={} isRaining={}",
+                bootstrap ? "BOOTSTRAP" : "NORMAL", checkInterval, baseChance, effectiveChance, isRaining);
         }
 
         // 2. 检查每日上限（使用持久化状态）
@@ -200,8 +203,8 @@ public class MysteriousMerchantSpawner {
         }
 
         // 6. 检查天气条件
-        if (REQUIRE_RAIN && !(DEBUG && DEBUG_SKIP_RAIN_CHECK)) {
-            if (!world.isRaining()) {
+        if (requireRain && !(DEBUG && DEBUG_SKIP_RAIN_CHECK)) {
+            if (!isRaining) {
                 if (DEBUG) {
                     LOGGER.debug("[Spawner] SKIP_NO_RAIN worldTime={}", currentTick);
                 }
@@ -212,42 +215,43 @@ public class MysteriousMerchantSpawner {
         // 7. 随机概率检查（per-check 概率）
         Random random = world.getRandom();
         float roll = random.nextFloat();
-        boolean passed = roll <= SPAWN_CHANCE_PER_CHECK;
+        boolean passed = roll <= effectiveChance;
         if (DEBUG) {
-            LOGGER.debug("[Spawner] CHANCE_CHECK chancePerCheck={} roll={} passed={} worldTime={}",
-                SPAWN_CHANCE_PER_CHECK, String.format("%.3f", roll), passed, currentTick);
+            LOGGER.debug("[Spawner] CHANCE_CHECK baseChance={} effectiveChance={} roll={} passed={} isRaining={} worldTime={}",
+                baseChance, String.format("%.3f", effectiveChance), String.format("%.3f", roll), passed, isRaining, currentTick);
         }
         if (!passed) {
-            return;
-        }
-
-        // 8. 获取随机玩家作为生成中心
-        var players = world.getPlayers();
-        if (players.isEmpty()) {
             if (DEBUG) {
-                LOGGER.debug("[Spawner] SKIP_NO_PLAYERS worldTime={}", currentTick);
+                LOGGER.debug("[Spawner] SKIP_CHANCE_FAIL roll={} effectiveChance={} worldTime={}",
+                    String.format("%.3f", roll), String.format("%.3f", effectiveChance), currentTick);
             }
             return;
         }
 
-        var targetPlayer = players.get(random.nextInt(players.size()));
+        // 8. 优先选择村庄附近玩家（避免随机玩家后再判村庄导致苛刻叠乘）
+        VillageProbeResult villageProbe = findVillageNearbyPlayer(world, random);
+        if (villageProbe == null) {
+            if (DEBUG) {
+                LOGGER.debug("[Spawner] SKIP_NO_VILLAGE_PLAYER worldTime={} reason=NO_VILLAGE_PLAYER", currentTick);
+            }
+            return;
+        }
+        ServerPlayerEntity targetPlayer = villageProbe.player();
         BlockPos playerPos = targetPlayer.getBlockPos();
-
-        // 9. 检查玩家附近是否有村庄
-        if (!isNearVillage(world, playerPos)) {
-            if (DEBUG) {
-                LOGGER.debug("[Spawner] SKIP_NO_VILLAGE player={} pos={}",
-                    targetPlayer.getName().getString(), playerPos.toShortString());
-            }
-            return;
+        BlockPos villagePos = villageProbe.villagePos();
+        if (DEBUG) {
+            LOGGER.debug("[Spawner] CHOSEN_PLAYER player={} pos={} villagePos={}",
+                targetPlayer.getName().getString(), playerPos.toShortString(),
+                villagePos != null ? villagePos.toShortString() : "null");
         }
 
         // 10. 尝试在玩家附近生成商人
-        BlockPos spawnPos = findSpawnPosition(world, playerPos, random);
+        BlockPos spawnCenter = villagePos != null ? villagePos : playerPos;
+        BlockPos spawnPos = findSpawnPosition(world, spawnCenter, random);
         if (spawnPos == null) {
             if (DEBUG) {
-                LOGGER.debug("[Spawner] SKIP_NO_VALID_POS attempts={} searchRange={}",
-                    MAX_SPAWN_ATTEMPTS, SPAWN_SEARCH_RANGE);
+                LOGGER.debug("[Spawner] SKIP_NO_VALID_POS attempts={} searchRange={} center={}",
+                    MAX_SPAWN_ATTEMPTS, SPAWN_SEARCH_RANGE, spawnCenter.toShortString());
             }
             return;
         }
@@ -292,27 +296,51 @@ public class MysteriousMerchantSpawner {
         }
     }
 
-    /**
-     * 检查指定位置附近是否有村庄
-     */
-    private boolean isNearVillage(ServerWorld world, BlockPos pos) {
-        BlockPos villagePos = world.locateStructure(
-                StructureTags.VILLAGE,
-                pos,
-                VILLAGE_DETECTION_RANGE_CHUNKS,  // 单位：区块
-                false
-        );
-
-        if (villagePos != null) {
-            double distance = Math.sqrt(pos.getSquaredDistance(villagePos));
+    private VillageProbeResult findVillageNearbyPlayer(ServerWorld world, Random random) {
+        List<ServerPlayerEntity> players = new ArrayList<>(world.getPlayers());
+        if (players.isEmpty()) {
             if (DEBUG) {
-                LOGGER.debug("[Spawner] VILLAGE_FOUND pos={} distance={} maxRange={}",
-                    villagePos.toShortString(), (int) distance, VILLAGE_DETECTION_RANGE_BLOCKS);
+                LOGGER.debug("[Spawner] SKIP_NO_PLAYERS worldTime={}", world.getTime());
             }
-            return distance <= VILLAGE_DETECTION_RANGE_BLOCKS;  // 单位：格
+            return null;
         }
 
-        return false;
+        for (int i = players.size() - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            ServerPlayerEntity tmp = players.get(i);
+            players.set(i, players.get(j));
+            players.set(j, tmp);
+        }
+
+        int probes = Math.min(MAX_PLAYER_VILLAGE_PROBES, players.size());
+        int villageRangeChunks = TradeConfig.VILLAGE_SEARCH_RADIUS;
+        int villageRangeBlocks = villageRangeChunks * 16;
+        for (int i = 0; i < probes; i++) {
+            ServerPlayerEntity candidate = players.get(i);
+            BlockPos playerPos = candidate.getBlockPos();
+            BlockPos villagePos = world.locateStructure(StructureTags.VILLAGE, playerPos, villageRangeChunks, false);
+            boolean villageHit = false;
+            double distance = -1.0D;
+            if (villagePos != null) {
+                distance = Math.sqrt(playerPos.getSquaredDistance(villagePos));
+                villageHit = distance <= villageRangeBlocks;
+            }
+            if (DEBUG) {
+                LOGGER.debug("[Spawner] VILLAGE_PROBE idx={} player={} pos={} villageHit={} villagePos={} distance={}",
+                    i, candidate.getName().getString(), playerPos.toShortString(), villageHit,
+                    villagePos != null ? villagePos.toShortString() : "null",
+                    distance >= 0.0D ? (int) distance : -1);
+            }
+            if (villageHit) {
+                if (DEBUG) {
+                    LOGGER.debug("[Spawner] VILLAGE_HIT idx={} player={} uuid={} villagePos={} distance={} maxDistance={}",
+                        i, candidate.getName().getString(), candidate.getUuid().toString().substring(0, 8),
+                        villagePos.toShortString(), (int) distance, villageRangeBlocks);
+                }
+                return new VillageProbeResult(candidate, villagePos);
+            }
+        }
+        return null;
     }
 
     /**

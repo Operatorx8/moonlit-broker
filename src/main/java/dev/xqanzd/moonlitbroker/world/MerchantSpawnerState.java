@@ -37,6 +37,7 @@ public class MerchantSpawnerState extends PersistentState {
     private int spawnCountToday;            // 今天已生成数量
     private long cooldownUntil;             // 全局冷却结束时间（世界tick，绝对值）
     private int totalSpawnedCount;          // 历史总生成数（统计用）
+    private boolean bootstrapComplete;      // 是否已完成引导阶段（首次见面送 Mark 后永久 true）
 
     // 活跃商人追踪（防重复生成核心）
     private UUID activeMerchantUuid;        // 当前活跃商人的 UUID（null 表示无活跃商人）
@@ -104,6 +105,7 @@ public class MerchantSpawnerState extends PersistentState {
         this.spawnCountToday = 0;
         this.cooldownUntil = 0;
         this.totalSpawnedCount = 0;
+        this.bootstrapComplete = false;
         this.activeMerchantUuid = null;
         this.activeMerchantExpireAt = 0;
         this.summonRequest = null;
@@ -125,6 +127,7 @@ public class MerchantSpawnerState extends PersistentState {
         nbt.putInt("spawnCountToday", this.spawnCountToday);
         nbt.putLong("cooldownUntil", this.cooldownUntil);
         nbt.putInt("totalSpawnedCount", this.totalSpawnedCount);
+        nbt.putBoolean("bootstrapComplete", this.bootstrapComplete);
         nbt.putLong("activeMerchantExpireAt", this.activeMerchantExpireAt);
 
         if (this.activeMerchantUuid != null) {
@@ -143,6 +146,7 @@ public class MerchantSpawnerState extends PersistentState {
         state.spawnCountToday = nbt.getInt("spawnCountToday");
         state.cooldownUntil = nbt.getLong("cooldownUntil");
         state.totalSpawnedCount = nbt.getInt("totalSpawnedCount");
+        state.bootstrapComplete = nbt.getBoolean("bootstrapComplete");
         state.activeMerchantExpireAt = nbt.getLong("activeMerchantExpireAt");
 
         if (nbt.containsUuid("activeMerchantUuid")) {
@@ -310,7 +314,7 @@ public class MerchantSpawnerState extends PersistentState {
                 return;
             }
 
-            recordSpawn(world, 0L, merchant.getUuid(), TradeConfig.SUMMON_EXPECTED_LIFETIME_TICKS);
+            recordSpawn(world, TradeConfig.SUMMON_GLOBAL_COOLDOWN_TICKS, merchant.getUuid(), TradeConfig.SUMMON_EXPECTED_LIFETIME_TICKS);
             this.summonRequest = null;
             this.markDirty();
 
@@ -352,7 +356,6 @@ public class MerchantSpawnerState extends PersistentState {
      * 时间基准：getTimeOfDay() / 24000（游戏内天数）
      */
     public boolean canSpawnToday(ServerWorld world, int dailyLimit) {
-        tick(world);
         refreshDayCounter(world);
 
         // 预约存在时，跳过自然生成，避免随机流程抢占预约。
@@ -464,7 +467,24 @@ public class MerchantSpawnerState extends PersistentState {
     public int getSpawnCountToday() { return spawnCountToday; }
     public int getTotalSpawnedCount() { return totalSpawnedCount; }
     public long getCooldownUntil() { return cooldownUntil; }
+    public boolean isBootstrapComplete() { return bootstrapComplete; }
     public long getActiveMerchantExpireAt() { return activeMerchantExpireAt; }
+
+    public void markBootstrapComplete() {
+        markBootstrapComplete(null, null);
+    }
+
+    public void markBootstrapComplete(ServerWorld world, UUID playerUuid) {
+        if (this.bootstrapComplete) {
+            return;
+        }
+        this.bootstrapComplete = true;
+        this.markDirty();
+        String worldKey = world != null ? world.getRegistryKey().getValue().toString() : "unknown";
+        long time = world != null ? world.getTime() : -1L;
+        LOGGER.info("[Spawner] BOOTSTRAP_COMPLETE world={} byPlayer={} time={}",
+            worldKey, shortUuid(playerUuid), time);
+    }
 
     /**
      * 输出当前状态摘要（用于调试日志）
@@ -474,6 +494,7 @@ public class MerchantSpawnerState extends PersistentState {
             " spawnCountToday=" + spawnCountToday +
             " cooldownUntil=" + cooldownUntil +
             " totalSpawned=" + totalSpawnedCount +
+            " bootstrapComplete=" + bootstrapComplete +
             " activeMerchant=" + (activeMerchantUuid != null ? activeMerchantUuid.toString().substring(0, 8) + "..." : "null") +
             " expireAt=" + activeMerchantExpireAt +
             " summonRequest=" + (summonRequest != null ? shortUuid(summonRequest.playerUuid()) + "@" + summonRequest.scheduledTick() : "null");

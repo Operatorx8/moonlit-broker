@@ -90,6 +90,18 @@ public final class TradeConfig {
     /** 隐藏页刷新冷却 (5秒 = 100 ticks) */
     public static final int SECRET_REFRESH_COOLDOWN_TICKS = 100;
 
+    // ===== Bootstrap Phase (totalSpawnedCount == 0 && !bootstrapComplete) =====
+    public static final long   BOOTSTRAP_CHECK_INTERVAL = 1200L;   // 1 min
+    public static final float  BOOTSTRAP_SPAWN_CHANCE   = 0.20f;   // 20%
+    public static final boolean BOOTSTRAP_REQUIRE_RAIN  = false;
+
+    // ===== Normal Phase =====
+    public static final long   NORMAL_CHECK_INTERVAL    = 2400L;   // 2 min
+    public static final float  NORMAL_SPAWN_CHANCE      = 0.06f;   // 6%
+    public static final float  RAIN_MULTIPLIER          = 3.0f;    // 雨天 ×3 = 18%
+    public static final boolean NORMAL_REQUIRE_RAIN     = false;   // 雨不是门槛
+    public static final int    VILLAGE_SEARCH_RADIUS    = 16;      // chunks (256 blocks)
+
     // ========== 商人召唤 ==========
     /** Bell 召唤消耗银币数量 */
     public static final int SUMMON_SILVER_NOTE_COST = 3;
@@ -109,6 +121,8 @@ public final class TradeConfig {
     public static final long SUMMON_RETRY_DELAY_TICKS = 600L;
     /** 召唤商人的预期生命周期（用于 active 保险机制） */
     public static final long SUMMON_EXPECTED_LIFETIME_TICKS = 120000L;
+    /** 召唤成功后的全局冷却（与自然生成全局冷却对齐） */
+    public static final long SUMMON_GLOBAL_COOLDOWN_TICKS = 18000L;
 
     // ========== Reclaim（补发/契约迁移） ==========
     /** Reclaim 冷却时间 (3 MC 天 = 72000 ticks) */
