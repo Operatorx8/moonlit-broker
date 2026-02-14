@@ -34,7 +34,9 @@ public final class KatanaContractUtil {
             "eclipse",
             "oblivion",
             "nmap");
-    private static final Map<UUID, Long> LAST_DORMANT_HINT_TICK = new ConcurrentHashMap<>();
+    private static final Map<String, Long> LAST_HINT_TICK_BY_KEY = new ConcurrentHashMap<>();
+    private static final long HINT_COOLDOWN_TICKS = TradeConfig.DORMANT_HINT_COOLDOWN_TICKS;
+    private static final int HINT_CACHE_MAX_SIZE = 2048;
 
     // ========== ItemStack readers ==========
 
@@ -117,13 +119,31 @@ public final class KatanaContractUtil {
      * Thin wrapper for effect entry points so handlers can share one gate call.
      */
     public static boolean gateOrReturn(ServerWorld world, PlayerEntity player, ItemStack stack) {
-        boolean ok = isActiveContract(world, player, stack);
-        if (!ok
-                && TradeConfig.DORMANT_SHOW_ACTIONBAR_HINT
-                && isDormant(world, player, stack)) {
-            maybeSendDormantHint(world, player, stack);
+        String type = KatanaIdUtil.extractCanonicalKatanaId(stack);
+        if (type.isEmpty()) return true; // not a katana
+        if (TradeConfig.CONTRACT_ENFORCE_ONLY_MYTHIC && !MYTHIC_TYPES.contains(type)) return true;
+        if (TradeConfig.CONTRACT_ALLOW_CREATIVE_BYPASS && player.getAbilities().creativeMode) return true;
+
+        KatanaOwnershipState state = KatanaOwnershipState.getServerState(world);
+        UUID playerUuid = player.getUuid();
+
+        if (!state.hasOwned(playerUuid, type)) {
+            maybeSendGateHint(world, player, type, "unowned",
+                    "未缔结契约：生存模式无效。请通过商人购买或 Reclaim 补发。");
+            return false;
         }
-        return ok;
+
+        UUID activeId = state.getActiveInstanceId(playerUuid, type);
+        if (activeId == null) return true; // legacy mode
+
+        UUID instanceId = getInstanceId(stack);
+        if (instanceId == null || !instanceId.equals(activeId)) {
+            maybeSendGateHint(world, player, type, "dormant",
+                    "契约已失效，可通过 Reclaim 补发。");
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -149,15 +169,26 @@ public final class KatanaContractUtil {
         return !instanceId.equals(activeId);
     }
 
-    private static void maybeSendDormantHint(ServerWorld world, PlayerEntity player, ItemStack stack) {
-        long now = world.getTime();
-        UUID playerUuid = player.getUuid();
-        Long last = LAST_DORMANT_HINT_TICK.get(playerUuid);
-        if (last != null && now - last < TradeConfig.DORMANT_HINT_COOLDOWN_TICKS) {
+    private static void maybeSendGateHint(
+            ServerWorld world,
+            PlayerEntity player,
+            String type,
+            String reason,
+            String message) {
+        if (!TradeConfig.DORMANT_SHOW_ACTIONBAR_HINT) {
             return;
         }
-        LAST_DORMANT_HINT_TICK.put(playerUuid, now);
-        player.sendMessage(Text.literal("契约已失效，可通过 Reclaim 补发"), true);
+        long now = world.getTime();
+        String key = player.getUuid() + ":" + type + ":" + reason;
+        Long last = LAST_HINT_TICK_BY_KEY.get(key);
+        if (last != null && now - last < HINT_COOLDOWN_TICKS) {
+            return;
+        }
+        if (LAST_HINT_TICK_BY_KEY.size() > HINT_CACHE_MAX_SIZE) {
+            LAST_HINT_TICK_BY_KEY.clear();
+        }
+        LAST_HINT_TICK_BY_KEY.put(key, now);
+        player.sendMessage(Text.literal(message), true);
     }
 
     // ========== Internal ==========
