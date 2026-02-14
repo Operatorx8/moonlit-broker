@@ -28,7 +28,7 @@ public final class ArmorConfig {
     public static final int CHESTPLATE_PROTECTION = 8;
 
     /** 韧性 */
-    public static final float TOUGHNESS = 5.0f;
+    public static final float TOUGHNESS = 4.0f;
 
     /** 默认击退抗性（头盔） */
     public static final float KNOCKBACK_RESISTANCE = 0.1f;

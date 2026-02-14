@@ -21,6 +21,7 @@
 
 ### Changed
 
+- 护甲韧性数值收敛：所有原本 `>= 4` 的装备韧性统一下调并封顶为 `4`
 - 商人音效字幕命名统一为 Moonlit Broker（月光掮客），覆盖 `ambient/hurt/death/agree/disagree/trade` 六类事件
 - 商人动态名称池调整为英文名；旧存档中的中文动态名会在读取时自动迁移为对应英文名
 - `moon_glow_katana` 显示名调整为 `Moonlight`（中英文语言文件同步）

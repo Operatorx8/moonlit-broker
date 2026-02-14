@@ -60,7 +60,7 @@ public final class BootsEffectConstants {
 
     // ==================== 靴子基础属性 ====================
     /** 韧性 (所有靴子) */
-    public static final float BOOTS_TOUGHNESS = 5.0f;
+    public static final float BOOTS_TOUGHNESS = 4.0f;
     /** 击退抗性 (所有靴子) */
     public static final float BOOTS_KNOCKBACK_RESISTANCE = 0.0f;
 
