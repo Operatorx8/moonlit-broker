@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
@@ -14,7 +15,6 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
@@ -250,13 +250,13 @@ public class EclipseHandler {
 
     private static void playSound(PlayerEntity player, LivingEntity target) {
         // A) 玩家听清：幽灵般的低语
-        player.playSound(SoundEvents.ENTITY_VEX_AMBIENT, 0.8f, 0.5f);
+        player.playSound(ModSounds.ECLIPSE_WHISPER, 0.8f, 0.5f);
 
         // B) 世界听到：沉闷的诅咒声
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ENTITY_WARDEN_AMBIENT,
+            ModSounds.ECLIPSE_AURA,
             SoundCategory.PLAYERS,
             0.4f, 0.3f
         );
@@ -265,7 +265,7 @@ public class EclipseHandler {
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.AMBIENT_CAVE.value(),
+            ModSounds.ECLIPSE_DEPTH,
             SoundCategory.AMBIENT,
             0.5f, 0.8f
         );

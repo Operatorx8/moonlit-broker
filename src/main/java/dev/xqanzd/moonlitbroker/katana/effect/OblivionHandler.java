@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
@@ -12,7 +13,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
@@ -316,13 +316,13 @@ public class OblivionHandler {
 
     private static void playReadWriteSound(PlayerEntity player, LivingEntity target) {
         // 玩家听到：低语声
-        player.playSound(SoundEvents.ENTITY_ALLAY_AMBIENT_WITHOUT_ITEM, 0.6f, 0.5f);
+        player.playSound(ModSounds.OBLIVION_READ, 0.6f, 0.5f);
 
         // 世界听到：神秘音效
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE,
+            ModSounds.OBLIVION_ENCHANT,
             SoundCategory.PLAYERS,
             0.5f, 1.5f
         );
@@ -330,13 +330,13 @@ public class OblivionHandler {
 
     private static void playCausalitySound(PlayerEntity player, LivingEntity target) {
         // 玩家听到：因果翻转的冲击
-        player.playSound(SoundEvents.ENTITY_WARDEN_SONIC_BOOM, 0.5f, 1.5f);
+        player.playSound(ModSounds.OBLIVION_CAUSALITY, 0.5f, 1.5f);
 
         // 世界听到：末影珍珠爆炸 + 凋灵生成
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ENTITY_ENDERMAN_TELEPORT,
+            ModSounds.OBLIVION_SHIFT,
             SoundCategory.PLAYERS,
             1.0f, 0.5f
         );
@@ -344,7 +344,7 @@ public class OblivionHandler {
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ENTITY_WITHER_SPAWN,
+            ModSounds.OBLIVION_DOOM,
             SoundCategory.PLAYERS,
             0.3f, 1.5f
         );

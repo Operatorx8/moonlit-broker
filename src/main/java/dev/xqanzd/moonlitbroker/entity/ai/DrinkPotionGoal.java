@@ -1,13 +1,13 @@
 package dev.xqanzd.moonlitbroker.entity.ai;
 
 import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,7 +101,7 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 播放喝药音效
-        merchant.playSound(SoundEvents.ENTITY_GENERIC_DRINK, 1.0f, 1.0f);
+        merchant.playSound(ModSounds.MERCHANT_DRINK, 1.0f, 1.0f);
     }
 
     @Override
@@ -165,7 +165,7 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 播放完成音效
-        merchant.playSound(SoundEvents.ENTITY_WITCH_DRINK, 1.0f, 1.0f);
+        merchant.playSound(ModSounds.MERCHANT_DRINK, 1.0f, 1.05f);
     }
 
     /**

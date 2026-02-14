@@ -2,12 +2,12 @@ package dev.xqanzd.moonlitbroker.armor.effect;
 
 import dev.xqanzd.moonlitbroker.armor.ArmorConfig;
 import dev.xqanzd.moonlitbroker.armor.item.ArmorItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,7 +101,7 @@ public class StealthShinHandler {
                 // 提示玩家
                 serverPlayer.sendMessage(Text.literal("[Stealth Shin] Charge ready! (" + newCharges + "/" + ArmorConfig.STEALTH_SHIN_MAX_CHARGES + ")"), true);
                 serverPlayer.getWorld().playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
-                        SoundEvents.BLOCK_NOTE_BLOCK_CHIME.value(), SoundCategory.PLAYERS, 0.5f, 1.5f);
+                        ModSounds.ARMOR_STEALTH_CHARGE, SoundCategory.PLAYERS, 0.5f, 1.5f);
 
                 LOGGER.info("[MoonTrace|Armor|STATE] action=state_change result=OK state=stealth_shin_charge charges={} ctx{{p={}}}",
                         newCharges, serverPlayer.getName().getString());
@@ -174,7 +174,7 @@ public class StealthShinHandler {
 
         // 播放音效
         player.getWorld().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BLOCK_WOOL_FALL, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                ModSounds.ARMOR_STEALTH_FALL_PAD, SoundCategory.PLAYERS, 1.0f, 1.0f);
 
         return finalDamage;
     }

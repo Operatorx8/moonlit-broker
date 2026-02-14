@@ -51,5 +51,15 @@
       "entity/wandering_trader/villager_trade2",
       "entity/wandering_trader/villager_trade3"
     ]
+  },
+  "entity.wandering_trader.drink_potion": {
+    "replace": true,
+    "subtitle": "subtitles.xqanzd_moonlit_broker.merchant.drink",
+    "sounds": [
+      {
+        "name": "minecraft:entity.generic.drink",
+        "type": "event"
+      }
+    ]
   }
 }

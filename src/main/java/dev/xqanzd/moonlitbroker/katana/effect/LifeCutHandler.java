@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
@@ -11,7 +12,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
@@ -317,12 +317,12 @@ public class LifeCutHandler {
         }
 
         // 音效：沉闷的斩击
-        player.playSound(SoundEvents.ENTITY_PLAYER_ATTACK_STRONG, 1.0f, 0.8f);
+        player.playSound(ModSounds.LIFECUT_STRIKE, 1.0f, 0.8f);
         // 世界隐约听到
         target.getWorld().playSound(
             null,
             target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ENTITY_WARDEN_HEARTBEAT,
+            ModSounds.LIFECUT_HEARTBEAT,
             SoundCategory.PLAYERS,
             0.3f, 0.6f
         );

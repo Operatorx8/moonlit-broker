@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.boss.WitherEntity;
@@ -13,7 +14,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +107,6 @@ public class NmapFirewallHandler {
                 15, 0.5, 0.5, 0.5, 0.1
             );
         }
-        player.playSound(SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE, 0.6f, 1.8f);
+        player.playSound(ModSounds.NMAP_FIREWALL, 0.6f, 1.8f);
     }
 }

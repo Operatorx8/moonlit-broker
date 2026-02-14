@@ -3,6 +3,7 @@ package dev.xqanzd.moonlitbroker.armor.effect;
 import dev.xqanzd.moonlitbroker.armor.ArmorConfig;
 import dev.xqanzd.moonlitbroker.armor.item.ArmorItems;
 import dev.xqanzd.moonlitbroker.armor.util.CooldownManager;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.damage.DamageTypes;
@@ -13,7 +14,6 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +102,7 @@ public class RetracerHandler {
         // 播放音效
         ServerWorld world = player.getServerWorld();
         world.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ITEM_TOTEM_USE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                ModSounds.ARMOR_RETRACER_GUARD, SoundCategory.PLAYERS, 1.0f, 1.0f);
 
         // 播放粒子效果（复用图腾粒子）
         world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING,

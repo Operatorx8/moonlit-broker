@@ -6,22 +6,41 @@ import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
 
 public class ModSounds {
-    // 你的模组ID，必须小写且与 sounds.json 里的路径一致
     public static final String MODID = "xqanzd_moonlit_broker";
 
-    // 定义音效事件：对应 sounds.json 里的 "moontrace.mark"
-    public static final SoundEvent MOONTRACE_MARK = register("moontrace.mark");
+    // Merchant
+    public static final SoundEvent MERCHANT_DRINK = register("merchant.drink");
 
-    // 注册方法 (Fabric 风格)
+    // Katana core
+    public static final SoundEvent MOONTRACE_MARK = register("moontrace.mark");
+    public static final SoundEvent MOONTRACE_CONSUME_CRIT = register("blade.moontrace_crit");
+    public static final SoundEvent LIFECUT_STRIKE = register("blade.lifecut_strike");
+    public static final SoundEvent LIFECUT_HEARTBEAT = register("blade.heartbeat");
+    public static final SoundEvent ECLIPSE_WHISPER = register("blade.eclipse_whisper");
+    public static final SoundEvent ECLIPSE_AURA = register("blade.eclipse_aura");
+    public static final SoundEvent ECLIPSE_DEPTH = register("blade.eclipse_depth");
+    public static final SoundEvent OBLIVION_READ = register("blade.oblivion_read");
+    public static final SoundEvent OBLIVION_ENCHANT = register("blade.oblivion_enchant");
+    public static final SoundEvent OBLIVION_CAUSALITY = register("blade.oblivion_causality");
+    public static final SoundEvent OBLIVION_SHIFT = register("blade.oblivion_shift");
+    public static final SoundEvent OBLIVION_DOOM = register("blade.oblivion_doom");
+    public static final SoundEvent NMAP_CRIT = register("blade.nmap_crit");
+    public static final SoundEvent NMAP_FIREWALL = register("blade.nmap_firewall");
+    public static final SoundEvent NMAP_SCAN_ON = register("blade.nmap_scan_on");
+    public static final SoundEvent NMAP_SCAN_BREAK = register("blade.nmap_scan_break");
+
+    // Armor
+    public static final SoundEvent ARMOR_RETRACER_GUARD = register("armor.retracer_guard");
+    public static final SoundEvent ARMOR_STEALTH_CHARGE = register("armor.stealth_charge");
+    public static final SoundEvent ARMOR_STEALTH_FALL_PAD = register("armor.stealth_fall_pad");
+    public static final SoundEvent ARMOR_SENTINEL_PULSE = register("armor.sentinel_pulse");
+
     private static SoundEvent register(String id) {
-        // 使用 Identifier.of (如果是旧版本 Fabric 可能需要 new Identifier(MODID, id))
         Identifier identifier = Identifier.of(MODID, id);
         return Registry.register(Registries.SOUND_EVENT, identifier, SoundEvent.of(identifier));
     }
 
-    // 初始化方法
     public static void init() {
-        // 空方法即可，调用它只是为了触发静态代码块加载
-        System.out.println("Katana ModSounds Initialized!");
+        // Trigger static field initialization.
     }
 }

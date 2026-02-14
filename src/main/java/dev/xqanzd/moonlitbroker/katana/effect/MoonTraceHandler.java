@@ -13,7 +13,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LightType;
@@ -488,7 +487,7 @@ public class MoonTraceHandler {
         // === 音效 ===
         // 物理暴击音效
         target.getWorld().playSound(null, target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ENTITY_PLAYER_ATTACK_CRIT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+            ModSounds.MOONTRACE_CONSUME_CRIT, SoundCategory.PLAYERS, 1.0f, 1.0f);
 
         // 月痕消耗音效
         float pitch = 0.8f + player.getRandom().nextFloat() * 0.4f;

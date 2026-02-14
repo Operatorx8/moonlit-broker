@@ -66,7 +66,7 @@ public final class ArmorConfig {
     /** Speed 等级 (0 = I级) */
     public static final int SENTINEL_SPEED_AMPLIFIER = 0;
     /** 回声提示音 ID */
-    public static final String SENTINEL_SOUND_ID = "minecraft:block.bell.use";
+    public static final String SENTINEL_SOUND_ID = "xqanzd_moonlit_broker:armor.sentinel_pulse";
     /** 提示音音量 */
     public static final float SENTINEL_SOUND_VOLUME = 0.7f;
     /** 提示音音调 */

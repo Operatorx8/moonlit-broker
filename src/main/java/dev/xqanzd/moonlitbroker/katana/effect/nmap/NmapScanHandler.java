@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -10,7 +11,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
@@ -136,7 +136,7 @@ public class NmapScanHandler {
             LOGGER.info("[Nmap] scan hit threats={} -> RESISTANCE V 2s (chain={}/{})",
                 threatCount, chainCount, NmapConfig.MAX_CHAIN_REFRESHES);
         }
-        player.playSound(SoundEvents.BLOCK_BEACON_ACTIVATE, 0.5f, 1.5f);
+        player.playSound(ModSounds.NMAP_SCAN_ON, 0.5f, 1.5f);
     }
 
     private static void forceCooldown(ServerPlayerEntity player, long currentTick, String logMessage) {
@@ -158,6 +158,6 @@ public class NmapScanHandler {
         if (NmapConfig.DEBUG) {
             LOGGER.info("[Nmap] damaged -> cancel + cooldown 12s");
         }
-        player.playSound(SoundEvents.BLOCK_GLASS_BREAK, 0.8f, 0.8f);
+        player.playSound(ModSounds.NMAP_SCAN_BREAK, 0.8f, 0.8f);
     }
 }

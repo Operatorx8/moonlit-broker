@@ -1,13 +1,13 @@
 package dev.xqanzd.moonlitbroker.katana.effect.nmap;
 
 import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
+import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +88,6 @@ public class NmapAttackHandler {
             );
         }
 
-        player.playSound(SoundEvents.ENTITY_PLAYER_ATTACK_CRIT, 1.0f, 1.2f);
+        player.playSound(ModSounds.NMAP_CRIT, 1.0f, 1.2f);
     }
 }
