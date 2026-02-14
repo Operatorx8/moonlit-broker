@@ -14,18 +14,18 @@ public final class TransitionalWeaponConstants {
     public static final int IRON_SWORD_DURABILITY = 250;
 
     // === Acer - 暴击强化剑 ===
-    public static final int ACER_BASE_DAMAGE = 6;
+    public static final int ACER_BASE_DAMAGE = 8;
     public static final float ACER_ATTACK_SPEED = -2.2f;  // 1.8 effective (4.0 - 2.2)
     public static final int ACER_DURABILITY = (int) (IRON_SWORD_DURABILITY * 1.15);  // 287
     public static final float ACER_CRIT_MULTIPLIER = 1.7f;  // 原版 1.5，Acer 提升至 1.7
 
     // === Velox - 快攻剑 ===
-    public static final int VELOX_BASE_DAMAGE = 5;
-    public static final float VELOX_ATTACK_SPEED = -1.8f;  // 2.2 effective (4.0 - 1.8)
+    public static final int VELOX_BASE_DAMAGE = 7;
+    public static final float VELOX_ATTACK_SPEED = -1.6f;  // 2.4 effective (4.0 - 1.6)
     public static final int VELOX_DURABILITY = (int) (IRON_SWORD_DURABILITY * 1.05);  // 262
 
     // === Fatalis - 重击剑 ===
-    public static final int FATALIS_BASE_DAMAGE = 10;
+    public static final int FATALIS_BASE_DAMAGE = 12;
     public static final float FATALIS_ATTACK_SPEED = -2.2f;  // 1.8 effective
     public static final int FATALIS_DURABILITY = (int) (IRON_SWORD_DURABILITY * 1.15);  // 287
 

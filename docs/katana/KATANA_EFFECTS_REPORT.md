@@ -1,6 +1,34 @@
 # Katana Effects Report
 Generated on: 2026-02-05T01:48:27-08:00
 
+## Delta Update (2026-02-14)
+This section is the latest override for balance/mechanic changes applied after the original report generation.
+
+- `moon_glow_katana`
+- Armor penetration now aligned: `ARMOR_PEN_NORMAL=0.25`, `ARMOR_PEN_BOSS=0.25`.
+- Delayed magic boss branch aligned with normal branch (`BASE=1.0`, `PERCENT=0.02`, `CAP=4.0`).
+
+- `regret_blade`
+- `ONLY_UNDEAD=false` (effect can trigger on generic `LivingEntity` by current code path).
+- Armor penetration aligned: normal/boss both `0.25`.
+
+- `eclipse_blade`
+- Debuff roulette includes `Poison` weighted combos and has safe fallback when total weight is invalid.
+- Boss duration no longer halved: `BOSS_DURATION_MULTIPLIER=1.0`.
+- Penetration state for logging is aligned to `25%` base and `25%` marked.
+
+- `oblivion_edge`
+- ReadWrite duration/cooldown boss multipliers aligned to `1.0` (boss equals normal).
+- Causality chance/cooldown boss values aligned with normal (`0.20`, `500 ticks`).
+- Armor penetration compensation now computes on every valid hit with tiered penetration:
+- Base `25%`
+- `ReadWrite` target `35%`
+- `ReadWrite + Boss` target `40%`
+
+- `nmap_katana`
+- Vulnerability module no longer hard-blocks Wither/Dragon targets when `armor == 0`.
+- Port Enumeration growth and cap remain unchanged (`+5%` per hostile, cap `35%`, max count `7`).
+
 ## Quick Index
 - moon_glow_katana
 - regret_blade
@@ -141,8 +169,8 @@ Generated on: 2026-02-05T01:48:27-08:00
 - Compute mark/debuff duration: 60 ticks, boss duration halved (`*0.5` => 30 ticks for Wither/Dragon).
 - Apply `Glowing` for duration.
 - Apply exactly two debuffs from weighted combo table (`DebuffCombo`), with strong-control mutual exclusion (no Darkness+Blindness pair).
-- Debuffs chosen from Darkness/Blindness/Weakness/Slowness/Wither.
-- All debuff amplifiers are config value `0` (level I).
+- Debuffs chosen from Darkness/Blindness/Weakness/Slowness/Wither/Poison.
+- All debuff amplifiers are config value `0` (level I), including Poison.
 - Applies Eclipse mark in `EclipseManager` (used for state tracking and debug/log context).
 - Spawns particles/sounds.
 
@@ -155,9 +183,9 @@ Generated on: 2026-02-05T01:48:27-08:00
 - `TRIGGER_CHANCE = 0.40`, `TRIGGER_CD_TICKS = 50`, `EclipseConfig`.
 - `MARK_DURATION_TICKS = 60`, `BOSS_DURATION_MULTIPLIER = 0.5`, `EclipseConfig`.
 - `BASE_ARMOR_PENETRATION = 0.15`, `MARKED_ARMOR_PENETRATION = 0.25`, `EclipseConfig` (logging/display only in current code).
-- Amplifiers: `WEAKNESS_AMPLIFIER = 0`, `WITHER_AMPLIFIER = 0`, `SLOWNESS_AMPLIFIER = 0`, `BLINDNESS_AMPLIFIER = 0`, `DARKNESS_AMPLIFIER = 0`, `EclipseConfig`.
+- Amplifiers: `WEAKNESS_AMPLIFIER = 0`, `WITHER_AMPLIFIER = 0`, `SLOWNESS_AMPLIFIER = 0`, `BLINDNESS_AMPLIFIER = 0`, `DARKNESS_AMPLIFIER = 0`, `POISON_AMPLIFIER = 0`, `EclipseConfig`.
 - Combo weights:
-- `WEIGHT_DARKNESS_WEAKNESS=12`, `WEIGHT_DARKNESS_SLOWNESS=12`, `WEIGHT_BLINDNESS_WEAKNESS=12`, `WEIGHT_BLINDNESS_SLOWNESS=12`, `WEIGHT_WEAKNESS_SLOWNESS=10`, `WEIGHT_DARKNESS_WITHER=4`, `WEIGHT_BLINDNESS_WITHER=4`, `WEIGHT_WEAKNESS_WITHER=2`, `WEIGHT_SLOWNESS_WITHER=2`, `EclipseConfig`.
+- `WEIGHT_DARKNESS_WEAKNESS=12`, `WEIGHT_DARKNESS_SLOWNESS=12`, `WEIGHT_BLINDNESS_WEAKNESS=12`, `WEIGHT_BLINDNESS_SLOWNESS=12`, `WEIGHT_WEAKNESS_SLOWNESS=10`, `WEIGHT_DARKNESS_POISON=8`, `WEIGHT_BLINDNESS_POISON=8`, `WEIGHT_WEAKNESS_POISON=10`, `WEIGHT_SLOWNESS_POISON=10`, `WEIGHT_DARKNESS_WITHER=4`, `WEIGHT_BLINDNESS_WITHER=4`, `WEIGHT_WEAKNESS_WITHER=2`, `WEIGHT_SLOWNESS_WITHER=2`, `EclipseConfig`.
 - Runtime adjustment: +15 is added to Darkness+Weakness and Blindness+Weakness in `EclipseHandler` static init.
 
 ### Code Entry Points

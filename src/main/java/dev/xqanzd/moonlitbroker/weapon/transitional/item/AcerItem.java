@@ -20,7 +20,7 @@ public class AcerItem extends SwordItem {
 
     private static Item.Settings createSettings() {
         // 计算伤害加成：base_damage - 1 - material_damage
-        // IRON material damage = 2, 所以 bonus = 6 - 1 - 2 = 3
+        // IRON material damage = 2, 所以 bonus = 8 - 1 - 2 = 5
         int damageBonus = TransitionalWeaponConstants.ACER_BASE_DAMAGE - 1 - 2;
 
         return new Item.Settings()

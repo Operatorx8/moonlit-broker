@@ -2316,7 +2316,7 @@
     "firstperson_righthand": {
       "rotation": [
         27,
-        93,
+        -93,
         0
       ],
       "translation": [
@@ -2352,6 +2352,23 @@
         0,
         5,
         0
+      ]
+    },
+    "fixed": {
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        7.25
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
       ]
     },
     "on_shelf": {

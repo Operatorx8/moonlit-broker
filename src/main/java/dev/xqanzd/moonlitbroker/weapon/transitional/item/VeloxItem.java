@@ -10,7 +10,7 @@ import net.minecraft.util.Rarity;
 /**
  * Velox - 快攻剑
  * 无特效，纯数值武器
- * 特点：高攻速 (2.2)，低伤害 (5)
+ * 特点：高攻速 (2.4)，中高伤害 (7)
  */
 public class VeloxItem extends SwordItem {
 
@@ -20,7 +20,7 @@ public class VeloxItem extends SwordItem {
 
     private static Item.Settings createSettings() {
         // 计算伤害加成：base_damage - 1 - material_damage
-        // IRON material damage = 2, 所以 bonus = 5 - 1 - 2 = 2
+        // IRON material damage = 2, 所以 bonus = 7 - 1 - 2 = 4
         int damageBonus = TransitionalWeaponConstants.VELOX_BASE_DAMAGE - 1 - 2;
 
         return new Item.Settings()

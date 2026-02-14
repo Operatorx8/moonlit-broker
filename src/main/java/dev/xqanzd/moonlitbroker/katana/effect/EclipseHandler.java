@@ -31,9 +31,9 @@ import java.util.UUID;
  *
  * 触发条件：40% 概率，每目标 2.5秒冷却
  * 效果：
- * - 施加月蚀标记（3秒，Boss减半）
- * - 随机施加 2 种 Debuff（强控互斥：darkness/blindness 最多一个）
- * - 护甲穿透仅用于展示：未标记 15%，标记 25%（不做额外伤害补偿）
+ * - 施加月蚀标记（3秒，Boss按配置倍率）
+ * - 随机施加 2 种 Debuff（强控互斥：darkness/blindness 最多一个，轮盘含 poison）
+ * - 护甲穿透仅用于展示：未标记 25%，标记 25%（不做额外伤害补偿）
  */
 public class EclipseHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger("Eclipse");
@@ -53,6 +53,10 @@ public class EclipseHandler {
         addCombo(StatusEffects.BLINDNESS, StatusEffects.WEAKNESS, EclipseConfig.WEIGHT_BLINDNESS_WEAKNESS + 15);
         addCombo(StatusEffects.BLINDNESS, StatusEffects.SLOWNESS, EclipseConfig.WEIGHT_BLINDNESS_SLOWNESS);
         addCombo(StatusEffects.WEAKNESS, StatusEffects.SLOWNESS, EclipseConfig.WEIGHT_WEAKNESS_SLOWNESS);
+        addCombo(StatusEffects.DARKNESS, StatusEffects.POISON, EclipseConfig.WEIGHT_DARKNESS_POISON);
+        addCombo(StatusEffects.BLINDNESS, StatusEffects.POISON, EclipseConfig.WEIGHT_BLINDNESS_POISON);
+        addCombo(StatusEffects.WEAKNESS, StatusEffects.POISON, EclipseConfig.WEIGHT_WEAKNESS_POISON);
+        addCombo(StatusEffects.SLOWNESS, StatusEffects.POISON, EclipseConfig.WEIGHT_SLOWNESS_POISON);
         addCombo(StatusEffects.DARKNESS, StatusEffects.WITHER, EclipseConfig.WEIGHT_DARKNESS_WITHER);
         addCombo(StatusEffects.BLINDNESS, StatusEffects.WITHER, EclipseConfig.WEIGHT_BLINDNESS_WITHER);
         addCombo(StatusEffects.WEAKNESS, StatusEffects.WITHER, EclipseConfig.WEIGHT_WEAKNESS_WITHER);
@@ -60,6 +64,7 @@ public class EclipseHandler {
     }
 
     private static void addCombo(RegistryEntry<StatusEffect> a, RegistryEntry<StatusEffect> b, int weight) {
+        if (weight <= 0) return;
         COMBOS.add(new DebuffCombo(a, b, weight));
         TOTAL_WEIGHT += weight;
     }
@@ -104,6 +109,9 @@ public class EclipseHandler {
         });
 
         LOGGER.info("[Eclipse] Handler registered");
+        if (EclipseConfig.DEBUG) {
+            LOGGER.info("[Eclipse] Debuff roulette initialized: combos={}, totalWeight={}", COMBOS.size(), TOTAL_WEIGHT);
+        }
     }
 
     private static boolean shouldTrigger(World world, LivingEntity target) {
@@ -180,6 +188,10 @@ public class EclipseHandler {
     }
 
     private static DebuffCombo selectRandomCombo(World world) {
+        if (COMBOS.isEmpty() || TOTAL_WEIGHT <= 0) {
+            return new DebuffCombo(StatusEffects.WEAKNESS, StatusEffects.SLOWNESS, 1);
+        }
+
         int roll = world.getRandom().nextInt(TOTAL_WEIGHT);
         int cumulative = 0;
 
@@ -201,6 +213,7 @@ public class EclipseHandler {
         if (effect == StatusEffects.SLOWNESS) return EclipseConfig.SLOWNESS_AMPLIFIER;
         if (effect == StatusEffects.BLINDNESS) return EclipseConfig.BLINDNESS_AMPLIFIER;
         if (effect == StatusEffects.DARKNESS) return EclipseConfig.DARKNESS_AMPLIFIER;
+        if (effect == StatusEffects.POISON) return EclipseConfig.POISON_AMPLIFIER;
         return 0;
     }
 

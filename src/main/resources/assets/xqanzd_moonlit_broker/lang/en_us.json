@@ -41,7 +41,7 @@
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_name": "[Lunar Eclipse]",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_penetration": "Penetration state: 15% (base), 25% (marked)",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc1": "40% chance to inflict Eclipse mark (2.5s trigger CD per target)",
-  "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc2": "Mark applies 2 random debuffs; boss duration is halved",
+  "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc2": "Mark applies 2 random debuffs (including Poison); boss duration is halved",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_lore": "\"When the moon devours the sun...\"",
   "tooltip.xqanzd_moonlit_broker.eclipse_blade.subtitle": "[Lunar Eclipse]",
   "tooltip.xqanzd_moonlit_broker.eclipse_blade.line1": "Dark light settles on the target like a hush.",

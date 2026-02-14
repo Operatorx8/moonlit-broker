@@ -33,7 +33,8 @@ public class OblivionConfig {
     public static final int CAUSALITY_COOLDOWN_TICKS = 500;          // 25s
     public static final int CAUSALITY_COOLDOWN_BOSS_TICKS = 500;     // Boss 冷却对齐普通
 
-    // === 护甲穿透（仅对 ReadWrite 目标生效） ===
-    public static final float ARMOR_PENETRATION = 0.35f;             // 35%
-    public static final float ARMOR_PENETRATION_BOSS = 0.35f;        // Boss 保持 35%
+    // === 护甲穿透 ===
+    public static final float BASE_ARMOR_PENETRATION = 0.25f;                 // 基础 25%
+    public static final float READWRITE_ARMOR_PENETRATION = 0.35f;            // ReadWrite 目标 35%
+    public static final float READWRITE_ARMOR_PENETRATION_BOSS = 0.40f;       // ReadWrite + Boss 40%
 }

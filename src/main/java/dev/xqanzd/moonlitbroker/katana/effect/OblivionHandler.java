@@ -60,10 +60,8 @@ public class OblivionHandler {
                     hasReadWrite);
             }
 
-            // === Layer 4: 护甲穿透（仅对 ReadWrite 目标） ===
-            if (hasReadWrite) {
-                applyArmorPenetration(player, target, isBoss);
-            }
+            // === Layer 4: 护甲穿透（基础 25%，ReadWrite 提升） ===
+            applyArmorPenetration(player, target, isBoss, hasReadWrite);
 
             // === Layer 3: 倒因噬果（条件判定） ===
             if (hasReadWrite && shouldTriggerCausality(player, target, playerHpBeforeHit, playerHpRatio, isBoss, currentTick)) {
@@ -226,21 +224,26 @@ public class OblivionHandler {
 
     // ========== Layer 4: 护甲穿透 ==========
 
-    private static void applyArmorPenetration(PlayerEntity player, LivingEntity target, boolean isBoss) {
+    private static void applyArmorPenetration(PlayerEntity player, LivingEntity target, boolean isBoss, boolean hasReadWrite) {
         float baseDamage = 5.0f;  // OblivionEdgeItem 基础伤害
         float armor = target.getArmor();
         float armorReduction = Math.min(armor * 0.04f, 0.8f);
 
-        float penetration = isBoss ? OblivionConfig.ARMOR_PENETRATION_BOSS : OblivionConfig.ARMOR_PENETRATION;
+        float penetration = OblivionConfig.BASE_ARMOR_PENETRATION;
+        if (hasReadWrite) {
+            penetration = isBoss
+                ? OblivionConfig.READWRITE_ARMOR_PENETRATION_BOSS
+                : OblivionConfig.READWRITE_ARMOR_PENETRATION;
+        }
         float compensationDamage = baseDamage * armorReduction * penetration;
 
         if (compensationDamage > 0.3f) {
             target.damage(player.getDamageSources().magic(), compensationDamage);
 
             if (OblivionConfig.DEBUG) {
-                LOGGER.info("[Oblivion] Armor penetration: {}% of {} armor = {} bonus damage (Boss: {})",
+                LOGGER.info("[Oblivion] Armor penetration: {}% of {} armor = {} bonus damage (ReadWrite: {}, Boss: {})",
                     (int)(penetration * 100), (int)armor,
-                    String.format("%.1f", compensationDamage), isBoss);
+                    String.format("%.1f", compensationDamage), hasReadWrite, isBoss);
             }
         }
     }

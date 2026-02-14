@@ -66,6 +66,34 @@
   - 护甲穿透统一为 `35%`（普通与 Boss）
   - DEBUG 日志补充：触发详情（攻击者、目标 UUID、maxHealth、cut、结果血量、冷却）与穿透值
 
+- Eclipse Blade（暗月之蚀）Debuff 轮盘扩展
+  - 新增 `Poison`（中毒）进入加权轮盘，并参与随机组合概率计算
+  - 增加轮盘保护：当总权重异常时回退到安全默认组合，避免随机 `nextInt(0)` 崩溃
+  - 当前配置对齐：`BOSS_DURATION_MULTIPLIER=1.0`（Boss 不减半），穿透状态文案基准为 `25% / 25%`
+
+- Oblivion Edge（窃念之黯）机制与手感调整
+  - 第一人称右手模型修正：刀刃朝外（`display.firstperson_righthand.rotation` 修正）
+  - 穿透补偿从“仅 ReadWrite 生效”调整为“基础命中即生效”
+  - 穿透分层：基础 `25%`；`ReadWrite` 目标 `35%`；`ReadWrite + Boss` 为 `40%`
+
+- Nmap Katana（先觉之谕）规则修正
+  - Vulnerability Scan 不再因目标是 Wither/Dragon 被硬性禁用（移除 boss 直接排除）
+  - Port Enumeration（按敌对目标数提高穿透，上限 35%）机制保持不变
+
+- 五把神器 Katana 展示框贴合优化（仅模型 `display.fixed`）
+  - `moon_glow_katana` / `regret_blade` / `eclipse_blade` / `oblivion_edge` / `nmap_katana`
+  - 统一补齐/对齐 `rotation`、`translation`、`scale`，并将 Z 轴朝底板方向微调，展示更贴框
+
+- 过渡武器资源接入与数值调整
+  - `acer` / `velox` / `fatalis` item model 改为指向 `assets/.../models/item/tran_katana/*`
+  - 新增对应 Blockbench 模型与纹理到 `assets/xqanzd_moonlit_broker/models/item/tran_katana/` 与 `textures/item/tran_katana/`
+  - 基础数值：`Acer=8`，`Velox=7` 且攻速 `2.4`，`Fatalis=12`
+
+- 商人相关 icon 资源迁移与调用
+  - 新增 `assets/xqanzd_moonlit_broker/models/item/icon/*` 与 `textures/item/icon/*`
+  - `guide_scroll` / `mysterious_coin` / `sacrifice` / `merchant_mark` / `silver_note` / `trade_scroll` 入口模型改为 parent 引用 icon 子模型
+  - 兼容保留顶层 item model 包装（`models/item/<id>.json`）
+
 ---
 
 ## [0.8.0] - Katana 武器系统

@@ -4,8 +4,6 @@ import dev.xqanzd.moonlitbroker.katana.item.KatanaItems;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.boss.WitherEntity;
-import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
@@ -67,7 +65,6 @@ public class NmapAttackHandler {
 
     private static boolean shouldVulnCrit(PlayerEntity player, LivingEntity target, long currentTick) {
         if (target.getArmor() > 0) return false;
-        if (target instanceof EnderDragonEntity || target instanceof WitherEntity) return false;
         return NmapManager.canVulnCrit(player, currentTick);
     }
 

@@ -41,16 +41,16 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
     - Glowing `12 ticks`
   - On mark consume (`applyConsumeBonus`):
     - Physical bonus random `[5.0, 9.0]`
-    - Armor penetration: normal `50%`, boss `25%`
+    - Armor penetration: normal `25%`, boss `25%`
     - If consuming `LIGHT_MARK`, all consume damage multiplied by `0.70`
     - Extra delayed magic (next tick):
       - Normal: `1.0 + min(maxHP*0.02, 4.0)`
-      - Boss: `0.5 + min(maxHP*0.01, 2.0)`
+      - Boss: `1.0 + min(maxHP*0.02, 4.0)`
   - Passive while holding in valid moonlight:
     - Speed I + Night Vision refreshed every `40 ticks`, each duration `60 ticks` (`tickSpeedBuff`)
 - Boss rule:
   - Boss check is `EnderDragonEntity` / `WitherEntity` (`MoonTraceHandler#isBoss`)
-  - Not forbidden (`FORBID_BOSS=false`), but consume scaling is weaker on boss
+  - Not forbidden (`FORBID_BOSS=false`), consume参数与普通目标对齐
 - Debug/log:
   - `MoonTraceConfig.DEBUG` controls verbose logs
   - Recommendation: keep for balancing; disable in release
@@ -68,8 +68,8 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
   - Base cut = current HP * `0.30`
   - Boss multiplier: `0.333`
   - Armor penetration:
-    - Normal `35%`
-    - Boss `35%`
+    - Normal `25%`
+    - Boss `25%`
   - Uses MC armor formula after penetration
   - Cannot kill clamp: leaves at least `1 HP` (`CANNOT_KILL`, `MIN_HEALTH_AFTER_CUT`)
   - Damage applied next tick via queue (`tickDelayedDamage`)
@@ -91,10 +91,11 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 - Effects:
   - Applies Eclipse mark (`EclipseManager`) with duration:
     - Normal `60 ticks`
-    - Boss `30 ticks` (`BOSS_DURATION_MULTIPLIER=0.5`)
+    - Boss `60 ticks` (`BOSS_DURATION_MULTIPLIER=1.0`)
   - Adds `Glowing` plus 2 debuffs selected from weighted combo table (`EclipseHandler` static combos)
+  - Debuff roulette now includes `Poison` (weighted participation with Darkness/Blindness/Weakness/Slowness combinations)
   - Penetration state values defined as:
-    - Base `15%`
+    - Base `25%`
     - Marked `25%`
     - Current implementation note: handler comments declare this state for display/logging (no explicit extra-damage compensation in this handler)
 - Boss rule:
@@ -112,10 +113,10 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
   - 25% proc (`READWRITE_CHANCE`)
   - Per-target cooldown:
     - Normal `100 ticks`
-    - Boss `200 ticks` (`BOSS_COOLDOWN_MULTIPLIER=2.0`)
+    - Boss `100 ticks` (`BOSS_COOLDOWN_MULTIPLIER=1.0`)
   - Duration:
     - Normal `50 ticks`
-    - Boss `25 ticks` (`BOSS_DURATION_MULTIPLIER=0.5`)
+    - Boss `50 ticks` (`BOSS_DURATION_MULTIPLIER=1.0`)
 - Layer 2 / Debuff:
   - Random 50/50:
     - Weakness II
@@ -127,17 +128,18 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
   - Target HP must be `> player HP`
   - Proc chance:
     - Normal `20%`
-    - Boss `6.6667%`
+    - Boss `20%`
   - Player cooldown:
     - Normal `500 ticks` (25s)
-    - Boss `900 ticks` (45s)
+    - Boss `500 ticks` (25s)
   - Effect: target HP set to `min(targetHP, playerHP)` (i.e., lowered to player HP when above it)
 - Layer 4 / Penetration bonus damage (`applyArmorPenetration`):
-  - Only on ReadWrite targets
+  - 每次命中都计算补偿（ReadWrite 状态决定穿透档位）
   - Compensation = `baseDamage(5.0) * min(armor*0.04, 0.8) * penetration`
   - Penetration:
-    - Normal `35%`
-    - Boss `17.5%`
+    - Base `25%`
+    - ReadWrite `35%`
+    - ReadWrite + Boss `40%`
   - Applied as magic damage if compensation `> 0.3`
 - Debug/log:
   - `OblivionConfig.DEBUG` controls logs
@@ -149,15 +151,13 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
   - Durability: `1765`
   - Enchantability source: inherited Sword/Netherite path
 - Module A / Host Discovery (`NmapScanHandler`):
-  - Scan radius `50` every:
-    - Normal `60 ticks`
-    - During cooldown `40 ticks`
+  - Scan radius `24` every `80 ticks`
+  - Threat vertical window `|dy| <= 10`
   - If hostile found and scan not on cooldown:
-    - Applies Resistance V (`amplifier=4`) for `60 ticks`
-    - Marks shield active
+    - Applies Resistance V (`amplifier=4`) for `40 ticks`
+    - 最多连续刷新 `3` 次，达到上限或扫描落空进入 `240 ticks` 冷却
   - On player damaged while shield active (`LivingEntityMixin -> NmapScanHandler#onPlayerDamaged`):
-    - Cooldown `1200 ticks` if from hostile monster
-    - Cooldown `3600 ticks` otherwise
+    - 取消护盾并进入 `240 ticks` 冷却
 - Module B / Port Enumeration (`NmapManager`):
   - Window `200 ticks`
   - +5% penetration per unique hostile UUID
@@ -166,16 +166,15 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 - Module C / Vulnerability Scan (`NmapAttackHandler`):
   - Conditions:
     - target armor == 0
-    - not dragon/wither
     - crit cooldown ready
   - Bonus: `+50%` of baseDamage(5.0) => `+2.5` player-attack damage
   - Cooldown `60 ticks`
 - Module D / Firewall (`NmapFirewallHandler` via `LivingEntityMixin`):
   - Harmful debuff block from hostile source:
-    - chance normal `40%`, boss `20%`
+    - chance normal `40%`, boss `40%`
     - cooldown `120 ticks`
   - Projectile block from hostile owner:
-    - chance normal `35%`, boss `15%`
+    - chance normal `35%`, boss `35%`
     - cooldown `120 ticks`
 - Debug/log:
   - `NmapConfig.DEBUG` controls module logs
@@ -183,7 +182,7 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 
 ## `xqanzd_moonlit_broker:acer` (transitional)
 - Base attributes:
-  - Damage/speed source: `TransitionalWeaponConstants.ACER_BASE_DAMAGE=6`, `ACER_ATTACK_SPEED=-2.2f` (`AcerItem#createSettings`)
+  - Damage/speed source: `TransitionalWeaponConstants.ACER_BASE_DAMAGE=8`, `ACER_ATTACK_SPEED=-2.2f` (`AcerItem#createSettings`)
   - Durability: `287` (`ACER_DURABILITY`)
   - Enchantability: override returns `15` (`AcerItem#getEnchantability`)
 - Special effect:
@@ -195,7 +194,7 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 
 ## `xqanzd_moonlit_broker:velox` (transitional, intentionally not in katana tag)
 - Base attributes:
-  - Damage/speed source: `VELOX_BASE_DAMAGE=5`, `VELOX_ATTACK_SPEED=-1.8f` (`VeloxItem#createSettings`)
+  - Damage/speed source: `VELOX_BASE_DAMAGE=7`, `VELOX_ATTACK_SPEED=-1.6f` (`VeloxItem#createSettings`)
   - Durability: `262` (`VELOX_DURABILITY`)
   - Enchantability: override returns `14` (`SWORD_ENCHANTABILITY`)
 - Special effect:
@@ -205,7 +204,7 @@ Project: MysteriousMerchant (`modid = xqanzd_moonlit_broker`)
 
 ## `xqanzd_moonlit_broker:fatalis` (transitional)
 - Base attributes:
-  - Damage/speed source: `FATALIS_BASE_DAMAGE=10`, `FATALIS_ATTACK_SPEED=-2.2f` (`FatalisItem#createSettings`)
+  - Damage/speed source: `FATALIS_BASE_DAMAGE=12`, `FATALIS_ATTACK_SPEED=-2.2f` (`FatalisItem#createSettings`)
   - Durability: `287` (`FATALIS_DURABILITY`)
   - Enchantability: override returns `15` (`KATANA_ENCHANTABILITY`)
 - Special effect:

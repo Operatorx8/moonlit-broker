@@ -41,7 +41,7 @@
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_name": "[月蚀]",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_penetration": "穿透状态：基础15%，标记25%",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc1": "40%概率施加月蚀标记（每目标触发冷却2.5秒）",
-  "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc2": "标记附带2个随机Debuff；Boss持续时间减半",
+  "item.xqanzd_moonlit_broker.eclipse_blade.effect_desc2": "标记附带2个随机Debuff（含中毒）；Boss持续时间减半",
   "item.xqanzd_moonlit_broker.eclipse_blade.effect_lore": "「当月吞日，黑暗降临...」",
   "tooltip.xqanzd_moonlit_broker.eclipse_blade.subtitle": "[月蚀]",
   "tooltip.xqanzd_moonlit_broker.eclipse_blade.line1": "暗光覆身，像一阵无声的天象。",
