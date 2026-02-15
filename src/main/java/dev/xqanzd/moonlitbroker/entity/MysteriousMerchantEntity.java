@@ -364,6 +364,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private String merchantName = "";
     /** 供奉交互的 runtime 防连点冷却（不持久化）。 */
     private long lastCoinOfferTick = -1L;
+    /** 送别二次确认：记录 (playerUuid -> 首次潜行右键 tick)，3秒内再次右键才真正送别。 */
+    private UUID sendoffPendingPlayer = null;
+    private long sendoffPendingTick = -1L;
+    private static final int SENDOFF_CONFIRM_WINDOW_TICKS = 60; // 3 秒
 
     // ========== Trade System: 隐藏交易限制 ==========
     /** 是否已售出隐藏物品 */
@@ -698,11 +702,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 发送警告消息
         if (player instanceof ServerPlayerEntity serverPlayer) {
             serverPlayer.sendMessage(
-                    Text.literal("月下掮客的诅咒降临于你...")
+                    Text.translatable("msg.xqanzd_moonlit_broker.merchant.kill_curse")
                             .formatted(Formatting.DARK_RED, Formatting.BOLD),
                     false);
             serverPlayer.sendMessage(
-                    Text.literal("你感受到一股不祥的力量...")
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.kill_omen")
                             .formatted(Formatting.DARK_PURPLE, Formatting.ITALIC),
                     true // actionBar
             );
@@ -776,12 +780,77 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (this.hasCustomer()) {
             if (heldItem.isOf(ModItems.BOUNTY_CONTRACT) && player instanceof ServerPlayerEntity sp) {
                 sp.sendMessage(
-                        Text.literal("商人正在交易中，稍后再试")
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.busy_try_later")
                                 .formatted(Formatting.YELLOW),
                         true);
                 return ActionResult.CONSUME;
             }
             return super.interactMob(player, hand);
+        }
+
+        // ========== 送别机制：潜行 + 手持 Trade Scroll 右键 ==========
+        if (player.isSneaking() && heldItem.isOf(ModItems.TRADE_SCROLL)) {
+            // 多人服保护：有其他玩家正在交易时阻止送别
+            if (this.hasCustomer() && this.getCustomer() != player) {
+                if (player instanceof ServerPlayerEntity sp) {
+                    sp.sendMessage(
+                            Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.busy_with_other")
+                                    .formatted(Formatting.YELLOW),
+                            true);
+                }
+                return ActionResult.CONSUME;
+            }
+            if (!this.getEntityWorld().isClient() && player instanceof ServerPlayerEntity sp) {
+                ServerWorld serverWorld = sp.getServerWorld();
+                long now = serverWorld.getTime();
+                // 二次确认：首次潜行右键仅提示，3秒内再次右键才执行送别
+                if (sendoffPendingPlayer == null
+                        || !sendoffPendingPlayer.equals(player.getUuid())
+                        || now - sendoffPendingTick > SENDOFF_CONFIRM_WINDOW_TICKS) {
+                    // 首次（或超时）：记录 nonce，提示确认
+                    sendoffPendingPlayer = player.getUuid();
+                    sendoffPendingTick = now;
+                    sp.sendMessage(
+                            Text.translatable(
+                                    "actionbar.xqanzd_moonlit_broker.merchant.sendoff_confirm",
+                                    new ItemStack(ModItems.TRADE_SCROLL).getName(),
+                                    1
+                            )
+                                    .formatted(Formatting.GOLD),
+                            true);
+                    return ActionResult.CONSUME;
+                }
+                // 二次确认通过，清除 nonce
+                sendoffPendingPlayer = null;
+                sendoffPendingTick = -1L;
+                // survival 消耗 1 Scroll
+                if (!player.isCreative()) {
+                    heldItem.decrement(1);
+                }
+                // 推进全局冷却（DEBUG + 创造模式可旁路）
+                boolean bypassCooldown = TradeConfig.DEBUG_TRADES
+                        && TradeConfig.DEBUG_SENDOFF_BYPASS_GLOBAL_COOLDOWN
+                        && player.isCreative();
+                if (!bypassCooldown) {
+                    MerchantSpawnerState.getServerState(serverWorld)
+                            .applySendoffCooldown(serverWorld, TradeConfig.SUMMON_GLOBAL_COOLDOWN_TICKS, player.getUuid());
+                } else {
+                    LOGGER.warn("[MoonTrade] SENDOFF_DEBUG_BYPASS_COOLDOWN player={} merchant={}",
+                            sp.getName().getString(), this.getUuid().toString().substring(0, 8));
+                }
+                // actionbar 提示
+                sp.sendMessage(
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.sendoff_done")
+                                .formatted(Formatting.LIGHT_PURPLE, Formatting.ITALIC),
+                        true);
+                LOGGER.info("[MoonTrade] SENDOFF player={} merchant={} pos={}",
+                        sp.getName().getString(),
+                        this.getUuid().toString().substring(0, 8),
+                        String.format("%.0f,%.0f,%.0f", this.getX(), this.getY(), this.getZ()));
+                // 复用现有 despawn 链路
+                performDespawn();
+            }
+            return ActionResult.CONSUME;
         }
 
         // 手持指南时优先打开书本阅读，避免被商人交互抢占。
@@ -803,7 +872,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (heldItem.getItem() == ModItems.BOUNTY_CONTRACT && player.isSneaking()) {
             if (player instanceof ServerPlayerEntity sp) {
                 sp.sendMessage(
-                        Text.literal("松开潜行以提交悬赏")
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.bounty.release_sneak_submit")
                                 .formatted(Formatting.GOLD),
                         true);
             }
@@ -886,7 +955,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
             // 发送消息
             player.sendMessage(
-                    Text.literal("[月下掮客] 初次见面，送你一份指南和印记。")
+                    Text.translatable("msg.xqanzd_moonlit_broker.merchant.first_meet_gift")
                             .formatted(Formatting.GOLD),
                     false);
 
@@ -933,15 +1002,19 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 发送消息
         if (player instanceof ServerPlayerEntity serverPlayer) {
             serverPlayer.sendMessage(
-                    Text.literal("月下掮客接受了你的供奉...")
+                    Text.translatable("msg.xqanzd_moonlit_broker.merchant.coin_offer.accepted")
                             .formatted(Formatting.GOLD),
                     false);
             serverPlayer.sendMessage(
-                    Text.literal("你感受到一股神秘的祝福！")
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.coin_offer.blessing")
                             .formatted(Formatting.YELLOW, Formatting.ITALIC),
                     true);
             serverPlayer.sendMessage(
-                    Text.literal("你额外获得了 1 张交易卷轴。")
+                    Text.translatable(
+                            "msg.xqanzd_moonlit_broker.merchant.coin_offer.extra_item",
+                            new ItemStack(ModItems.TRADE_SCROLL).getName(),
+                            1
+                    )
                             .formatted(Formatting.AQUA),
                     false);
         }
@@ -993,7 +1066,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 1) 验证有效契约
         if (!BountyContractItem.isValidContract(contractStack)) {
             serverPlayer.sendMessage(
-                    Text.literal("这不是有效的悬赏契约").formatted(Formatting.RED), true);
+                    Text.translatable("error.xqanzd_moonlit_broker.bounty.invalid_contract")
+                            .formatted(Formatting.RED),
+                    true
+            );
             LOGGER.info("[MoonTrade] action=BOUNTY_SUBMIT_REJECT reason=INVALID side=S player={}",
                     serverPlayer.getName().getString());
             return ActionResult.CONSUME;
@@ -1005,7 +1081,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             int required = BountyContractItem.getRequired(contractStack);
             String target = BountyContractItem.getTarget(contractStack);
             serverPlayer.sendMessage(
-                    Text.literal("悬赏未完成！进度: " + progress + "/" + required)
+                    Text.translatable("error.xqanzd_moonlit_broker.bounty.not_completed", progress, required)
                             .formatted(Formatting.YELLOW),
                     false);
             LOGGER.info("[MoonTrade] action=BOUNTY_SUBMIT_REJECT reason=NOT_DONE side=S player={} target={} progress={}/{}",
@@ -1025,7 +1101,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             LOGGER.error("[MoonTrade] action=BOUNTY_SUBMIT_ERROR side=S player={} target={} error={}",
                     serverPlayer.getName().getString(), target, e.getMessage(), e);
             serverPlayer.sendMessage(
-                    Text.literal("悬赏提交失败，请查看日志").formatted(Formatting.RED), false);
+                    Text.translatable("error.xqanzd_moonlit_broker.bounty.submit_failed")
+                            .formatted(Formatting.RED),
+                    false
+            );
             return ActionResult.CONSUME;
         }
 
@@ -1034,7 +1113,13 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 dev.xqanzd.moonlitbroker.trade.TradeConfig.BOUNTY_SILVER_REWARD);
 
         serverPlayer.sendMessage(
-                Text.literal("悬赏已提交！获得交易卷轴和银币")
+                Text.translatable(
+                        "msg.xqanzd_moonlit_broker.bounty.rewards_granted",
+                        new ItemStack(ModItems.TRADE_SCROLL).getName(),
+                        1,
+                        new ItemStack(ModItems.SILVER_NOTE).getName(),
+                        TradeConfig.BOUNTY_SILVER_REWARD
+                )
                         .formatted(Formatting.GREEN),
                 false);
 
@@ -1155,12 +1240,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 unlockStateChanged = true;
                 if (player instanceof ServerPlayerEntity serverPlayer) {
                     serverPlayer.sendMessage(
-                            Text.literal("[月下掮客] 你解封了卷轴，隐藏交易已开启。")
+                            Text.translatable("msg.xqanzd_moonlit_broker.merchant.unseal_unlocked")
                                     .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
                             false);
                     // P0-6 修复：提示玩家重新打开交易界面以查看隐藏交易
                     serverPlayer.sendMessage(
-                            Text.literal("[月下掮客] 请关闭并重新打开交易界面查看隐藏交易。")
+                            Text.translatable("msg.xqanzd_moonlit_broker.merchant.unseal_reopen")
                                     .formatted(Formatting.GRAY, Formatting.ITALIC),
                             false);
                 }

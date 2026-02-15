@@ -389,7 +389,10 @@ public abstract class MerchantScreenRefreshMixin extends HandledScreen<MerchantS
     @Unique
     private boolean xqanzd_moonlit_broker$isMysteriousMerchantScreen() {
         String titleText = this.title.getString().toLowerCase(Locale.ROOT);
-        if (titleText.contains("mysterious merchant") || titleText.contains("神秘商人")) {
+        if (titleText.contains("mysterious merchant")
+                || titleText.contains("moonlit broker")
+                || titleText.contains("神秘商人")
+                || titleText.contains("月下掮客")) {
             return true;
         }
 

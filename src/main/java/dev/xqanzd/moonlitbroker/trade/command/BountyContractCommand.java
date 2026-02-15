@@ -3,13 +3,16 @@ package dev.xqanzd.moonlitbroker.trade.command;
 import com.mojang.brigadier.CommandDispatcher;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
+import net.minecraft.entity.EntityType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +56,7 @@ public final class BountyContractCommand {
 
         ServerPlayerEntity player = source.getPlayer();
         if (player == null) {
-            source.sendError(Text.literal("此命令只能由玩家执行"));
+            source.sendError(Text.translatable("error.xqanzd_moonlit_broker.command.player_only"));
             return 0;
         }
 
@@ -74,11 +77,28 @@ public final class BountyContractCommand {
         LOGGER.info("[MoonTrade] action=BOUNTY_CONTRACT_GIVE player={} target={} required={}",
                 player.getName().getString(), target, required);
 
+        Text targetName = resolveTargetName(target);
         player.sendMessage(
-                Text.literal("获得悬赏契约！目标: " + target + " ×" + required)
+                Text.translatable(
+                        "msg.xqanzd_moonlit_broker.command.bounty_contract.granted",
+                        contract.getName(),
+                        targetName,
+                        required
+                )
                         .formatted(Formatting.GOLD),
                 false);
 
         return 1;
+    }
+
+    private static Text resolveTargetName(String target) {
+        Identifier id = Identifier.tryParse(target);
+        if (id != null) {
+            EntityType<?> entityType = Registries.ENTITY_TYPE.get(id);
+            if (entityType != null) {
+                return entityType.getName();
+            }
+        }
+        return Text.literal(target);
     }
 }

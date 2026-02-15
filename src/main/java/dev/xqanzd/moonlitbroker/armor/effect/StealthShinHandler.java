@@ -99,7 +99,13 @@ public class StealthShinHandler {
                 }
 
                 // 提示玩家
-                serverPlayer.sendMessage(Text.literal("[Stealth Shin] Charge ready! (" + newCharges + "/" + ArmorConfig.STEALTH_SHIN_MAX_CHARGES + ")"), true);
+                serverPlayer.sendMessage(
+                        Text.translatable(
+                                "actionbar.xqanzd_moonlit_broker.armor.stealth_shin.charge_ready",
+                                newCharges, ArmorConfig.STEALTH_SHIN_MAX_CHARGES
+                        ),
+                        true
+                );
                 serverPlayer.getWorld().playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                         ModSounds.ARMOR_STEALTH_CHARGE, SoundCategory.PLAYERS, 0.5f, 1.5f);
 

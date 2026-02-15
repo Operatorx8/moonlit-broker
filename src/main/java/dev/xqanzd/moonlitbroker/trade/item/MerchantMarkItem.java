@@ -1,5 +1,6 @@
 package dev.xqanzd.moonlitbroker.trade.item;
 
+import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.world.MerchantSpawnerState;
 import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
@@ -51,7 +52,7 @@ public class MerchantMarkItem extends Item {
         if (!isBoundTo(markStack, player)) {
             if (!world.isClient) {
                 logBlocked(player, "MARK_NOT_BOUND_SELF", "stack_unbound_or_other_owner");
-                player.sendMessage(Text.literal("此商人印记未绑定到你本人。"), true);
+                player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.not_bound_self"), true);
             }
             return ActionResult.FAIL;
         }
@@ -63,12 +64,12 @@ public class MerchantMarkItem extends Item {
         ServerWorld serverWorld = (ServerWorld) world;
         if (serverWorld.getRegistryKey() != World.OVERWORLD) {
             logBlocked(player, "NOT_OVERWORLD", "dimension=" + serverWorld.getRegistryKey().getValue());
-            player.sendMessage(Text.literal("只能在主世界的钟上发起召唤预约。"), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.only_overworld_bell"), true);
             return ActionResult.FAIL;
         }
         if (!isNearVillage(serverWorld, context.getBlockPos())) {
             logBlocked(player, "NOT_NEAR_VILLAGE", "bellPos=" + context.getBlockPos().toShortString());
-            player.sendMessage(Text.literal("只能在村庄附近的钟上发起召唤预约。"), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.only_village_bell"), true);
             return ActionResult.FAIL;
         }
 
@@ -79,14 +80,14 @@ public class MerchantMarkItem extends Item {
         if (spawnerState.hasActiveMerchant(serverWorld)) {
             UUID activeUuid = spawnerState.getActiveMerchantUuid();
             logBlocked(player, "ACTIVE_MERCHANT_LOCK", "activeMerchant=" + shortUuid(activeUuid));
-            player.sendMessage(Text.literal("当前已有活跃月下掮客，暂时无法召唤。"), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.active_lock"), true);
             return ActionResult.FAIL;
         }
 
         if (spawnerState.hasSummonRequest()) {
             long scheduledTick = spawnerState.getSummonScheduledTick();
             logBlocked(player, "PENDING_REQUEST", "scheduledTick=" + scheduledTick);
-            player.sendMessage(Text.literal("已有召唤预约在排队，请稍后。"), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.pending_request"), true);
             return ActionResult.FAIL;
         }
 
@@ -97,7 +98,10 @@ public class MerchantMarkItem extends Item {
             if (elapsed < TradeConfig.SUMMON_COOLDOWN_TICKS) {
                 long remaining = TradeConfig.SUMMON_COOLDOWN_TICKS - elapsed;
                 logBlocked(player, "PLAYER_COOLDOWN", "remainingTicks=" + remaining);
-                player.sendMessage(Text.literal("召唤冷却中，剩余 " + (remaining / 20) + " 秒。"), true);
+                player.sendMessage(
+                        Text.translatable("error.xqanzd_moonlit_broker.mark.cooldown_seconds", remaining / 20),
+                        true
+                );
                 return ActionResult.FAIL;
             }
         }
@@ -106,7 +110,15 @@ public class MerchantMarkItem extends Item {
         int noteCount = countSilverNotes(player);
         if (noteCount < requiredNotes) {
             logBlocked(player, "INSUFFICIENT_SILVER_NOTE", "need=" + requiredNotes + ", have=" + noteCount);
-            player.sendMessage(Text.literal("银票不足，需要 " + requiredNotes + " 张。"), true);
+            player.sendMessage(
+                    Text.translatable(
+                            "error.xqanzd_moonlit_broker.mark.insufficient_item",
+                            new ItemStack(ModItems.SILVER_NOTE).getName(),
+                            requiredNotes,
+                            noteCount
+                    ),
+                    true
+            );
             return ActionResult.FAIL;
         }
 
@@ -115,7 +127,7 @@ public class MerchantMarkItem extends Item {
         int consumed = consumeSilverNotes(player, requiredNotes);
         if (consumed < requiredNotes) {
             logBlocked(player, "SILVER_NOTE_CONSUME_FAILED", "need=" + requiredNotes + ", consumed=" + consumed);
-            player.sendMessage(Text.literal("扣除银票失败，请重试。"), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.mark.consume_failed"), true);
             return ActionResult.FAIL;
         }
 
@@ -124,7 +136,10 @@ public class MerchantMarkItem extends Item {
         unlockState.markDirty();
 
         long delayTicks = Math.max(0L, scheduledTick - currentTick);
-        player.sendMessage(Text.literal("召唤预约已创建，预计 " + (delayTicks / 20) + " 秒后现身。"), true);
+        player.sendMessage(
+                Text.translatable("msg.xqanzd_moonlit_broker.mark.summon_scheduled_seconds", delayTicks / 20),
+                true
+        );
         return ActionResult.SUCCESS;
     }
 

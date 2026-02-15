@@ -141,6 +141,8 @@ public class MerchantUnlockState extends PersistentState {
         private long lastSummonTick = -1L;
         /** Bounty 发 Coin 的 per-player 冷却：上次尝试 tick（按"尝试"写入，不是按"成功"） */
         private long lastCoinBountyTick = -1L;
+        /** 玩家是否曾通过悬赏保底获得过 Coin（首次保底用，仅触发一次） */
+        private boolean hasEverReceivedBountyCoin = false;
 
         // ========== P0-A FIX: per-player sigil offers hash (跨玩家隔离) ==========
         /** Per-(player,merchant) 上次 sigil offers hash */
@@ -643,6 +645,14 @@ public class MerchantUnlockState extends PersistentState {
             this.lastCoinBountyTick = Math.max(-1L, lastCoinBountyTick);
         }
 
+        public boolean hasEverReceivedBountyCoin() {
+            return hasEverReceivedBountyCoin;
+        }
+
+        public void setHasEverReceivedBountyCoin(boolean value) {
+            this.hasEverReceivedBountyCoin = value;
+        }
+
         // ========== P0-A FIX: sigil hash getter/setter ==========
         public int getLastSigilOffersHash(UUID merchantUuid) {
             if (merchantUuid == null) {
@@ -768,6 +778,7 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putInt("SilverDropCount", this.silverDropCount);
             nbt.putLong(NBT_LAST_SUMMON_TICK, this.lastSummonTick);
             nbt.putLong("LastCoinBountyTick", this.lastCoinBountyTick);
+            nbt.putBoolean("HasEverReceivedBountyCoin", this.hasEverReceivedBountyCoin);
             int purchasedDrop = Math.max(0, this.purchasedSecretKatanaIds.size() - MAX_PURCHASED_SECRET_IDS);
             if (purchasedDrop > 0 && !purchasedCapWarned) {
                 purchasedCapWarned = true;
@@ -906,6 +917,9 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("LastCoinBountyTick")) {
                 progress.lastCoinBountyTick = Math.max(-1L, nbt.getLong("LastCoinBountyTick"));
+            }
+            if (nbt.contains("HasEverReceivedBountyCoin")) {
+                progress.hasEverReceivedBountyCoin = nbt.getBoolean("HasEverReceivedBountyCoin");
             }
             if (nbt.contains(NBT_PURCHASED_SECRET_IDS, NbtElement.LIST_TYPE)) {
                 NbtList purchasedList = nbt.getList(NBT_PURCHASED_SECRET_IDS, NbtElement.STRING_TYPE);

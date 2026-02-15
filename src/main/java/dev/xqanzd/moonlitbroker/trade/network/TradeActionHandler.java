@@ -197,15 +197,28 @@ public class TradeActionHandler {
 
     private static void handleOpenNormal(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
         ItemStack scroll = SecretGateValidator.findAnyScroll(player);
+        Text scrollName = new ItemStack(ModItems.TRADE_SCROLL).getName();
 
         if (scroll.isEmpty()) {
-            player.sendMessage(Text.literal("需要交易卷轴才能打开交易").formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable("error.xqanzd_moonlit_broker.trade.open.need_item", scrollName)
+                            .formatted(Formatting.RED),
+                    true
+            );
             return;
         }
 
         // Check scroll has enough uses BEFORE rebuilding
         if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_OPEN_NORMAL) {
-            player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable(
+                            "error.xqanzd_moonlit_broker.trade.open.insufficient_uses",
+                            scrollName,
+                            TradeConfig.COST_OPEN_NORMAL,
+                            TradeScrollItem.getUses(scroll)
+                    ).formatted(Formatting.RED),
+                    true
+            );
             return;
         }
 
@@ -227,7 +240,14 @@ public class TradeActionHandler {
                 audit.offersTotal(), audit.baseCount(), audit.sigilCount(), audit.hiddenCount(),
                 Integer.toHexString(audit.offersHash()));
 
-        player.sendMessage(Text.literal("消耗卷轴次数: " + TradeConfig.COST_OPEN_NORMAL).formatted(Formatting.GRAY), true);
+        player.sendMessage(
+                Text.translatable(
+                        "msg.xqanzd_moonlit_broker.trade.open.consumed_uses",
+                        scrollName,
+                        TradeConfig.COST_OPEN_NORMAL
+                ).formatted(Formatting.GRAY),
+                true
+        );
     }
 
     private static void handleSwitchSecret(ServerPlayerEntity player, MysteriousMerchantEntity merchant) {
@@ -235,7 +255,11 @@ public class TradeActionHandler {
         MerchantUnlockState state = MerchantUnlockState.getServerState(player.getServerWorld());
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid(), variantKey);
         if (!progress.isUnlockedKatanaHidden(variantKey)) {
-            player.sendMessage(Text.literal("该商人变体的隐藏页尚未解锁").formatted(Formatting.RED), false);
+            player.sendMessage(
+                    Text.translatable("error.xqanzd_moonlit_broker.trade.secret.variant_locked")
+                            .formatted(Formatting.RED),
+                    false
+            );
             LOGGER.info(
                     "[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=1 allowed=0 reason=variant_not_unlocked variant={}",
                     player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, variantKey);
@@ -246,7 +270,11 @@ public class TradeActionHandler {
         SecretGateValidator.ValidationResult result = SecretGateValidator.validate(player, merchant);
 
         if (!result.passed()) {
-            player.sendMessage(Text.literal("无法进入隐藏交易: " + result.reason()).formatted(Formatting.RED), false);
+            player.sendMessage(
+                    Text.translatable("error.xqanzd_moonlit_broker.trade.secret.enter_failed", result.reason())
+                            .formatted(Formatting.RED),
+                    false
+            );
             LOGGER.info(
                     "[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=1 allowed=0 reason={} cost={}",
                     player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, result.reason(), 0);
@@ -255,10 +283,19 @@ public class TradeActionHandler {
 
         // 找到封印卷轴
         ItemStack scroll = SecretGateValidator.findSealedScroll(player);
+        Text scrollName = new ItemStack(ModItems.TRADE_SCROLL).getName();
 
         // Check scroll has enough uses BEFORE rebuilding
         if (TradeScrollItem.getUses(scroll) < TradeConfig.COST_SWITCH_SECRET) {
-            player.sendMessage(Text.literal("卷轴次数不足").formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable(
+                            "error.xqanzd_moonlit_broker.trade.open.insufficient_uses",
+                            scrollName,
+                            TradeConfig.COST_SWITCH_SECRET,
+                            TradeScrollItem.getUses(scroll)
+                    ).formatted(Formatting.RED),
+                    true
+            );
             LOGGER.info(
                     "[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=1 allowed=0 reason=scroll_uses_low cost={}",
                     player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, 0);
@@ -281,14 +318,21 @@ public class TradeActionHandler {
                 "[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=0 allowed=1 reason=OK cost={}",
                 player.getUuid(), merchant.getUuid(), merchant.isSecretSold() ? 1 : 0, TradeConfig.COST_SWITCH_SECRET);
 
-        player.sendMessage(Text.literal("已进入隐藏交易页").formatted(Formatting.LIGHT_PURPLE), false);
+        player.sendMessage(
+                Text.translatable("msg.xqanzd_moonlit_broker.trade.secret.entered")
+                        .formatted(Formatting.LIGHT_PURPLE),
+                false
+        );
     }
 
     private static void handleRefresh(ServerPlayerEntity player, MysteriousMerchantEntity merchant, int requestedPageIndex) {
         // P0 fix: block refresh while on secret page
         if (isOnSecretPage(player, merchant)) {
             player.sendMessage(
-                    Text.literal("隐藏页不可刷新。请返回普通页刷新货架。").formatted(Formatting.YELLOW), true);
+                    Text.translatable("error.xqanzd_moonlit_broker.trade.refresh.secret_page")
+                            .formatted(Formatting.YELLOW),
+                    true
+            );
             LOGGER.warn(
                     "[MoonTrade] action=REFRESH_BLOCKED side=S player={} merchant={} reason=SECRET_PAGE",
                     playerTag(player), merchantTag(merchant));
@@ -315,7 +359,11 @@ public class TradeActionHandler {
                 TRADE_PAGE_SIZE);
 
         if (merchantUuid == null) {
-            player.sendMessage(Text.literal("刷新失败：商人标识异常").formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable("error.xqanzd_moonlit_broker.trade.refresh.merchant_invalid")
+                            .formatted(Formatting.RED),
+                    true
+            );
             LOGGER.warn(
                     "[MoonTrade] action=REFRESH_DENY side=S player={} merchant={} item={} need={} have={} unlock={} source={} reason=merchant_uuid_null",
                     playerTag(player), merchantTag(merchant), refreshItemId, REFRESH_SCROLL_COST, haveBefore,

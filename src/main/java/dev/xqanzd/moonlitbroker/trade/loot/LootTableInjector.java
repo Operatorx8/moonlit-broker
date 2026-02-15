@@ -35,6 +35,13 @@ public class LootTableInjector {
     private static final Identifier CHEST_ANCIENT_CITY = Identifier.ofVanilla("chests/ancient_city");
     private static final String TRIAL_CHEST_PREFIX = "minecraft:chests/trial_chambers";
 
+    // 探索结构箱（不需要 Boss）
+    private static final Identifier CHEST_BURIED_TREASURE = Identifier.ofVanilla("chests/buried_treasure");
+    private static final Identifier CHEST_SHIPWRECK_TREASURE = Identifier.ofVanilla("chests/shipwreck_treasure");
+    private static final Identifier CHEST_DESERT_PYRAMID = Identifier.ofVanilla("chests/desert_pyramid");
+    private static final Identifier CHEST_JUNGLE_TEMPLE = Identifier.ofVanilla("chests/jungle_temple");
+    private static final Identifier CHEST_ABANDONED_MINESHAFT = Identifier.ofVanilla("chests/abandoned_mineshaft");
+
     /**
      * 注册战利品表修改器
      */
@@ -75,11 +82,12 @@ public class LootTableInjector {
             }
         });
 
-        LOGGER.info("[MoonTrade] 战利品表注入已注册，scrollTargets={} coinTargets=stronghold_library+ancient_city+trial_chambers*",
+        LOGGER.info("[MoonTrade] 战利品表注入已注册，scrollTargets={} coinTargets=stronghold_library+ancient_city+trial_chambers*+buried_treasure+shipwreck_treasure+desert_pyramid+jungle_temple+abandoned_mineshaft",
                 SCROLL_TARGET_CHESTS.size());
     }
 
     private static float coinChanceForTable(Identifier id) {
+        // 高级结构箱（原有）
         if (CHEST_STRONGHOLD_LIBRARY.equals(id)) {
             return TradeConfig.CHEST_COIN_CHANCE_STRONGHOLD;
         }
@@ -88,6 +96,22 @@ public class LootTableInjector {
         }
         if (id.toString().startsWith(TRIAL_CHEST_PREFIX)) {
             return TradeConfig.CHEST_COIN_CHANCE_TRIAL;
+        }
+        // 探索结构箱（低概率，不需要 Boss）
+        if (CHEST_BURIED_TREASURE.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_BURIED_TREASURE;
+        }
+        if (CHEST_SHIPWRECK_TREASURE.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_SHIPWRECK_TREASURE;
+        }
+        if (CHEST_DESERT_PYRAMID.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_DESERT_PYRAMID;
+        }
+        if (CHEST_JUNGLE_TEMPLE.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_JUNGLE_TEMPLE;
+        }
+        if (CHEST_ABANDONED_MINESHAFT.equals(id)) {
+            return TradeConfig.CHEST_COIN_CHANCE_ABANDONED_MINESHAFT;
         }
         return 0f;
     }

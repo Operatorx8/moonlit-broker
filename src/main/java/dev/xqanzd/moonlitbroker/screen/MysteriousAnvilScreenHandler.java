@@ -1,15 +1,13 @@
 package dev.xqanzd.moonlitbroker.screen;
 
 import dev.xqanzd.moonlitbroker.registry.ModItems;
+import dev.xqanzd.moonlitbroker.registry.ModBlocks;
 import dev.xqanzd.moonlitbroker.registry.ModTags;
 import dev.xqanzd.moonlitbroker.util.KatanaContractUtil;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.ScreenHandlerContext;
@@ -37,21 +35,28 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
     }
 
     @Override
+    public boolean canUse(PlayerEntity player) {
+        return canUse(this.context, player, ModBlocks.MYSTERIOUS_ANVIL);
+    }
+
+    @Override
     protected boolean canTakeOutput(PlayerEntity player, boolean present) {
+        ItemStack right = this.input.getStack(1);
+        if (!right.isOf(ModItems.SACRIFICE)) {
+            this.sacrificeUsage = 0;
+            return super.canTakeOutput(player, present);
+        }
+
         if (!present) {
             return false;
         }
         ItemStack left = this.input.getStack(0);
-        ItemStack right = this.input.getStack(1);
         if (!isAllowedRepairTarget(left)) {
             return false;
         }
         // Reject dormant katana
         if (this.player.getWorld() instanceof ServerWorld sw
                 && KatanaContractUtil.isDormant(sw, this.player, left)) {
-            return false;
-        }
-        if (!right.isOf(ModItems.SACRIFICE)) {
             return false;
         }
         return this.sacrificeUsage > 0 && right.getCount() >= this.sacrificeUsage;
@@ -61,12 +66,18 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
     protected void onTakeOutput(PlayerEntity player, ItemStack stack) {
         ItemStack left = this.input.getStack(0);
         ItemStack right = this.input.getStack(1);
+        if (!right.isOf(ModItems.SACRIFICE)) {
+            this.sacrificeUsage = 0;
+            super.onTakeOutput(player, stack);
+            return;
+        }
+
         if (this.player.getWorld() instanceof ServerWorld sw
                 && KatanaContractUtil.isDormant(sw, this.player, left)) {
             clearResultState();
             return;
         }
-        if (!isAllowedRepairTarget(left) || !right.isOf(ModItems.SACRIFICE) || this.sacrificeUsage <= 0) {
+        if (!isAllowedRepairTarget(left) || this.sacrificeUsage <= 0) {
             clearResultState();
             return;
         }
@@ -94,6 +105,12 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         ItemStack left = this.input.getStack(0);
         ItemStack right = this.input.getStack(1);
 
+        if (!right.isOf(ModItems.SACRIFICE)) {
+            this.sacrificeUsage = 0;
+            super.updateResult();
+            return;
+        }
+
         if (left.isEmpty()) {
             reject("left_empty", left, right);
             return;
@@ -110,18 +127,6 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         }
         if (!left.isDamageable()) {
             reject("left_not_damageable", left, right);
-            return;
-        }
-        if (right.isEmpty()) {
-            reject("right_empty", left, right);
-            return;
-        }
-        if (isForbiddenEnchantInput(right)) {
-            reject("forbidden_enchanting_input", left, right);
-            return;
-        }
-        if (!right.isOf(ModItems.SACRIFICE)) {
-            reject("right_not_sacrifice", left, right);
             return;
         }
 
@@ -167,20 +172,6 @@ public class MysteriousAnvilScreenHandler extends AnvilScreenHandler {
         }
         Identifier id = Registries.ITEM.getId(stack.getItem());
         return id != null && ModItems.MOD_ID.equals(id.getNamespace());
-    }
-
-    private boolean isForbiddenEnchantInput(ItemStack stack) {
-        if (stack.isOf(Items.ENCHANTED_BOOK) || stack.isOf(Items.BOOK)) {
-            return true;
-        }
-        if (stack.contains(DataComponentTypes.STORED_ENCHANTMENTS)) {
-            return true;
-        }
-        ItemEnchantmentsComponent enchants = stack.getOrDefault(
-                DataComponentTypes.ENCHANTMENTS,
-                ItemEnchantmentsComponent.DEFAULT
-        );
-        return !enchants.isEmpty();
     }
 
     private void reject(String reason, ItemStack left, ItemStack right) {

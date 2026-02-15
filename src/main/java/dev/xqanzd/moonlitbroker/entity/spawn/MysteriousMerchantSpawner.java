@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Phase 4: 神秘商人自然生成管理器
@@ -76,6 +77,12 @@ public class MysteriousMerchantSpawner {
     private static final long DEBUG_EXPECTED_LIFETIME = 1200;
     /** 正常模式：商人预期存活时间 5 天 (120000 ticks) */
     private static final long NORMAL_EXPECTED_LIFETIME = 120000;
+    /** INFO 节流：概率未命中等高频原因（5分钟） */
+    private static final long INFO_CD_HIGH_FREQ_TICKS = 6000L;
+    /** INFO 节流：冷却/活跃锁等中频原因（2分钟） */
+    private static final long INFO_CD_MID_FREQ_TICKS = 2400L;
+    /** reason -> lastInfoTick */
+    private static final ConcurrentHashMap<String, Long> LAST_INFO_TICK = new ConcurrentHashMap<>();
 
     private static final class WeightedVariantEntry {
         private final MysteriousMerchantEntity.MerchantVariant variant;
@@ -101,6 +108,15 @@ public class MysteriousMerchantSpawner {
     // ========== 内存状态（仅用于检查间隔，不影响持久化） ==========
     private long lastCheckTick = 0;
 
+    private static boolean shouldInfo(String key, long nowTick, long cooldownTicks) {
+        Long last = LAST_INFO_TICK.get(key);
+        if (last != null && nowTick - last < cooldownTicks) {
+            return false;
+        }
+        LAST_INFO_TICK.put(key, nowTick);
+        return true;
+    }
+
     /**
      * 尝试生成神秘商人
      * 应在 ServerTickEvents.END_WORLD_TICK 中调用
@@ -124,6 +140,7 @@ public class MysteriousMerchantSpawner {
         boolean isRaining = world.isRaining();
         float effectiveChance = baseChance * (isRaining ? TradeConfig.RAIN_MULTIPLIER : 1.0f);
         effectiveChance = Math.max(0.0f, Math.min(1.0f, effectiveChance));
+        String phaseName = bootstrap ? "BOOTSTRAP" : "NORMAL";
 
         // 检查是否到达检查间隔（内存级别，用于减少检查频率）
         if (currentTick - lastCheckTick < checkInterval) {
@@ -136,14 +153,19 @@ public class MysteriousMerchantSpawner {
         }
         lastCheckTick = currentTick;
 
+        LOGGER.info(
+            "[Spawner] CHECK_START phase={} interval={} baseChance={} effectiveChance={} raining={} players={} worldTime={}",
+            phaseName, checkInterval, baseChance, effectiveChance, isRaining, world.getPlayers().size(), currentTick);
         if (DEBUG) {
-            LOGGER.debug("[Spawner] CHECK_START worldTime={} state={{{}}}", currentTick, state.toDebugString());
-            LOGGER.debug("[Spawner] PHASE phase={} interval={} baseChance={} effectiveChance={} isRaining={}",
-                bootstrap ? "BOOTSTRAP" : "NORMAL", checkInterval, baseChance, effectiveChance, isRaining);
+            LOGGER.debug("[Spawner] CHECK_START_STATE worldTime={} state={{{}}}", currentTick, state.toDebugString());
         }
 
         // 2. 检查每日上限（使用持久化状态）
         if (!state.canSpawnToday(world, MAX_MERCHANTS_PER_DAY)) {
+            if (shouldInfo("SKIP_DAILY_LIMIT", currentTick, INFO_CD_HIGH_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=DAILY_LIMIT phase={} spawnCountToday={} max={} lastSpawnDay={}",
+                    phaseName, state.getSpawnCountToday(), MAX_MERCHANTS_PER_DAY, state.getLastSpawnDay());
+            }
             if (DEBUG) {
                 LOGGER.debug("[Spawner] SKIP_DAILY_LIMIT spawnCountToday={} max={} lastSpawnDay={}",
                     state.getSpawnCountToday(), MAX_MERCHANTS_PER_DAY, state.getLastSpawnDay());
@@ -153,8 +175,12 @@ public class MysteriousMerchantSpawner {
 
         // 3. 检查全局冷却（使用持久化状态）
         if (!state.isCooldownExpired(world)) {
+            long remaining = state.getRemainingCooldown(world);
+            if (shouldInfo("SKIP_COOLDOWN", currentTick, INFO_CD_MID_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=COOLDOWN phase={} remainingTicks={} cooldownUntil={} worldTime={}",
+                    phaseName, remaining, state.getCooldownUntil(), currentTick);
+            }
             if (DEBUG) {
-                long remaining = state.getRemainingCooldown(world);
                 LOGGER.debug("[Spawner] SKIP_COOLDOWN cooldownUntil={} remaining={}ticks({}s) worldTime={}",
                     state.getCooldownUntil(), remaining, (remaining / 20), currentTick);
             }
@@ -168,6 +194,10 @@ public class MysteriousMerchantSpawner {
             var existingMerchant = world.getEntity(activeUuid);
             if (existingMerchant != null && existingMerchant.isAlive()) {
                 // 商人确实存在且存活
+                if (shouldInfo("SKIP_ACTIVE_MERCHANT_EXISTS", currentTick, INFO_CD_MID_FREQ_TICKS)) {
+                    LOGGER.info("[Spawner] SKIP reason=ACTIVE_MERCHANT_EXISTS phase={} uuid={} pos={} expireAt={}",
+                        phaseName, activeUuid.toString().substring(0, 8), existingMerchant.getBlockPos().toShortString(), state.getActiveMerchantExpireAt());
+                }
                 if (DEBUG) {
                     LOGGER.debug("[Spawner] SKIP_ACTIVE_MERCHANT_EXISTS uuid={} pos={} worldTime={}",
                         activeUuid, existingMerchant.getBlockPos().toShortString(), currentTick);
@@ -180,6 +210,10 @@ public class MysteriousMerchantSpawner {
                 state.clearActiveMerchant();
             } else {
                 // 商人不在已加载区块中，依赖持久化追踪
+                if (shouldInfo("SKIP_ACTIVE_MERCHANT_UNLOADED", currentTick, INFO_CD_MID_FREQ_TICKS)) {
+                    LOGGER.info("[Spawner] SKIP reason=ACTIVE_MERCHANT_UNLOADED phase={} uuid={} expireAt={} worldTime={}",
+                        phaseName, activeUuid.toString().substring(0, 8), state.getActiveMerchantExpireAt(), currentTick);
+                }
                 if (DEBUG) {
                     LOGGER.debug("[Spawner] SKIP_ACTIVE_MERCHANT_UNLOADED uuid={} expireAt={} worldTime={}",
                         activeUuid, state.getActiveMerchantExpireAt(), currentTick);
@@ -195,6 +229,10 @@ public class MysteriousMerchantSpawner {
             entity -> entity.isAlive()
         ).size();
         if (existingCount > 0) {
+            if (shouldInfo("SKIP_EXISTING_LOADED", currentTick, INFO_CD_MID_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=EXISTING_LOADED phase={} existingMerchants={} worldTime={}",
+                    phaseName, existingCount, currentTick);
+            }
             if (DEBUG) {
                 LOGGER.debug("[Spawner] SKIP_EXISTING_LOADED existingMerchants={} worldTime={}",
                     existingCount, currentTick);
@@ -205,6 +243,9 @@ public class MysteriousMerchantSpawner {
         // 6. 检查天气条件
         if (requireRain && !(DEBUG && DEBUG_SKIP_RAIN_CHECK)) {
             if (!isRaining) {
+                if (shouldInfo("SKIP_NO_RAIN", currentTick, INFO_CD_HIGH_FREQ_TICKS)) {
+                    LOGGER.info("[Spawner] SKIP reason=NO_RAIN phase={} worldTime={}", phaseName, currentTick);
+                }
                 if (DEBUG) {
                     LOGGER.debug("[Spawner] SKIP_NO_RAIN worldTime={}", currentTick);
                 }
@@ -221,6 +262,10 @@ public class MysteriousMerchantSpawner {
                 baseChance, String.format("%.3f", effectiveChance), String.format("%.3f", roll), passed, isRaining, currentTick);
         }
         if (!passed) {
+            if (shouldInfo("SKIP_CHANCE_FAIL", currentTick, INFO_CD_HIGH_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=CHANCE_FAIL phase={} roll={} effectiveChance={} raining={} worldTime={}",
+                    phaseName, roll, effectiveChance, isRaining, currentTick);
+            }
             if (DEBUG) {
                 LOGGER.debug("[Spawner] SKIP_CHANCE_FAIL roll={} effectiveChance={} worldTime={}",
                     String.format("%.3f", roll), String.format("%.3f", effectiveChance), currentTick);
@@ -231,6 +276,11 @@ public class MysteriousMerchantSpawner {
         // 8. 优先选择村庄附近玩家（避免随机玩家后再判村庄导致苛刻叠乘）
         VillageProbeResult villageProbe = findVillageNearbyPlayer(world, random);
         if (villageProbe == null) {
+            if (shouldInfo("SKIP_NO_VILLAGE_PLAYER", currentTick, INFO_CD_HIGH_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=NO_VILLAGE_PLAYER phase={} onlinePlayers={} probes={} villageRadiusChunks={} worldTime={}",
+                    phaseName, world.getPlayers().size(), Math.min(MAX_PLAYER_VILLAGE_PROBES, world.getPlayers().size()),
+                    TradeConfig.VILLAGE_SEARCH_RADIUS, currentTick);
+            }
             if (DEBUG) {
                 LOGGER.debug("[Spawner] SKIP_NO_VILLAGE_PLAYER worldTime={} reason=NO_VILLAGE_PLAYER", currentTick);
             }
@@ -249,6 +299,10 @@ public class MysteriousMerchantSpawner {
         BlockPos spawnCenter = villagePos != null ? villagePos : playerPos;
         BlockPos spawnPos = findSpawnPosition(world, spawnCenter, random);
         if (spawnPos == null) {
+            if (shouldInfo("SKIP_NO_VALID_POS", currentTick, INFO_CD_HIGH_FREQ_TICKS)) {
+                LOGGER.info("[Spawner] SKIP reason=NO_VALID_SPAWN_POS phase={} center={} attempts={} range={} worldTime={}",
+                    phaseName, spawnCenter.toShortString(), MAX_SPAWN_ATTEMPTS, SPAWN_SEARCH_RANGE, currentTick);
+            }
             if (DEBUG) {
                 LOGGER.debug("[Spawner] SKIP_NO_VALID_POS attempts={} searchRange={} center={}",
                     MAX_SPAWN_ATTEMPTS, SPAWN_SEARCH_RANGE, spawnCenter.toShortString());
@@ -280,15 +334,20 @@ public class MysteriousMerchantSpawner {
                 UUID merchantUuid = merchant.getUuid();
                 state.recordSpawn(world, cooldownTicks, merchantUuid, expectedLifetime);
 
-                if (DEBUG) {
-                    LOGGER.info("[Spawner] action=MM_SPAWN_VARIANT villagerType={} originVariant={} rolledVariant={} roll={}/{} chosen={} pos={} uuid={}... nearPlayer={} totalSpawned={}",
-                        villagerType, variantRoll.originVariant(), variantRoll.rolledVariant(), variantRoll.roll(), variantRoll.totalWeight(),
-                        net.minecraft.registry.Registries.ENTITY_TYPE.getId(chosenType),
-                        spawnPos.toShortString(),
-                        merchantUuid.toString().substring(0, 8),
-                        targetPlayer.getName().getString(),
-                        state.getTotalSpawnedCount());
-                }
+                LOGGER.info(
+                    "[Spawner] NATURAL_SPAWNED phase={} originVariant={} rolledVariant={} player={} pos={} chunk={} uuid={} effectiveChance={} raining={} roll={}/{} totalSpawned={}",
+                    phaseName,
+                    variantRoll.originVariant(),
+                    variantRoll.rolledVariant(),
+                    targetPlayer.getName().getString(),
+                    spawnPos.toShortString(),
+                    (spawnPos.getX() >> 4) + "," + (spawnPos.getZ() >> 4),
+                    merchantUuid.toString().substring(0, 8),
+                    effectiveChance,
+                    isRaining,
+                    variantRoll.roll(),
+                    variantRoll.totalWeight(),
+                    state.getTotalSpawnedCount());
                 if (DEBUG) {
                     LOGGER.debug("[Spawner]   └─ cooldownTicks={} worldTime={}", cooldownTicks, currentTick);
                 }

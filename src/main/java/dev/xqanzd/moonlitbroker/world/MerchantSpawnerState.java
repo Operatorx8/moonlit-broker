@@ -506,6 +506,20 @@ public class MerchantSpawnerState extends PersistentState {
     }
 
     /**
+     * 送别机制：仅推进全局冷却，不修改 spawnCountToday / totalSpawnedCount。
+     * @param world 服务端世界
+     * @param cooldownTicks 冷却时长（复用 SUMMON_GLOBAL_COOLDOWN_TICKS）
+     * @param playerUuid 发起送别的玩家（仅用于日志）
+     */
+    public void applySendoffCooldown(ServerWorld world, long cooldownTicks, UUID playerUuid) {
+        long now = world.getTime();
+        this.cooldownUntil = Math.max(this.cooldownUntil, now + cooldownTicks);
+        this.markDirty();
+        LOGGER.info("[SpawnerState] SENDOFF_COOLDOWN_APPLIED player={} cooldownTicks={} cooldownUntil={} now={}",
+                shortUuid(playerUuid), cooldownTicks, this.cooldownUntil, now);
+    }
+
+    /**
      * 输出当前状态摘要（用于调试日志）
      */
     public String toDebugString() {

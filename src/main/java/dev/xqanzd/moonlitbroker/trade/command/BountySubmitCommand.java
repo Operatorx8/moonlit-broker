@@ -1,8 +1,10 @@
 package dev.xqanzd.moonlitbroker.trade.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.loot.BountyHandler;
+import net.minecraft.item.ItemStack;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -45,7 +47,7 @@ public final class BountySubmitCommand {
 
         ServerPlayerEntity player = source.getPlayer();
         if (player == null) {
-            source.sendError(Text.literal("此命令只能由玩家执行"));
+            source.sendError(Text.translatable("error.xqanzd_moonlit_broker.command.player_only"));
             return 0;
         }
 
@@ -57,7 +59,13 @@ public final class BountySubmitCommand {
                 player.getName().getString(), TradeConfig.BOUNTY_SILVER_REWARD);
 
         player.sendMessage(
-                Text.literal("悬赏奖励已发放！获得交易卷轴 ×1 + 银币 ×" + TradeConfig.BOUNTY_SILVER_REWARD)
+                Text.translatable(
+                        "msg.xqanzd_moonlit_broker.command.bounty_submit.rewards",
+                        new ItemStack(ModItems.TRADE_SCROLL).getName(),
+                        1,
+                        new ItemStack(ModItems.SILVER_NOTE).getName(),
+                        TradeConfig.BOUNTY_SILVER_REWARD
+                )
                         .formatted(Formatting.GREEN),
                 false);
 

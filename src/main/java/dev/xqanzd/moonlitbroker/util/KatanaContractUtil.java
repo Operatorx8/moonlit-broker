@@ -129,7 +129,7 @@ public final class KatanaContractUtil {
 
         if (!state.hasOwned(playerUuid, type)) {
             maybeSendGateHint(world, player, type, "unowned",
-                    "未缔结契约：生存模式无效。请通过商人购买或 Reclaim 补发。");
+                    "msg.xqanzd_moonlit_broker.contract.unowned");
             return false;
         }
 
@@ -139,7 +139,7 @@ public final class KatanaContractUtil {
         UUID instanceId = getInstanceId(stack);
         if (instanceId == null || !instanceId.equals(activeId)) {
             maybeSendGateHint(world, player, type, "dormant",
-                    "契约已失效，可通过 Reclaim 补发。");
+                    "msg.xqanzd_moonlit_broker.contract.dormant");
             return false;
         }
 
@@ -174,7 +174,7 @@ public final class KatanaContractUtil {
             PlayerEntity player,
             String type,
             String reason,
-            String message) {
+            String messageKey) {
         if (!TradeConfig.DORMANT_SHOW_ACTIONBAR_HINT) {
             return;
         }
@@ -188,7 +188,7 @@ public final class KatanaContractUtil {
             LAST_HINT_TICK_BY_KEY.clear();
         }
         LAST_HINT_TICK_BY_KEY.put(key, now);
-        player.sendMessage(Text.literal(message), true);
+        player.sendMessage(Text.translatable(messageKey), true);
     }
 
     // ========== Internal ==========

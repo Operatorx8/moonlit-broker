@@ -33,6 +33,8 @@ public final class TradeConfig {
     // ========== Debug Trade Gate ==========
     /** 仅在 debug 时出现 Emerald->Diamond / Emerald->Netherite 等测试交易 */
     public static final boolean DEBUG_TRADES = MASTER_DEBUG;
+    /** DEBUG only: 创造模式送别跳过全局冷却推进（仅 DEBUG_TRADES=true 时生效） */
+    public static final boolean DEBUG_SENDOFF_BYPASS_GLOBAL_COOLDOWN = false;
 
     // ========== 门槛阈值 ==========
     /** 进入隐藏页所需声望 */
@@ -83,6 +85,20 @@ public final class TradeConfig {
     public static final float CHEST_COIN_CHANCE_ANCIENT_CITY = 0.08f;
     /** 高级结构箱 Coin 掉率：trial_chambers */
     public static final float CHEST_COIN_CHANCE_TRIAL = 0.10f;
+
+    // ===== Coin: exploration-friendly sources =====
+    /** 首次完成悬赏保底 1 Coin 开关 */
+    public static final boolean COIN_FIRST_BOUNTY_GUARANTEE = true;
+    /** 探索结构箱 Coin 掉率：buried_treasure */
+    public static final float CHEST_COIN_CHANCE_BURIED_TREASURE = 0.04f;
+    /** 探索结构箱 Coin 掉率：shipwreck_treasure */
+    public static final float CHEST_COIN_CHANCE_SHIPWRECK_TREASURE = 0.03f;
+    /** 探索结构箱 Coin 掉率：desert_pyramid */
+    public static final float CHEST_COIN_CHANCE_DESERT_PYRAMID = 0.02f;
+    /** 探索结构箱 Coin 掉率：jungle_temple */
+    public static final float CHEST_COIN_CHANCE_JUNGLE_TEMPLE = 0.02f;
+    /** 探索结构箱 Coin 掉率：abandoned_mineshaft */
+    public static final float CHEST_COIN_CHANCE_ABANDONED_MINESHAFT = 0.01f;
 
     // ===== Elite drop tuning (P0 minimal) =====
     /** elite 银票概率倍率（不改 cap 逻辑） */

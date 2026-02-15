@@ -55,16 +55,28 @@ public class BountyHandler {
         }
 
         if (countA < REQUIRED_COUNT_A) {
-            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_A + " 个 " +
-                    BOUNTY_ITEM_A.getName().getString() + " 才能提交悬赏 (当前: " + countA + ")")
-                    .formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable(
+                            "error.xqanzd_moonlit_broker.bounty.need_item",
+                            REQUIRED_COUNT_A,
+                            BOUNTY_ITEM_A.getName(),
+                            countA
+                    ).formatted(Formatting.RED),
+                    true
+            );
             return false;
         }
 
         if (countB < REQUIRED_COUNT_B) {
-            player.sendMessage(Text.literal("需要 " + REQUIRED_COUNT_B + " 个 " +
-                    BOUNTY_ITEM_B.getName().getString() + " 才能提交悬赏 (当前: " + countB + ")")
-                    .formatted(Formatting.RED), true);
+            player.sendMessage(
+                    Text.translatable(
+                            "error.xqanzd_moonlit_broker.bounty.need_item",
+                            REQUIRED_COUNT_B,
+                            BOUNTY_ITEM_B.getName(),
+                            countB
+                    ).formatted(Formatting.RED),
+                    true
+            );
             return false;
         }
 
@@ -73,7 +85,8 @@ public class BountyHandler {
         // AUDIT FIX: Pass player for rollback fail-safe
         if (!removeItemsFromInventory(inventory, BOUNTY_ITEM_A, REQUIRED_COUNT_A,
                 BOUNTY_ITEM_B, REQUIRED_COUNT_B, player)) {
-            player.sendMessage(Text.literal("提交失败：物品移除错误").formatted(Formatting.RED), true);
+            player.sendMessage(Text.translatable("error.xqanzd_moonlit_broker.bounty.remove_failed")
+                    .formatted(Formatting.RED), true);
             LOGGER.error("[MoonTrade] BOUNTY_REMOVE_FAILED player={}", player.getName().getString());
             return false;
         }
@@ -81,8 +94,16 @@ public class BountyHandler {
         // 发放奖励 (only after successful removal)
         grantRewards(player);
 
-        player.sendMessage(Text.literal("悬赏已提交！获得交易卷轴和银币")
-                .formatted(Formatting.GREEN), false);
+        player.sendMessage(
+                Text.translatable(
+                        "msg.xqanzd_moonlit_broker.bounty.rewards_granted",
+                        new ItemStack(ModItems.TRADE_SCROLL).getName(),
+                        1,
+                        new ItemStack(ModItems.SILVER_NOTE).getName(),
+                        TradeConfig.BOUNTY_SILVER_REWARD
+                ).formatted(Formatting.GREEN),
+                false
+        );
 
         LOGGER.info("[MoonTrade] BOUNTY_SUBMIT player={}", player.getName().getString());
         return true;
@@ -238,7 +259,20 @@ public class BountyHandler {
                 progress.setLastCoinBountyTick(now); // 按尝试写入
                 state.markDirty();
                 coinRolled = true;
-                if (RANDOM.nextFloat() < TradeConfig.COIN_BOUNTY_CHANCE) {
+
+                // 首次保底：第一次进入 coin roll 必得 1 Coin
+                if (TradeConfig.COIN_FIRST_BOUNTY_GUARANTEE && !progress.hasEverReceivedBountyCoin()) {
+                    coinGranted = true;
+                    progress.setHasEverReceivedBountyCoin(true);
+                    state.markDirty();
+                    ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
+                    if (!player.giveItemStack(coin)) {
+                        player.dropItem(coin, false);
+                        anyDropped = true;
+                    }
+                    LOGGER.info("[Bounty] COIN_GUARANTEE_FIRST_GRANTED player={} now={}",
+                            player.getName().getString(), now);
+                } else if (RANDOM.nextFloat() < TradeConfig.COIN_BOUNTY_CHANCE) {
                     coinGranted = true;
                     ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
                     if (!player.giveItemStack(coin)) {
@@ -267,7 +301,8 @@ public class BountyHandler {
             }
             LOGGER.info("[MoonTrade] action=BOUNTY_REWARD_MARK side=S player={} given={}",
                     player.getName().getString(), markGiven ? "inventory" : "dropped");
-            player.sendMessage(Text.literal("获得商人印记！").formatted(Formatting.GOLD), false);
+            player.sendMessage(Text.translatable("msg.xqanzd_moonlit_broker.bounty.mark_granted")
+                    .formatted(Formatting.GOLD), false);
         }
 
         LOGGER.info(
@@ -277,7 +312,10 @@ public class BountyHandler {
         // 背包满提示
         if (anyDropped) {
             player.sendMessage(
-                    Text.literal("背包已满，部分奖励掉落在脚下").formatted(Formatting.YELLOW), false);
+                    Text.translatable("msg.xqanzd_moonlit_broker.bounty.rewards_dropped")
+                            .formatted(Formatting.YELLOW),
+                    false
+            );
         }
     }
 }

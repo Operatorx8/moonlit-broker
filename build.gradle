@@ -3,6 +3,99 @@ plugins {
     id 'maven-publish'
 }
 
+tasks.register("verifyI18nGuardrails") {
+    group = "verification"
+    description = "Enforce i18n guardrails: lang files, locale resources, and visible literals"
+
+    doLast {
+        def modId = "xqanzd_moonlit_broker"
+        def langDir = file("src/main/resources/assets/${modId}/lang")
+        def allowedLangFiles = ["en_us.json", "zh_cn.json"] as Set
+
+        if (!langDir.exists()) {
+            throw new GradleException("Missing lang directory: ${langDir}")
+        }
+
+        def actualLangFiles = (langDir.listFiles() ?: [] as File[])
+                .findAll { it.isFile() && it.name.endsWith(".json") }
+                .collect { it.name } as Set
+
+        def missingLangFiles = allowedLangFiles - actualLangFiles
+        def disallowedLangFiles = actualLangFiles - allowedLangFiles
+        if (!missingLangFiles.isEmpty() || !disallowedLangFiles.isEmpty()) {
+            throw new GradleException(
+                    "Lang file policy violated. Missing=${missingLangFiles}, disallowed=${disallowedLangFiles}. " +
+                            "Only en_us.json and zh_cn.json are allowed."
+            )
+        }
+
+        def forbiddenLangFiles = fileTree("src/main/resources").matching {
+            include "**/zh_tw.json"
+            include "**/ja_jp.json"
+            include "**/ru_ru.json"
+        }.files
+        if (!forbiddenLangFiles.isEmpty()) {
+            throw new GradleException(
+                    "Forbidden locale lang files found:\n" +
+                            forbiddenLangFiles.collect { it.path }.sort().join("\n")
+            )
+        }
+
+        def guideLocaleDirs = []
+        def dataRoot = file("src/main/resources/data")
+        if (dataRoot.exists()) {
+            dataRoot.eachDirRecurse { dir ->
+                String p = dir.path.replace('\\', '/')
+                String name = dir.name.toLowerCase(Locale.ROOT)
+                boolean isLocale = (name ==~ /[a-z]{2}_[a-z]{2}/)
+                boolean inGuideTree = p.contains("/book/") || p.contains("/books/") || p.contains("/patchouli_books/")
+                if (isLocale && inGuideTree) {
+                    guideLocaleDirs.add(p)
+                }
+            }
+        }
+        if (!guideLocaleDirs.isEmpty()) {
+            throw new GradleException(
+                    "Forbidden guide locale directories found:\n" + guideLocaleDirs.sort().join("\n")
+            )
+        }
+
+        def javaFiles = fileTree("src").matching {
+            include "main/java/**/*.java"
+            include "client/java/**/*.java"
+        }.files
+
+        def literalCjkPattern = ~/Text\.literal\(\s*"[^"\n]*[\u4e00-\u9fff][^"\n]*"/
+        def visibleLiteralPattern = ~/(?s)(sendMessage|sendSystemMessage|sendFeedback|sendError)\s*\([^;]{0,600}?Text\.literal\(/
+        def violations = []
+
+        javaFiles.each { f ->
+            String content = f.getText("UTF-8")
+            def lineOf = { int idx -> content.substring(0, idx).count("\n") + 1 }
+
+            def cjkMatcher = (content =~ literalCjkPattern)
+            while (cjkMatcher.find()) {
+                violations.add("${f.path}:${lineOf(cjkMatcher.start())} contains Text.literal with CJK content")
+            }
+
+            def visibleMatcher = (content =~ visibleLiteralPattern)
+            while (visibleMatcher.find()) {
+                violations.add("${f.path}:${lineOf(visibleMatcher.start())} uses Text.literal in message API")
+            }
+        }
+
+        if (!violations.isEmpty()) {
+            throw new GradleException(
+                    "Player-visible literal policy violated:\n" + violations.sort().join("\n")
+            )
+        }
+    }
+}
+
+tasks.named("compileJava").configure {
+    dependsOn(tasks.named("verifyI18nGuardrails"))
+}
+
 version = project.mod_version
 group = project.maven_group
 
