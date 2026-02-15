@@ -698,7 +698,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 发送警告消息
         if (player instanceof ServerPlayerEntity serverPlayer) {
             serverPlayer.sendMessage(
-                    Text.literal("神秘商人的诅咒降临于你...")
+                    Text.literal("月下掮客的诅咒降临于你...")
                             .formatted(Formatting.DARK_RED, Formatting.BOLD),
                     false);
             serverPlayer.sendMessage(
@@ -772,7 +772,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (heldItem.getItem() instanceof SpawnEggItem) {
             return super.interactMob(player, hand);
         }
+        // P0: 商人忙碌时，手持契约的玩家收到 actionbar 提示
         if (this.hasCustomer()) {
+            if (heldItem.isOf(ModItems.BOUNTY_CONTRACT) && player instanceof ServerPlayerEntity sp) {
+                sp.sendMessage(
+                        Text.literal("商人正在交易中，稍后再试")
+                                .formatted(Formatting.YELLOW),
+                        true);
+                return ActionResult.CONSUME;
+            }
             return super.interactMob(player, hand);
         }
 
@@ -786,9 +794,20 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return handleMysteriousCoinInteraction(player, heldItem, hand);
         }
 
-        // Bounty v1: 非潜行且无人占用时提交；潜行拿契约按正常 UI 流程走
-        if (heldItem.getItem() == ModItems.BOUNTY_CONTRACT && !player.isSneaking() && !this.hasCustomer()) {
+        // Bounty v1: 非潜行且无人占用时提交
+        if (heldItem.getItem() == ModItems.BOUNTY_CONTRACT && !player.isSneaking()) {
             return handleBountyContractSubmit(player, heldItem, hand);
+        }
+
+        // P0: 潜行 + 手持契约 → actionbar 提示松开潜行以提交，不打开交易界面
+        if (heldItem.getItem() == ModItems.BOUNTY_CONTRACT && player.isSneaking()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                sp.sendMessage(
+                        Text.literal("松开潜行以提交悬赏")
+                                .formatted(Formatting.GOLD),
+                        true);
+            }
+            return ActionResult.CONSUME;
         }
 
         if (hand == Hand.MAIN_HAND) {
@@ -867,7 +886,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
             // 发送消息
             player.sendMessage(
-                    Text.literal("[神秘商人] 初次见面，送你一份指南和印记。")
+                    Text.literal("[月下掮客] 初次见面，送你一份指南和印记。")
                             .formatted(Formatting.GOLD),
                     false);
 
@@ -914,7 +933,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 发送消息
         if (player instanceof ServerPlayerEntity serverPlayer) {
             serverPlayer.sendMessage(
-                    Text.literal("神秘商人接受了你的供奉...")
+                    Text.literal("月下掮客接受了你的供奉...")
                             .formatted(Formatting.GOLD),
                     false);
             serverPlayer.sendMessage(
@@ -1136,12 +1155,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 unlockStateChanged = true;
                 if (player instanceof ServerPlayerEntity serverPlayer) {
                     serverPlayer.sendMessage(
-                            Text.literal("[神秘商人] 你解封了卷轴，隐藏交易已开启。")
+                            Text.literal("[月下掮客] 你解封了卷轴，隐藏交易已开启。")
                                     .formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD),
                             false);
                     // P0-6 修复：提示玩家重新打开交易界面以查看隐藏交易
                     serverPlayer.sendMessage(
-                            Text.literal("[神秘商人] 请关闭并重新打开交易界面查看隐藏交易。")
+                            Text.literal("[月下掮客] 请关闭并重新打开交易界面查看隐藏交易。")
                                     .formatted(Formatting.GRAY, Formatting.ITALIC),
                             false);
                 }

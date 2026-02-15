@@ -18,8 +18,13 @@ import dev.xqanzd.moonlitbroker.trade.loot.BountyProgressHandler;
 import dev.xqanzd.moonlitbroker.trade.loot.LootTableInjector;
 import dev.xqanzd.moonlitbroker.trade.loot.MobDropHandler;
 import dev.xqanzd.moonlitbroker.trade.network.TradeNetworking;
+import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.entity.EntityType;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.tag.TagKey;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
@@ -82,6 +87,15 @@ public class Mymodtest implements ModInitializer {
         // Trade System: 注册悬赏契约掉落处理器
         BountyDropHandler.register();
 
+        // 护栏 A: 服务器启动后验证掉落相关 tag 非空（datapack 已加载）
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            verifyTagNotEmpty(ModEntityTypeTags.SILVERNOTE_DROPPERS, "silvernote_droppers");
+            verifyTagNotEmpty(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS, "silvernote_neutral_droppers");
+            verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_TARGETS, "bounty_targets");
+            verifyTagNotEmpty(ModEntityTypeTags.SILVERNOTE_ELITE_DROPPERS, "silvernote_elite_droppers");
+            verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_ELITE_TARGETS, "bounty_elite_targets");
+        });
+
         // Phase 4: 注册世界 tick 事件，用于自然生成
         ServerTickEvents.END_WORLD_TICK.register(world -> {
             // 只在主世界生成商人
@@ -94,5 +108,20 @@ public class Mymodtest implements ModInitializer {
         });
 
         LOGGER.info("[Mymodtest] Mod initialization complete!");
+    }
+
+    /**
+     * 护栏 A: 验证 entity type tag 在 datapack 加载后非空。
+     * 若为空说明资源路径错误（如 entity_types/ vs entity_type/），立即在日志中报错。
+     */
+    private static void verifyTagNotEmpty(TagKey<EntityType<?>> tag, String name) {
+        boolean empty = Registries.ENTITY_TYPE.streamTagsAndEntries()
+                .noneMatch(pair -> pair.getFirst().equals(tag));
+        if (empty) {
+            LOGGER.error("[MoonTrade] TAG_EMPTY tag={} — 掉落系统不会工作！请检查 data/{}/tags/entity_type/{}.json 是否存在",
+                    name, MOD_ID, name);
+        } else {
+            LOGGER.info("[MoonTrade] TAG_OK tag={}", name);
+        }
     }
 }

@@ -84,6 +84,14 @@ public final class TradeConfig {
     /** 高级结构箱 Coin 掉率：trial_chambers */
     public static final float CHEST_COIN_CHANCE_TRIAL = 0.10f;
 
+    // ===== Elite drop tuning (P0 minimal) =====
+    /** elite 银票概率倍率（不改 cap 逻辑） */
+    public static final float SILVER_ELITE_MULTIPLIER = 2.0f;
+    /** elite 契约概率倍率（乘在原概率上） */
+    public static final float BOUNTY_ELITE_CHANCE_MULTIPLIER = 3.0f;
+    /** 是否启用 elite 掉落加成 */
+    public static final boolean ENABLE_ELITE_DROP_BONUS = true;
+
     // ========== 冷却时间 ==========
     /** 页面操作冷却 (0.5秒 = 10 ticks) */
     public static final int PAGE_ACTION_COOLDOWN_TICKS = 10;
@@ -143,6 +151,10 @@ public final class TradeConfig {
     public static final boolean DORMANT_SHOW_ACTIONBAR_HINT = true;
     /** 同一玩家提示节流 (60 ticks = 3s) */
     public static final int DORMANT_HINT_COOLDOWN_TICKS = 60;
+
+    // ========== Bounty Progress Hint ==========
+    /** 悬赏进度 actionbar 提示冷却 (30 ticks = 1.5s) */
+    public static final int BOUNTY_PROGRESS_HINT_CD_TICKS = 30;
 
     // ========== NBT 键名 ==========
     public static final String NBT_SCROLL_USES = "Uses";

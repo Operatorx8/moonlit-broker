@@ -285,6 +285,16 @@ public class TradeActionHandler {
     }
 
     private static void handleRefresh(ServerPlayerEntity player, MysteriousMerchantEntity merchant, int requestedPageIndex) {
+        // P0 fix: block refresh while on secret page
+        if (isOnSecretPage(player, merchant)) {
+            player.sendMessage(
+                    Text.literal("隐藏页不可刷新。请返回普通页刷新货架。").formatted(Formatting.YELLOW), true);
+            LOGGER.warn(
+                    "[MoonTrade] action=REFRESH_BLOCKED side=S player={} merchant={} reason=SECRET_PAGE",
+                    playerTag(player), merchantTag(merchant));
+            return;
+        }
+
         int logicalPage = sanitizeRequestedRefreshPageIndex(player, merchant, requestedPageIndex);
 
         String source = "REFRESH_NORMAL";

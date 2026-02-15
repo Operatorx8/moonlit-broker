@@ -79,7 +79,7 @@ public class MerchantMarkItem extends Item {
         if (spawnerState.hasActiveMerchant(serverWorld)) {
             UUID activeUuid = spawnerState.getActiveMerchantUuid();
             logBlocked(player, "ACTIVE_MERCHANT_LOCK", "activeMerchant=" + shortUuid(activeUuid));
-            player.sendMessage(Text.literal("当前已有活跃神秘商人，暂时无法召唤。"), true);
+            player.sendMessage(Text.literal("当前已有活跃月下掮客，暂时无法召唤。"), true);
             return ActionResult.FAIL;
         }
 

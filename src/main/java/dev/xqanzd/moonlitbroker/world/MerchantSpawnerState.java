@@ -243,6 +243,8 @@ public class MerchantSpawnerState extends PersistentState {
         if (world.getRegistryKey() != World.OVERWORLD) {
             return;
         }
+        // P0: 主动清理 stale active-merchant lock，不依赖 hasActiveMerchant() 被调用
+        maybeExpireStaleActiveLock(world);
         SummonRequest request = this.summonRequest;
         if (request == null) {
             return;
@@ -430,6 +432,23 @@ public class MerchantSpawnerState extends PersistentState {
             LOGGER.debug("[SpawnerState] RECORD_SPAWN spawnCountToday={} totalSpawned={} cooldownUntil={} activeMerchantUuid={}... expireAt={}",
                 this.spawnCountToday, this.totalSpawnedCount, this.cooldownUntil,
                 merchantUuid.toString().substring(0, 8), this.activeMerchantExpireAt);
+        }
+    }
+
+    /**
+     * P0: 主动检查并清理过期的 active-merchant lock。
+     * 在 tick() 入口无条件调用，确保即使没有生成流程触发 hasActiveMerchant()，
+     * stale lock 也能按 activeMerchantExpireAt 自动释放。
+     */
+    private void maybeExpireStaleActiveLock(ServerWorld world) {
+        if (this.activeMerchantUuid != null
+                && this.activeMerchantExpireAt > 0
+                && world.getTime() > this.activeMerchantExpireAt) {
+            LOGGER.info("[SpawnerState] STALE_LOCK_EXPIRED uuid={} expireAt={} now={}",
+                    shortUuid(this.activeMerchantUuid), this.activeMerchantExpireAt, world.getTime());
+            this.activeMerchantUuid = null;
+            this.activeMerchantExpireAt = 0;
+            this.markDirty();
         }
     }
 

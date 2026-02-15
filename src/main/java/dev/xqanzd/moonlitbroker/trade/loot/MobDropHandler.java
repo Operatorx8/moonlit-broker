@@ -40,6 +40,7 @@ public class MobDropHandler {
     private static final float SILVER_BASE_DROP_CHANCE = 0.05f;
     private static final float SILVER_LOOTING_BONUS_PER_LEVEL = 0.01f;
     private static final float SILVER_MAX_DROP_CHANCE = 0.25f;
+    private static volatile boolean silverTagEmptyWarned = false;
 
     /**
      * 注册怪物死亡事件
@@ -162,6 +163,13 @@ public class MobDropHandler {
         boolean inRegularTag = entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_DROPPERS);
         boolean inNeutralTag = entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS);
         if (!inRegularTag && !inNeutralTag) {
+            // 护栏 B: release 下只 warn 一次，避免日志洪水
+            if (!silverTagEmptyWarned) {
+                silverTagEmptyWarned = true;
+                LOGGER.warn("[MoonTrade] action=SILVER_TAG_MISS mob={} — 该实体不在 silvernote_droppers/silvernote_neutral_droppers tag 中。" +
+                        "若所有怪物都不掉银票，请检查 data/{}/tags/entity_type/ 目录",
+                        mobId, ModItems.MOD_ID);
+            }
             return;
         }
 
@@ -176,14 +184,19 @@ public class MobDropHandler {
         }
 
         int lootingLevel = getLootingLevel(world, player);
-        float chance = Math.min(SILVER_MAX_DROP_CHANCE,
+        float baseChance = Math.min(SILVER_MAX_DROP_CHANCE,
                 SILVER_BASE_DROP_CHANCE + lootingLevel * SILVER_LOOTING_BONUS_PER_LEVEL);
+        // Elite 倍率：提高概率，不改 cap
+        boolean isElite = entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_ELITE_DROPPERS);
+        float chance = (TradeConfig.ENABLE_ELITE_DROP_BONUS && isElite)
+                ? Math.min(1.0f, baseChance * TradeConfig.SILVER_ELITE_MULTIPLIER)
+                : baseChance;
         float roll = RANDOM.nextFloat();
         if (roll >= chance) {
             if (TradeConfig.TRADE_DEBUG) {
                 LOGGER.info(
-                        "[MoonTrade] action=SILVER_DROP_CHECK result=MISS mob={} roll={} chance={} looting={} player={} dim={}",
-                        mobId, roll, chance, lootingLevel, player.getName().getString(), world.getRegistryKey().getValue());
+                        "[MoonTrade] action=SILVER_DROP_CHECK result=MISS mob={} roll={} chance={} elite={} looting={} player={} dim={}",
+                        mobId, roll, chance, isElite, lootingLevel, player.getName().getString(), world.getRegistryKey().getValue());
             }
             return;
         }
@@ -213,8 +226,8 @@ public class MobDropHandler {
 
         if (TradeConfig.TRADE_DEBUG) {
             LOGGER.info(
-                    "[MoonTrade] action=SILVER_DROP_CHECK result=DROP mob={} roll={} chance={} looting={} amount={} player={} dim={} dropCount={}",
-                    mobId, roll, chance, lootingLevel, amount, player.getName().getString(),
+                    "[MoonTrade] action=SILVER_DROP_CHECK result=DROP mob={} roll={} chance={} elite={} looting={} amount={} player={} dim={} dropCount={}",
+                    mobId, roll, chance, isElite, lootingLevel, amount, player.getName().getString(),
                     world.getRegistryKey().getValue(), progress.getSilverDropCount());
         }
     }

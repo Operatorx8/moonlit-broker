@@ -6,14 +6,9 @@ import net.minecraft.component.type.NbtComponent;
 import net.minecraft.entity.EntityType;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
-
-import java.util.List;
 
 /**
  * 悬赏契约物品
@@ -117,43 +112,6 @@ public class BountyContractItem extends Item {
      */
     public static boolean isValidContract(ItemStack stack) {
         return stack.isOf(ModItems.BOUNTY_CONTRACT) && !getTarget(stack).isEmpty();
-    }
-
-    // ========== Tooltip ==========
-
-    @Override
-    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        super.appendTooltip(stack, context, tooltip, type);
-
-        String target = getTarget(stack);
-        if (target.isEmpty()) {
-            tooltip.add(Text.literal("空白契约").formatted(Formatting.GRAY));
-            return;
-        }
-
-        // 目标名称
-        Identifier targetId = Identifier.tryParse(target);
-        String targetName = target;
-        if (targetId != null) {
-            EntityType<?> entityType = Registries.ENTITY_TYPE.get(targetId);
-            if (entityType != null) {
-                targetName = entityType.getName().getString();
-            }
-        }
-        tooltip.add(Text.literal("目标: " + targetName).formatted(Formatting.YELLOW));
-
-        // 进度
-        int progress = getProgress(stack);
-        int required = getRequired(stack);
-        tooltip.add(Text.literal("进度: " + progress + "/" + required)
-                .formatted(progress >= required ? Formatting.GREEN : Formatting.GRAY));
-
-        // 完成状态
-        if (isCompleted(stack)) {
-            tooltip.add(Text.literal("✓ 已完成 — 右键商人提交").formatted(Formatting.GREEN, Formatting.BOLD));
-        } else {
-            tooltip.add(Text.literal("✗ 未完成").formatted(Formatting.RED));
-        }
     }
 
     // ========== Internal ==========

@@ -51,6 +51,7 @@ public class BountyDropHandler {
     private static final float BASE_DROP_CHANCE = 0.005f; // 0.5%
     private static final float LOOTING_BONUS_PER_LEVEL = 0.001f; // +0.1% / level
     private static final float MAX_DROP_CHANCE = 0.02f; // 2%
+    private static volatile boolean bountyTagEmptyWarned = false;
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register(BountyDropHandler::onMobDeath);
@@ -64,7 +65,16 @@ public class BountyDropHandler {
         Identifier mobId = Registries.ENTITY_TYPE.getId(entity.getType());
 
         // 改为 tag 驱动，不再写死目标白名单。
-        if (!entity.getType().isIn(ModEntityTypeTags.BOUNTY_TARGETS)) return;
+        if (!entity.getType().isIn(ModEntityTypeTags.BOUNTY_TARGETS)) {
+            // 护栏 B: release 下只 warn 一次
+            if (!bountyTagEmptyWarned) {
+                bountyTagEmptyWarned = true;
+                LOGGER.warn("[MoonTrade] action=BOUNTY_TAG_MISS mob={} — 该实体不在 bounty_targets tag 中。" +
+                        "若所有怪物都不掉契约，请检查 data/{}/tags/entity_type/ 目录",
+                        mobId, ModItems.MOD_ID);
+            }
+            return;
+        }
 
         // neutral 目标只有“正在对该玩家仇恨/激怒”时才允许掉落
         if (entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS) && !isAngeredAtPlayer(entity, player)) {
@@ -84,13 +94,18 @@ public class BountyDropHandler {
 
         // 概率判定
         int lootingLevel = getLootingLevel(world, player);
-        float chance = Math.min(MAX_DROP_CHANCE, BASE_DROP_CHANCE + lootingLevel * LOOTING_BONUS_PER_LEVEL);
+        float baseChance = Math.min(MAX_DROP_CHANCE, BASE_DROP_CHANCE + lootingLevel * LOOTING_BONUS_PER_LEVEL);
+        // Elite 倍率：提高概率，不改阀门
+        boolean isElite = entity.getType().isIn(ModEntityTypeTags.BOUNTY_ELITE_TARGETS);
+        float chance = (TradeConfig.ENABLE_ELITE_DROP_BONUS && isElite)
+                ? Math.min(1.0f, baseChance * TradeConfig.BOUNTY_ELITE_CHANCE_MULTIPLIER)
+                : baseChance;
         float roll = RANDOM.nextFloat();
         if (roll >= chance) {
             if (TradeConfig.TRADE_DEBUG) {
                 LOGGER.info(
-                        "[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=MISS mob={} roll={} chance={} looting={} player={} dim={}",
-                        mobId, roll, chance, lootingLevel, player.getName().getString(),
+                        "[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=MISS mob={} roll={} chance={} elite={} looting={} player={} dim={}",
+                        mobId, roll, chance, isElite, lootingLevel, player.getName().getString(),
                         world.getRegistryKey().getValue());
             }
             return;
@@ -100,12 +115,50 @@ public class BountyDropHandler {
         // 生成契约
         ItemStack contract = new ItemStack(ModItems.BOUNTY_CONTRACT, 1);
         BountyContractItem.initialize(contract, mobId.toString(), required);
-        entity.dropStack(contract);
+        net.minecraft.entity.ItemEntity itemEntity = entity.dropStack(contract);
+
+        // P0: 掉落反馈 - 发光 + actionbar + 音效（仅 dropStack 成功时）
+        if (itemEntity != null) {
+            itemEntity.setGlowing(true);
+
+            // actionbar: 目标名 + 初始进度
+            net.minecraft.text.Text targetName = resolveTargetName(mobId.toString());
+            player.sendMessage(
+                    net.minecraft.text.Text.translatable(
+                            "actionbar.xqanzd_moonlit_broker.bounty.contract_drop",
+                            targetName, required
+                    ).formatted(net.minecraft.util.Formatting.LIGHT_PURPLE),
+                    true);
+
+            // 音效: 经验球拾取音（明显但不刺耳）
+            player.getWorld().playSound(null,
+                    player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sound.SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
+                    net.minecraft.sound.SoundCategory.PLAYERS,
+                    1.0f, 0.8f);
+        } else {
+            LOGGER.warn("[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP_STACK_NULL mob={} player={}",
+                    mobId, player.getName().getString());
+        }
 
         LOGGER.info(
-                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} roll={} chance={} looting={} side=S player={} dim={}",
-                mobId, required, roll, chance, lootingLevel, player.getName().getString(),
+                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} roll={} chance={} elite={} looting={} side=S player={} dim={}",
+                mobId, required, roll, chance, isElite, lootingLevel, player.getName().getString(),
                 world.getRegistryKey().getValue());
+    }
+
+    /**
+     * 将 entity ID 字符串解析为可读名称
+     */
+    private static net.minecraft.text.Text resolveTargetName(String target) {
+        net.minecraft.util.Identifier targetId = net.minecraft.util.Identifier.tryParse(target);
+        if (targetId != null) {
+            net.minecraft.entity.EntityType<?> entityType = Registries.ENTITY_TYPE.get(targetId);
+            if (entityType != null) {
+                return entityType.getName();
+            }
+        }
+        return net.minecraft.text.Text.literal(target);
     }
 
     private static boolean playerHasBountyContract(ServerPlayerEntity player) {
