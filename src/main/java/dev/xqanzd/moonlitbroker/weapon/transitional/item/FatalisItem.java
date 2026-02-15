@@ -10,7 +10,7 @@ import net.minecraft.util.Rarity;
 /**
  * Fatalis - 重击剑
  * 无特效，纯数值武器
- * 特点：高伤害 (12)，标准攻速 (1.8)
+ * 特点：高伤害 (10)，标准攻速 (1.8)
  */
 public class FatalisItem extends SwordItem {
 
@@ -20,7 +20,7 @@ public class FatalisItem extends SwordItem {
 
     private static Item.Settings createSettings() {
         // 计算伤害加成：base_damage - 1 - material_damage
-        // IRON material damage = 2, 所以 bonus = 12 - 1 - 2 = 9
+        // IRON material damage = 2, 所以 bonus = 10 - 1 - 2 = 7
         int damageBonus = TransitionalWeaponConstants.FATALIS_BASE_DAMAGE - 1 - 2;
 
         return new Item.Settings()

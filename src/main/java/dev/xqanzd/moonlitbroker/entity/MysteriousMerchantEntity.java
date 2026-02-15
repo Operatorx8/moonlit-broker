@@ -1095,7 +1095,16 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         int required = BountyContractItem.getRequired(contractStack);
 
         try {
-            dev.xqanzd.moonlitbroker.trade.loot.BountyHandler.grantRewards(serverPlayer);
+            // Resolve isElite from target entity ID for reward scaling
+            boolean isElite = false;
+            net.minecraft.util.Identifier targetId = net.minecraft.util.Identifier.tryParse(target);
+            if (targetId != null) {
+                net.minecraft.entity.EntityType<?> targetType = net.minecraft.registry.Registries.ENTITY_TYPE.get(targetId);
+                if (targetType != null) {
+                    isElite = targetType.isIn(dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags.BOUNTY_ELITE_TARGETS);
+                }
+            }
+            dev.xqanzd.moonlitbroker.trade.loot.BountyHandler.grantRewards(serverPlayer, required, isElite);
             contractStack.decrement(1);
         } catch (Exception e) {
             LOGGER.error("[MoonTrade] action=BOUNTY_SUBMIT_ERROR side=S player={} target={} error={}",

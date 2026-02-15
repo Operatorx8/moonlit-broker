@@ -91,8 +91,8 @@ public class BountyHandler {
             return false;
         }
 
-        // 发放奖励 (only after successful removal)
-        grantRewards(player);
+        // 发放奖励 (only after successful removal) — legacy skull path, no contract context
+        grantRewards(player, 0, false);
 
         player.sendMessage(
                 Text.translatable(
@@ -224,8 +224,11 @@ public class BountyHandler {
     /**
      * AUDIT FIX: Added logging for reward grant/drop outcome (guarded under
      * TRADE_DEBUG)
+     *
+     * @param required   contract kill requirement (0 = legacy/unknown, no scaling)
+     * @param isElite    whether the bounty target was an elite mob
      */
-    public static void grantRewards(ServerPlayerEntity player) {
+    public static void grantRewards(ServerPlayerEntity player, int required, boolean isElite) {
         final int rewardScroll = 1;
         final int rewardSilver = TradeConfig.BOUNTY_SILVER_REWARD;
         boolean anyDropped = false;
@@ -248,7 +251,27 @@ public class BountyHandler {
             anyDropped = true;
         }
 
-        // 奖励3：Coin（按“尝试”冷却，2 MC 日内不再 roll）
+        // Reward scaling: compute bonus coin chance from required + isElite
+        float bonusCoinChance = 0f;
+        if (TradeConfig.BOUNTY_ENABLE_REWARD_SCALING && required > 0) {
+            if (isElite) {
+                bonusCoinChance = Math.max(0f, Math.min(
+                        (required - 5) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_ELITE,
+                        TradeConfig.BOUNTY_COIN_BONUS_MAX_ELITE));
+            } else {
+                bonusCoinChance = Math.max(0f, Math.min(
+                        (required - 10) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_NORMAL,
+                        TradeConfig.BOUNTY_COIN_BONUS_MAX_NORMAL));
+            }
+        }
+        float effectiveCoinChance = Math.min(1f, TradeConfig.COIN_BOUNTY_CHANCE + bonusCoinChance);
+
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.debug("[Bounty] COIN_CHANCE_SCALE elite={} required={} base={} bonus={} effective={}",
+                    isElite, required, TradeConfig.COIN_BOUNTY_CHANCE, bonusCoinChance, effectiveCoinChance);
+        }
+
+        // 奖励3：Coin（按"尝试"冷却，2 MC 日内不再 roll）
         if (player.getWorld() instanceof ServerWorld serverWorld) {
             MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
             MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
@@ -272,7 +295,7 @@ public class BountyHandler {
                     }
                     LOGGER.info("[Bounty] COIN_GUARANTEE_FIRST_GRANTED player={} now={}",
                             player.getName().getString(), now);
-                } else if (RANDOM.nextFloat() < TradeConfig.COIN_BOUNTY_CHANCE) {
+                } else if (RANDOM.nextFloat() < effectiveCoinChance) {
                     coinGranted = true;
                     ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
                     if (!player.giveItemStack(coin)) {

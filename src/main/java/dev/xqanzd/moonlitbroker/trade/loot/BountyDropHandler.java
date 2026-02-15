@@ -6,6 +6,7 @@ import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
 import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Bounty v2: 怪物击杀 → 掉落悬赏契约
@@ -52,6 +54,38 @@ public class BountyDropHandler {
     private static final float LOOTING_BONUS_PER_LEVEL = 0.001f; // +0.1% / level
     private static final float MAX_DROP_CHANCE = 0.02f; // 2%
     private static volatile boolean bountyTagEmptyWarned = false;
+
+    // ===== Elite density tiers (caps required for rare elites) =====
+    enum DensityTier {
+        DENSE(15), MEDIUM(12), RARE(10);
+        final int capMax;
+        DensityTier(int capMax) { this.capMax = capMax; }
+    }
+
+    private static final Set<EntityType<?>> ELITE_RARE = Set.of(
+            EntityType.EVOKER, EntityType.PIGLIN_BRUTE);
+    private static final Set<EntityType<?>> ELITE_MEDIUM = Set.of(
+            EntityType.WITHER_SKELETON);
+    // DENSE = all other elites (pillager, vindicator, witch, etc.)
+
+    static DensityTier getEliteDensityTier(EntityType<?> type) {
+        if (ELITE_RARE.contains(type)) return DensityTier.RARE;
+        if (ELITE_MEDIUM.contains(type)) return DensityTier.MEDIUM;
+        return DensityTier.DENSE;
+    }
+
+    // ===== Triangular distribution sampling =====
+    static int sampleTriangularInt(Random r, int min, int mode, int max) {
+        double u = r.nextDouble();
+        double c = (mode - min) / (double) (max - min);
+        double x;
+        if (u < c) {
+            x = min + Math.sqrt(u * (max - min) * (mode - min));
+        } else {
+            x = max - Math.sqrt((1 - u) * (max - min) * (max - mode));
+        }
+        return Math.max(min, Math.min(max, (int) Math.round(x)));
+    }
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register(BountyDropHandler::onMobDeath);
@@ -111,6 +145,12 @@ public class BountyDropHandler {
             return;
         }
         int required = rollRequired(entity);
+
+        if (TradeConfig.TRADE_DEBUG) {
+            DensityTier tier = isElite ? getEliteDensityTier(entity.getType()) : null;
+            LOGGER.debug("[Bounty] CONTRACT_GEN target={} elite={} tier={} required={}",
+                    mobId, isElite, tier, required);
+        }
 
         // 生成契约
         ItemStack contract = new ItemStack(ModItems.BOUNTY_CONTRACT, 1);
@@ -172,12 +212,18 @@ public class BountyDropHandler {
     }
 
     private static int rollRequired(LivingEntity entity) {
-        // 高血量目标给更低 required，避免过长追猎链。
-        double maxHealth = entity.getAttributeValue(EntityAttributes.GENERIC_MAX_HEALTH);
-        if (maxHealth >= 30.0) {
-            return 2 + RANDOM.nextInt(3); // 2-4
+        boolean isElite = entity.getType().isIn(ModEntityTypeTags.BOUNTY_ELITE_TARGETS);
+        int required;
+        if (isElite) {
+            // Elite: triangular [5..15] mode 10, then cap by density tier
+            required = sampleTriangularInt(RANDOM, 5, 10, 15);
+            DensityTier tier = getEliteDensityTier(entity.getType());
+            required = Math.max(5, Math.min(required, tier.capMax));
+        } else {
+            // Normal: triangular [10..25] mode 17
+            required = sampleTriangularInt(RANDOM, 10, 17, 25);
         }
-        return 3 + RANDOM.nextInt(4); // 3-6
+        return required;
     }
 
     private static int getLootingLevel(ServerWorld world, ServerPlayerEntity player) {

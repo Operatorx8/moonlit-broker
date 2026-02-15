@@ -10,6 +10,7 @@ import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import net.minecraft.text.TranslatableTextContent;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Language;
@@ -59,6 +60,7 @@ public final class TooltipComposer {
         List<Text> block = new ArrayList<>();
         boolean useZhStyle = isChineseLanguage();
         boolean isEnglish = !useZhStyle;
+        int inscriptionLineCount = countInscriptionLines(inscriptions);
 
         addInscription(block, inscriptions);
         addTagline(modId, itemPath, block, isEnglish);
@@ -75,6 +77,87 @@ public final class TooltipComposer {
         }
         int insertIndex = Math.min(1, tooltip.size());
         tooltip.addAll(insertIndex, block);
+
+        if (inscriptionLineCount > 0) {
+            int attributeInsertAt = Math.min(insertIndex + inscriptionLineCount + 1, tooltip.size());
+            moveVanillaAttributeBlock(tooltip, attributeInsertAt);
+        }
+    }
+
+    public static void moveVanillaAttributeBlock(List<Text> tooltip, int insertAt) {
+        if (tooltip == null || tooltip.isEmpty()) {
+            return;
+        }
+
+        List<Text> moved = new ArrayList<>();
+        List<IndexRange> removeRanges = new ArrayList<>();
+
+        int cursor = 0;
+        while (cursor < tooltip.size()) {
+            if (!isVanillaModifierSlotHeader(tooltip.get(cursor))) {
+                cursor++;
+                continue;
+            }
+
+            int removeStart = cursor;
+            if (removeStart > 0 && isEmptyTooltipLine(tooltip.get(removeStart - 1))) {
+                removeStart--;
+            }
+
+            int blockEnd = cursor + 1;
+            while (blockEnd < tooltip.size()) {
+                Text line = tooltip.get(blockEnd);
+                if (isVanillaModifierAttributeLine(line) || isVanillaModifierSlotHeader(line)) {
+                    blockEnd++;
+                    continue;
+                }
+                if (isEmptyTooltipLine(line)) {
+                    if (blockEnd + 1 < tooltip.size() && isVanillaModifierSlotHeader(tooltip.get(blockEnd + 1))) {
+                        blockEnd++;
+                        continue;
+                    }
+                    blockEnd++;
+                }
+                break;
+            }
+
+            List<Text> segment = trimEmptyEdgeLines(tooltip.subList(cursor, blockEnd));
+            if (!segment.isEmpty()) {
+                if (!moved.isEmpty()) {
+                    moved.add(Text.empty());
+                }
+                moved.addAll(segment);
+            }
+
+            removeRanges.add(new IndexRange(removeStart, blockEnd));
+            cursor = blockEnd;
+        }
+
+        if (moved.isEmpty() || removeRanges.isEmpty()) {
+            return;
+        }
+
+        int adjustedInsertAt = Math.max(0, Math.min(insertAt, tooltip.size()));
+        for (IndexRange range : removeRanges) {
+            if (range.start >= adjustedInsertAt) {
+                continue;
+            }
+            adjustedInsertAt -= Math.min(range.end, adjustedInsertAt) - range.start;
+        }
+
+        for (int i = removeRanges.size() - 1; i >= 0; i--) {
+            IndexRange range = removeRanges.get(i);
+            tooltip.subList(range.start, range.end).clear();
+        }
+
+        int target = Math.max(0, Math.min(adjustedInsertAt, tooltip.size()));
+        if (target > 0 && !isEmptyTooltipLine(tooltip.get(target - 1))) {
+            moved.add(0, Text.empty());
+        }
+        if (target < tooltip.size() && !isEmptyTooltipLine(tooltip.get(target))) {
+            moved.add(Text.empty());
+        }
+        tooltip.addAll(target, moved);
     }
 
     public static void addInscription(List<Text> out, List<String> inscriptions) {
@@ -88,6 +171,20 @@ public final class TooltipComposer {
             out.add(Text.literal(line).formatted(Formatting.GRAY));
         }
         out.add(Text.empty());
+    }
+
+    private static int countInscriptionLines(List<String> inscriptions) {
+        if (inscriptions == null || inscriptions.isEmpty()) {
+            return 0;
+        }
+
+        int count = 0;
+        for (String line : inscriptions) {
+            if (line != null && !line.isBlank()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public static void addTagline(String modId, String itemPath, List<Text> out, boolean isEnglish) {
@@ -389,6 +486,44 @@ public final class TooltipComposer {
                 : text.formatted(Formatting.DARK_GRAY);
     }
 
+    private static boolean isVanillaModifierSlotHeader(Text line) {
+        String key = getTranslatableKey(line);
+        return key != null && key.startsWith("item.modifiers.");
+    }
+
+    private static boolean isVanillaModifierAttributeLine(Text line) {
+        String key = getTranslatableKey(line);
+        return key != null && key.startsWith("attribute.modifier.");
+    }
+
+    private static String getTranslatableKey(Text line) {
+        if (line.getContent() instanceof TranslatableTextContent translatable) {
+            return translatable.getKey();
+        }
+        return null;
+    }
+
+    private static boolean isEmptyTooltipLine(Text line) {
+        return line.getString().isBlank();
+    }
+
+    private static List<Text> trimEmptyEdgeLines(List<Text> lines) {
+        int start = 0;
+        int end = lines.size();
+
+        while (start < end && isEmptyTooltipLine(lines.get(start))) {
+            start++;
+        }
+        while (end > start && isEmptyTooltipLine(lines.get(end - 1))) {
+            end--;
+        }
+
+        if (start >= end) {
+            return List.of();
+        }
+        return new ArrayList<>(lines.subList(start, end));
+    }
+
     private static boolean isChineseLanguage() {
         return isChineseLanguageCode(Language.getInstance().get("language.code"));
     }
@@ -396,6 +531,8 @@ public final class TooltipComposer {
     private static boolean isChineseLanguageCode(String langCode) {
         return langCode != null && langCode.toLowerCase(Locale.ROOT).startsWith("zh_");
     }
+
+    private record IndexRange(int start, int end) {}
 
     private record HintSpan(int start, int end) {}
 }

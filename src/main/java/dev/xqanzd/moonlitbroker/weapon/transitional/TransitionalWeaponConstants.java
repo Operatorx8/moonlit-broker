@@ -25,7 +25,7 @@ public final class TransitionalWeaponConstants {
     public static final int VELOX_DURABILITY = (int) (IRON_SWORD_DURABILITY * 1.05);  // 262
 
     // === Fatalis - 重击剑 ===
-    public static final int FATALIS_BASE_DAMAGE = 12;
+    public static final int FATALIS_BASE_DAMAGE = 10;
     public static final float FATALIS_ATTACK_SPEED = -2.2f;  // 1.8 effective
     public static final int FATALIS_DURABILITY = (int) (IRON_SWORD_DURABILITY * 1.15);  // 287
 

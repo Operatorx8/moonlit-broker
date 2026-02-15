@@ -108,6 +108,20 @@ public final class TradeConfig {
     /** 是否启用 elite 掉落加成 */
     public static final boolean ENABLE_ELITE_DROP_BONUS = true;
 
+    // ===== Bounty reward scaling (coin chance scales with required kills) =====
+    /** 总开关：是否启用悬赏奖励缩放 */
+    public static final boolean BOUNTY_ENABLE_REWARD_SCALING = true;
+    /** 每 5 击杀额外银票数（默认 0，稳后再开） */
+    public static final int BOUNTY_REWARD_SILVER_PER_5_KILLS = 0;
+    /** Normal 悬赏：coin 概率加成上限 */
+    public static final float BOUNTY_COIN_BONUS_MAX_NORMAL = 0.05f;
+    /** Elite 悬赏：coin 概率加成上限 */
+    public static final float BOUNTY_COIN_BONUS_MAX_ELITE = 0.10f;
+    /** Normal 悬赏：每多 1 required 的 coin 概率增量 (0.05 / 15) */
+    public static final float BOUNTY_COIN_BONUS_PER_REQUIRED_NORMAL = BOUNTY_COIN_BONUS_MAX_NORMAL / 15f;
+    /** Elite 悬赏：每多 1 required 的 coin 概率增量 (0.10 / 10) */
+    public static final float BOUNTY_COIN_BONUS_PER_REQUIRED_ELITE = BOUNTY_COIN_BONUS_MAX_ELITE / 10f;
+
     // ========== 冷却时间 ==========
     /** 页面操作冷却 (0.5秒 = 10 ticks) */
     public static final int PAGE_ACTION_COOLDOWN_TICKS = 10;
