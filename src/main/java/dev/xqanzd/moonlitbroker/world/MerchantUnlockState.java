@@ -50,6 +50,16 @@ public class MerchantUnlockState extends PersistentState {
         return overworld.getPersistentStateManager().getOrCreate(TYPE, DATA_NAME);
     }
 
+    /**
+     * 判断玩家是否已解锁商人系统（首次见面 Guide+Mark 已发放）。
+     * 用于替代"背包里必须有 Mark"的 gate。
+     */
+    public static boolean isMerchantUnlocked(ServerWorld world, UUID playerUuid) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.progressByPlayer.get(playerUuid);
+        return progress != null && progress.isFirstMeetGuideGiven();
+    }
+
     public Progress getOrCreateProgress(UUID playerUuid) {
         return progressByPlayer.computeIfAbsent(playerUuid, key -> new Progress());
     }
@@ -143,6 +153,8 @@ public class MerchantUnlockState extends PersistentState {
         private long lastCoinBountyTick = -1L;
         /** 玩家是否曾通过悬赏保底获得过 Coin（首次保底用，仅触发一次） */
         private boolean hasEverReceivedBountyCoin = false;
+        /** 是否已自动补发过 Mark（一次性，丢失后只救一次） */
+        private boolean reissuedMark = false;
 
         // ========== P0-A FIX: per-player sigil offers hash (跨玩家隔离) ==========
         /** Per-(player,merchant) 上次 sigil offers hash */
@@ -613,6 +625,14 @@ public class MerchantUnlockState extends PersistentState {
             this.firstMeetGuideGiven = firstMeetGuideGiven;
         }
 
+        public boolean isReissuedMark() {
+            return reissuedMark;
+        }
+
+        public void setReissuedMark(boolean reissuedMark) {
+            this.reissuedMark = reissuedMark;
+        }
+
         public long getSilverWindowStart() {
             return silverWindowStart;
         }
@@ -774,6 +794,7 @@ public class MerchantUnlockState extends PersistentState {
             // Trade System 新增字段
             nbt.putInt("Reputation", this.reputation);
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
+            nbt.putBoolean("ReissuedMark", this.reissuedMark);
             nbt.putLong("SilverWindowStart", this.silverWindowStart);
             nbt.putInt("SilverDropCount", this.silverDropCount);
             nbt.putLong(NBT_LAST_SUMMON_TICK, this.lastSummonTick);
@@ -905,6 +926,9 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("FirstMeetGuideGiven")) {
                 progress.firstMeetGuideGiven = nbt.getBoolean("FirstMeetGuideGiven");
+            }
+            if (nbt.contains("ReissuedMark")) {
+                progress.reissuedMark = nbt.getBoolean("ReissuedMark");
             }
             if (nbt.contains("SilverWindowStart")) {
                 progress.silverWindowStart = nbt.getLong("SilverWindowStart");

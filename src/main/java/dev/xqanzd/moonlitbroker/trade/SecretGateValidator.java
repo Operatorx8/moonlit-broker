@@ -1,10 +1,11 @@
 package dev.xqanzd.moonlitbroker.trade;
 
 import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
-import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
+import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.world.ServerWorld;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,17 +31,18 @@ public class SecretGateValidator {
     /**
      * 验证玩家是否满足进入隐藏页的所有条件
      * 需要同时满足：
-     * 1. 持有绑定到自己的 Merchant Mark
+     * 1. 玩家已解锁商人系统（Progress 标记）
      * 2. 持有 SEALED 等级的 Trade Scroll，且 uses >= 2
      */
     public static ValidationResult validate(PlayerEntity player, MysteriousMerchantEntity merchant) {
-        // 条件1：检查 Merchant Mark
-        if (!MerchantMarkItem.playerHasValidMark(player)) {
+        // 条件1：检查商人系统解锁（Progress 标记，不再要求背包持有 Mark）
+        if (merchant.getEntityWorld() instanceof ServerWorld serverWorld
+                && !MerchantUnlockState.isMerchantUnlocked(serverWorld, player.getUuid())) {
             if (TradeConfig.TRADE_DEBUG) {
-                LOGGER.debug("[MoonTrade] GATE_FAIL player={} reason=NO_MARK", 
+                LOGGER.debug("[MoonTrade] GATE_FAIL player={} reason=NOT_UNLOCKED",
                     player.getName().getString());
             }
-            return ValidationResult.fail("缺少商人印记");
+            return ValidationResult.fail("尚未解锁商人系统");
         }
 
         // 条件2：检查 Trade Scroll

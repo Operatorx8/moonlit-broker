@@ -316,6 +316,7 @@ public class MerchantSpawnerState extends PersistentState {
                 return;
             }
 
+            merchant.markRitualReveal(world);
             recordSpawn(world, TradeConfig.SUMMON_GLOBAL_COOLDOWN_TICKS, merchant.getUuid(), TradeConfig.SUMMON_EXPECTED_LIFETIME_TICKS);
             this.summonRequest = null;
             this.markDirty();

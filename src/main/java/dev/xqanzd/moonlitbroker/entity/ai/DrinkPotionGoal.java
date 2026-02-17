@@ -187,6 +187,9 @@ public class DrinkPotionGoal extends Goal {
         // 已经隐身了就不需要再喝
         if (merchant.hasStatusEffect(StatusEffects.INVISIBILITY)) return false;
 
+        // Ritual Reveal 窗口内禁止隐身
+        if (merchant.isRitualRevealActive(merchant.getEntityWorld().getTime())) return false;
+
         // 条件1：最近受伤
         if (wasRecentlyHurt()) {
             return true;

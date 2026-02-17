@@ -161,6 +161,8 @@ public final class TradeConfig {
     public static final long SUMMON_EXPECTED_LIFETIME_TICKS = 120000L;
     /** 召唤成功后的全局冷却（与自然生成全局冷却对齐） */
     public static final long SUMMON_GLOBAL_COOLDOWN_TICKS = 18000L;
+    /** 仪式召唤后禁止隐身的可见窗口（~一整晚，够玩家找人） */
+    public static final long SUMMON_RITUAL_REVEAL_TICKS = 14000L;
 
     // ========== Reclaim（补发/契约迁移） ==========
     /** Reclaim 冷却时间 (3 MC 天 = 72000 ticks) */

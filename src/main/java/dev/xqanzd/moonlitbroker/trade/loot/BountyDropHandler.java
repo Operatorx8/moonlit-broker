@@ -4,7 +4,7 @@ import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
-import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
+import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
@@ -120,8 +120,8 @@ public class BountyDropHandler {
             return;
         }
 
-        // Gate: 需持有 MerchantMark
-        if (!MerchantMarkItem.playerHasValidMark(player)) return;
+        // Gate: 玩家需已解锁商人系统（Progress 标记，不再要求背包持有 Mark）
+        if (!MerchantUnlockState.isMerchantUnlocked(world, player.getUuid())) return;
 
         // 背包中已有契约则不掉落（maxCount=1 精神）
         if (playerHasBountyContract(player)) return;

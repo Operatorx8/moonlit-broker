@@ -357,6 +357,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     // Phase 4: Despawn 数据
     private long spawnTick = -1;
     private boolean isInWarningPhase = false;
+
+    // Ritual Reveal: 仪式召唤后的可见窗口（禁止隐身）
+    private long ritualRevealUntilTick = 0L;
     /** P0-1: 是否已通知 SpawnerState 清除（防 discard 重入） */
     private boolean stateClearNotified = false;
 
@@ -399,6 +402,23 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     // ========== Phase 4: Despawn 逻辑 ==========
 
+    /**
+     * 仪式召唤可见窗口是否激活（窗口内禁止隐身）。
+     */
+    public boolean isRitualRevealActive(long now) {
+        return ritualRevealUntilTick > 0L && now < ritualRevealUntilTick;
+    }
+
+    /**
+     * 标记仪式召唤可见窗口（仅由召唤路径调用）。
+     */
+    public void markRitualReveal(ServerWorld world) {
+        long now = world.getTime();
+        long until = now + TradeConfig.SUMMON_RITUAL_REVEAL_TICKS;
+        if (until > this.ritualRevealUntilTick) this.ritualRevealUntilTick = until;
+        LOGGER.info("[Merchant] RITUAL_REVEAL merchant={} now={} until={}", this.getUuidAsString(), now, this.ritualRevealUntilTick);
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -421,6 +441,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         long currentTick = this.getEntityWorld().getTime();
+
+        // Ritual Reveal: 窗口内移除已有隐身效果（阻止 DrinkPotionGoal 在 canStart 中另行处理）
+        if (isRitualRevealActive(currentTick)) {
+            if (this.hasStatusEffect(StatusEffects.INVISIBILITY)) {
+                this.removeStatusEffect(StatusEffects.INVISIBILITY);
+            }
+        }
+
         long aliveTicks = currentTick - spawnTick;
 
         int warningTime = DEBUG_DESPAWN ? WARNING_TIME_DEBUG : WARNING_TIME_NORMAL;
@@ -893,6 +921,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
         ensureVariantIdentityIfNeeded();
         grantFirstMeetGuideIfNeeded(serverPlayer);
+        reissueMarkIfNeeded(serverPlayer);
         initSecretKatanaIdIfNeeded();
 
         OfferBuildAudit audit = rebuildOffersForPlayer(serverPlayer, OfferBuildSource.INTERACT_PREOPEN);
@@ -961,6 +990,58 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
             LOGGER.info("[MoonTrade] FIRST_MEET_GUIDE player={}", player.getName().getString());
         }
+    }
+
+    /**
+     * Mark 补发：已解锁玩家背包无 Mark 时自动补发 1 个绑定印记（仅限一次）。
+     * 补发后 Progress.reissuedMark 置 true；后续丢失需通过交易重新获取。
+     */
+    private void reissueMarkIfNeeded(ServerPlayerEntity player) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) return;
+
+        if (!MerchantUnlockState.isMerchantUnlocked(serverWorld, player.getUuid())) return;
+        if (playerHasAnyMerchantMark(player)) return;
+
+        MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+
+        if (progress.isReissuedMark()) {
+            // 已用过一次性补发，提示玩家通过交易获取
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.mark.reissue_exhausted")
+                            .formatted(Formatting.YELLOW),
+                    true);
+            return;
+        }
+
+        ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
+        dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(mark, player);
+        if (!player.giveItemStack(mark)) {
+            player.dropItem(mark, false);
+        }
+
+        progress.setReissuedMark(true);
+        state.markDirty();
+
+        player.sendMessage(
+                Text.translatable("actionbar.xqanzd_moonlit_broker.mark.reissued")
+                        .formatted(Formatting.GREEN),
+                true);
+
+        LOGGER.info("[Mark] REISSUE player={} reason=NO_MARK_IN_INVENTORY", player.getName().getString());
+    }
+
+    /**
+     * 检查玩家背包（主手/副手/main）是否有任意 MerchantMark（不要求绑定）。
+     */
+    private static boolean playerHasAnyMerchantMark(PlayerEntity player) {
+        for (ItemStack stack : player.getInventory().main) {
+            if (stack.isOf(ModItems.MERCHANT_MARK)) return true;
+        }
+        for (ItemStack stack : player.getInventory().offHand) {
+            if (stack.isOf(ModItems.MERCHANT_MARK)) return true;
+        }
+        return false;
     }
 
     /**
@@ -4095,6 +4176,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         nbt.putLong(NBT_SIGIL_ROLL_SEED, 0L);
         nbt.putBoolean(NBT_SIGIL_ROLL_INIT, false);
 
+        // Ritual Reveal: 持久化可见窗口
+        if (this.ritualRevealUntilTick > 0) {
+            nbt.putLong("RitualRevealUntil", this.ritualRevealUntilTick);
+        }
+
         if (DEBUG_DESPAWN) {
             LOGGER.debug("[Merchant] NBT_SAVE spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
                     spawnTick, isInWarningPhase, hasEverTraded, secretSold);
@@ -4130,6 +4216,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
         // P0-A FIX: sigil seed no longer stored on entity; ignore legacy NBT values
         // (old saves may have SigilRollSeed/SigilRollInitialized - just skip them)
+
+        // Ritual Reveal: 读取可见窗口
+        this.ritualRevealUntilTick = nbt.contains("RitualRevealUntil") ? nbt.getLong("RitualRevealUntil") : 0L;
 
         if (DEBUG_DESPAWN) {
             LOGGER.debug("[Merchant] NBT_LOAD spawnTick={} isInWarningPhase={} hasEverTraded={} secretSold={}",
