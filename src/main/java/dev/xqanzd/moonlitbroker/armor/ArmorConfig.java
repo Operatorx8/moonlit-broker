@@ -27,8 +27,17 @@ public final class ArmorConfig {
     /** 胸甲护甲值 */
     public static final int CHESTPLATE_PROTECTION = 8;
 
-    /** 韧性 */
-    public static final float TOUGHNESS = 4.0f;
+    /** 头盔韧性（默认值/兜底，可被 ArmorSpecs 按单件覆写） */
+    public static final float HELMET_TOUGHNESS = 1.0f;
+
+    /** 胸甲韧性（默认值/兜底，可被 ArmorSpecs 按单件覆写） */
+    public static final float CHESTPLATE_TOUGHNESS = 5.0f;
+
+    /** 护腿韧性（默认值/兜底，可被 ArmorSpecs 按单件覆写） */
+    public static final float LEGGINGS_TOUGHNESS = 1.2f;
+
+    /** 兼容旧代码：等价于胸甲韧性 */
+    public static final float TOUGHNESS = CHESTPLATE_TOUGHNESS;
 
     /** 默认击退抗性（头盔） */
     public static final float KNOCKBACK_RESISTANCE = 0.1f;

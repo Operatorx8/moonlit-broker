@@ -1,6 +1,8 @@
 package dev.xqanzd.moonlitbroker;
 
 import dev.xqanzd.moonlitbroker.armor.ArmorInit;
+import dev.xqanzd.moonlitbroker.armor.ArmorBalanceValidator;
+import dev.xqanzd.moonlitbroker.armor.ArmorSpecs;
 import dev.xqanzd.moonlitbroker.armor.item.ArmorDyeSupport;
 import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorInit;
 import dev.xqanzd.moonlitbroker.entity.spawn.MysteriousMerchantSpawner;
@@ -61,6 +63,12 @@ public class Mymodtest implements ModInitializer {
 
         // 初始化过渡护甲子系统
         TransitionalArmorInit.init();
+
+        // 非胸甲 toughness 硬阀门校验（仅告警）
+        ArmorBalanceValidator.validateNonChestplateToughnessCaps();
+
+        // ArmorSpecs 覆写表自检：校验 key 是否对应已注册 item（防拼错）
+        ArmorSpecs.validateOverrideKeys();
 
         // 将所有借用皮革模型的护甲绑定到炼药锅清洗行为
         ArmorDyeSupport.registerCauldronCleaningBehavior();

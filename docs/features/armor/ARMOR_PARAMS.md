@@ -6,13 +6,20 @@
 
 ## 基础属性
 
+### 全局约定：非胸甲 toughness 收口与硬上限
+
+- Helmet：`toughness = 1.0`，硬上限 `<= 1.0`
+- Leggings：默认 `toughness = 1.2`，仅明确防御侧重时可到 `1.5`，硬上限 `<= 1.5`
+- Boots：按 `protection` 分档 `1 -> 0.5`、`2 -> 0.6`、`3 -> 0.8`，硬上限 `<= 0.8`
+- Chestplate：不纳入本规则，保持现状
+
 ### 头盔通用属性（5 件头盔共享）
 
 | 属性 | 值 | 说明 |
 |------|-----|------|
 | `durabilityMultiplier` | 25 | 基础耐久乘数（头盔实际耐久 = 25 × 11 = 275） |
 | `protection` | 3 | 护甲值（头盔槽位） |
-| `toughness` | 2.0 | 韧性 |
+| `toughness` | 1.0 | 韧性（统一收口） |
 | `knockbackResistance` | 0.1 | 击退抗性 10% |
 | `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
 | `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
@@ -25,7 +32,7 @@
 |------|-----|------|
 | `durabilityMultiplier` | 25 | 基础耐久乘数（胸甲实际耐久 = 25 × 16 = 400） |
 | `protection` | 8 | 护甲值（胸甲槽位） |
-| `toughness` | 2.0 | 韧性 |
+| `toughness` | 5.0 | 韧性（保持现状，不纳入非胸甲收口规则） |
 | `knockbackResistance` | 0.0 | 默认无击退抗性（防风衣例外：+0.3） |
 | `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
 | `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
@@ -38,7 +45,7 @@
 |------|-----|------|
 | `durabilityMultiplier` | 25 | 基础耐久乘数（护腿实际耐久 = 25 × 15 = 375） |
 | `protection` | 6 | 护甲值（护腿槽位） |
-| `toughness` | 2.0 | 韧性 |
+| `toughness` | 1.2 | 韧性（默认档；明确防御侧重可到 1.5） |
 | `knockbackResistance` | 0.0 | 默认无击退抗性 |
 | `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
 | `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
@@ -51,7 +58,7 @@
 |------|-----|------|
 | `durability` | 按靴子定义 | 见下方靴子基础数值表 |
 | `protection` | 按靴子定义 | 见下方靴子基础数值表 |
-| `toughness` | 5.0 | 韧性（当前代码值） |
+| `toughness` | 按 `protection` 分档 | `1 -> 0.5`、`2 -> 0.6`、`3 -> 0.8` |
 | `knockbackResistance` | 0.0 | 默认无击退抗性 |
 | `enchantability` | 按稀有度分档 | 见下方映射表（继承原版材质） |
 | `fireproof` | true | 防火（物品不会被熔岩/火焰销毁） |
@@ -108,13 +115,13 @@
 
 ### 5 件靴子基础数值与稀有度分配
 
-| 靴子 | durability | protection | rarity | enchantability 档位 |
-|------|------------|------------|--------|----------------------|
-| `untraceable_treads_boots` | 380 | 3 | `EPIC` | `NETHERITE` (15) |
-| `boundary_walker_boots` | 380 | 2 | `UNCOMMON` | `IRON` (9) |
-| `ghost_step_boots` | 320 | 1 | `RARE` | `CHAIN` (12) |
-| `marching_boots` | 400 | 2 | `UNCOMMON` | `IRON` (9) |
-| `gossamer_boots` | 375 | 2 | `RARE` | `CHAIN` (12) |
+| 靴子 | durability | protection | toughness | rarity | enchantability 档位 |
+|------|------------|------------|-----------|--------|----------------------|
+| `untraceable_treads_boots` | 380 | 3 | 0.8 | `EPIC` | `NETHERITE` (15) |
+| `boundary_walker_boots` | 380 | 2 | 0.6 | `UNCOMMON` | `IRON` (9) |
+| `ghost_step_boots` | 320 | 1 | 0.5 | `RARE` | `CHAIN` (12) |
+| `marching_boots` | 400 | 2 | 0.6 | `UNCOMMON` | `IRON` (9) |
+| `gossamer_boots` | 375 | 2 | 0.6 | `RARE` | `CHAIN` (12) |
 
 ---
 
@@ -509,8 +516,13 @@ public class ArmorConstants {
     public static final int CHESTPLATE_PROTECTION = 8;
     public static final int LEGGINGS_PROTECTION = 6;
 
-    // 韧性
-    public static final float ARMOR_TOUGHNESS = 2.0f;
+    // 韧性（非胸甲收口）
+    public static final float HELMET_TOUGHNESS = 1.0f;
+    public static final float CHESTPLATE_TOUGHNESS = 5.0f; // 保持现状
+    public static final float LEGGINGS_TOUGHNESS = 1.2f;
+    public static final float BOOTS_TOUGHNESS_ARMOR_1 = 0.5f;
+    public static final float BOOTS_TOUGHNESS_ARMOR_2 = 0.6f;
+    public static final float BOOTS_TOUGHNESS_ARMOR_3 = 0.8f;
 
     // 默认击退抗性（头盔）
     public static final float HELMET_KNOCKBACK_RESISTANCE = 0.1f;

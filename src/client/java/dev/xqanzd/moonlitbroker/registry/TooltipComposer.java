@@ -57,10 +57,13 @@ public final class TooltipComposer {
             List<Text> tooltip,
             List<String> inscriptions
     ) {
+        // ── Phase A: extract all vanilla attribute blocks before any insertion ──
+        List<Text> extractedAttributes = extractVanillaAttributeBlocks(tooltip);
+
+        // ── Build the custom lore block ──
         List<Text> block = new ArrayList<>();
         boolean useZhStyle = isChineseLanguage();
         boolean isEnglish = !useZhStyle;
-        int inscriptionLineCount = countInscriptionLines(inscriptions);
 
         addInscription(block, inscriptions);
         addTagline(modId, itemPath, block, isEnglish);
@@ -68,28 +71,36 @@ public final class TooltipComposer {
         addShiftDetails(modId, itemPath, stack, block, isEnglish);
         addAdvancedDebug(modId, itemPath, stack, tooltipType, block);
 
-        if (block.isEmpty()) {
-            return;
-        }
-
-        if (!tooltip.isEmpty()) {
-            block.add(Text.empty());
-        }
+        // ── Phase B: insert attribute block, then lore block, after item name ──
         int insertIndex = Math.min(1, tooltip.size());
-        tooltip.addAll(insertIndex, block);
 
-        if (inscriptionLineCount > 0) {
-            int attributeInsertAt = Math.min(insertIndex + inscriptionLineCount + 1, tooltip.size());
-            moveVanillaAttributeBlock(tooltip, attributeInsertAt);
+        // Insert extracted attributes first (right after item name)
+        if (!extractedAttributes.isEmpty()) {
+            tooltip.addAll(insertIndex, extractedAttributes);
+            // lore block goes after the attribute block
+            insertIndex += extractedAttributes.size();
+        }
+
+        // Insert custom lore block after attributes
+        if (!block.isEmpty()) {
+            if (!tooltip.isEmpty()) {
+                block.add(Text.empty());
+            }
+            tooltip.addAll(insertIndex, block);
         }
     }
 
-    public static void moveVanillaAttributeBlock(List<Text> tooltip, int insertAt) {
+    /**
+     * Extracts and removes all vanilla attribute blocks (header + attribute lines)
+     * from the tooltip list, returning them as a single ordered list.
+     * Handles mainhand, offhand, head, chest, legs, feet slots.
+     */
+    private static List<Text> extractVanillaAttributeBlocks(List<Text> tooltip) {
         if (tooltip == null || tooltip.isEmpty()) {
-            return;
+            return new ArrayList<>();
         }
 
-        List<Text> moved = new ArrayList<>();
+        List<Text> extracted = new ArrayList<>();
         List<IndexRange> removeRanges = new ArrayList<>();
 
         int cursor = 0;
@@ -99,11 +110,13 @@ public final class TooltipComposer {
                 continue;
             }
 
+            // Found a header — include the blank line before it if present
             int removeStart = cursor;
             if (removeStart > 0 && isEmptyTooltipLine(tooltip.get(removeStart - 1))) {
                 removeStart--;
             }
 
+            // Scan forward to collect all attribute lines belonging to this header
             int blockEnd = cursor + 1;
             while (blockEnd < tooltip.size()) {
                 Text line = tooltip.get(blockEnd);
@@ -111,53 +124,41 @@ public final class TooltipComposer {
                     blockEnd++;
                     continue;
                 }
+                // Empty line might separate two slot headers — peek ahead
                 if (isEmptyTooltipLine(line)) {
                     if (blockEnd + 1 < tooltip.size() && isVanillaModifierSlotHeader(tooltip.get(blockEnd + 1))) {
                         blockEnd++;
                         continue;
                     }
+                    // Trailing blank after the block — include it in removal but not in extracted content
                     blockEnd++;
                 }
                 break;
             }
 
+            // Trim empty edges from the content we keep
             List<Text> segment = trimEmptyEdgeLines(tooltip.subList(cursor, blockEnd));
             if (!segment.isEmpty()) {
-                if (!moved.isEmpty()) {
-                    moved.add(Text.empty());
+                if (!extracted.isEmpty()) {
+                    extracted.add(Text.empty());
                 }
-                moved.addAll(segment);
+                extracted.addAll(segment);
             }
 
             removeRanges.add(new IndexRange(removeStart, blockEnd));
             cursor = blockEnd;
         }
 
-        if (moved.isEmpty() || removeRanges.isEmpty()) {
-            return;
-        }
-
-        int adjustedInsertAt = Math.max(0, Math.min(insertAt, tooltip.size()));
-        for (IndexRange range : removeRanges) {
-            if (range.start >= adjustedInsertAt) {
-                continue;
-            }
-            adjustedInsertAt -= Math.min(range.end, adjustedInsertAt) - range.start;
-        }
-
+        // Remove from bottom to top so indices stay valid
         for (int i = removeRanges.size() - 1; i >= 0; i--) {
             IndexRange range = removeRanges.get(i);
-            tooltip.subList(range.start, range.end).clear();
+            int safeEnd = Math.min(range.end, tooltip.size());
+            if (range.start < safeEnd) {
+                tooltip.subList(range.start, safeEnd).clear();
+            }
         }
 
-        int target = Math.max(0, Math.min(adjustedInsertAt, tooltip.size()));
-        if (target > 0 && !isEmptyTooltipLine(tooltip.get(target - 1))) {
-            moved.add(0, Text.empty());
-        }
-        if (target < tooltip.size() && !isEmptyTooltipLine(tooltip.get(target))) {
-            moved.add(Text.empty());
-        }
-        tooltip.addAll(target, moved);
+        return extracted;
     }
 
     public static void addInscription(List<Text> out, List<String> inscriptions) {
@@ -173,19 +174,6 @@ public final class TooltipComposer {
         out.add(Text.empty());
     }
 
-    private static int countInscriptionLines(List<String> inscriptions) {
-        if (inscriptions == null || inscriptions.isEmpty()) {
-            return 0;
-        }
-
-        int count = 0;
-        for (String line : inscriptions) {
-            if (line != null && !line.isBlank()) {
-                count++;
-            }
-        }
-        return count;
-    }
 
     public static void addTagline(String modId, String itemPath, List<Text> out, boolean isEnglish) {
         MutableText line1 = resolveTagline1(modId, itemPath);
@@ -492,8 +480,19 @@ public final class TooltipComposer {
     }
 
     private static boolean isVanillaModifierAttributeLine(Text line) {
+        // Check the line itself
         String key = getTranslatableKey(line);
-        return key != null && key.startsWith("attribute.modifier.");
+        if (key != null && key.startsWith("attribute.modifier.")) {
+            return true;
+        }
+        // Check siblings (child components) for attribute.modifier.* or attribute.name.* keys
+        for (Text sibling : line.getSiblings()) {
+            String sibKey = getTranslatableKey(sibling);
+            if (sibKey != null && (sibKey.startsWith("attribute.modifier.") || sibKey.startsWith("attribute.name."))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String getTranslatableKey(Text line) {

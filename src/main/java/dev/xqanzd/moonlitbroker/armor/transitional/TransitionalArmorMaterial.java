@@ -25,9 +25,9 @@ public final class TransitionalArmorMaterial {
     private TransitionalArmorMaterial() {}
 
     // HEAD 材质
-    public static RegistryEntry<ArmorMaterial> SCAVENGER_GOGGLES;  // def=2, tough=0, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> CAST_IRON_SALLET;   // def=2, tough=0.5, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> SANCTIFIED_HOOD;    // def=1, tough=0, RARE
+    public static RegistryEntry<ArmorMaterial> SCAVENGER_GOGGLES;  // def=3, tough=1.0, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> CAST_IRON_SALLET;   // def=3, tough=1.0, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> SANCTIFIED_HOOD;    // def=3, tough=1.0, RARE
 
     // CHEST 材质
     public static RegistryEntry<ArmorMaterial> REACTIVE_BUG_PLATE; // def=6, tough=1, RARE
@@ -35,14 +35,14 @@ public final class TransitionalArmorMaterial {
     public static RegistryEntry<ArmorMaterial> RITUAL_ROBE;        // def=5, tough=1, UNCOMMON
 
     // LEGS 材质
-    public static RegistryEntry<ArmorMaterial> WRAPPED_LEGGINGS;      // def=4, tough=0.5, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> REINFORCED_GREAVES;    // def=6, tough=0.5, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> CARGO_PANTS;           // def=5, tough=0, RARE
+    public static RegistryEntry<ArmorMaterial> WRAPPED_LEGGINGS;      // def=6, tough=1.2, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> REINFORCED_GREAVES;    // def=6, tough=1.2, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> CARGO_PANTS;           // def=6, tough=1.2, RARE
 
     // FEET 材质
-    public static RegistryEntry<ArmorMaterial> PENITENT_BOOTS;        // def=3, tough=0.5, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> STANDARD_IRON_BOOTS;   // def=2, tough=0.5, UNCOMMON
-    public static RegistryEntry<ArmorMaterial> CUSHION_HIKING_BOOTS;  // def=3, tough=0.5, RARE
+    public static RegistryEntry<ArmorMaterial> PENITENT_BOOTS;        // def=3, tough=0.8, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> STANDARD_IRON_BOOTS;   // def=3, tough=0.8, UNCOMMON
+    public static RegistryEntry<ArmorMaterial> CUSHION_HIKING_BOOTS;  // def=3, tough=0.8, RARE
 
     public static void register() {
         if (SCAVENGER_GOGGLES != null) {
@@ -59,7 +59,7 @@ public final class TransitionalArmorMaterial {
         CAST_IRON_SALLET = registerHelmetMaterial(
                 "trans_cast_iron_sallet",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CAST_IRON_SALLET_RARITY),
-                TransitionalArmorConstants.CAST_IRON_SALLET_DEFENSE,
+                (int) TransitionalArmorConstants.CAST_IRON_SALLET_DEFENSE,
                 TransitionalArmorConstants.CAST_IRON_SALLET_TOUGHNESS,
                 getRepairIngredientByRarity(TransitionalArmorConstants.CAST_IRON_SALLET_RARITY)
         );
@@ -98,7 +98,7 @@ public final class TransitionalArmorMaterial {
         WRAPPED_LEGGINGS = registerLeggingsMaterial(
                 "trans_wrapped_leggings",
                 getEnchantabilityByRarity(TransitionalArmorConstants.WRAPPED_LEGGINGS_RARITY),
-                TransitionalArmorConstants.WRAPPED_LEGGINGS_DEFENSE,
+                (int) TransitionalArmorConstants.WRAPPED_LEGGINGS_DEFENSE,
                 TransitionalArmorConstants.WRAPPED_LEGGINGS_TOUGHNESS,
                 getRepairIngredientByRarity(TransitionalArmorConstants.WRAPPED_LEGGINGS_RARITY)
         );
@@ -112,7 +112,7 @@ public final class TransitionalArmorMaterial {
         CARGO_PANTS = registerLeggingsMaterial(
                 "trans_cargo_pants",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CARGO_PANTS_RARITY),
-                TransitionalArmorConstants.CARGO_PANTS_DEFENSE,
+                (int) TransitionalArmorConstants.CARGO_PANTS_DEFENSE,
                 TransitionalArmorConstants.CARGO_PANTS_TOUGHNESS,
                 getRepairIngredientByRarity(TransitionalArmorConstants.CARGO_PANTS_RARITY)
         );
@@ -135,7 +135,7 @@ public final class TransitionalArmorMaterial {
         CUSHION_HIKING_BOOTS = registerBootsMaterial(
                 "trans_cushion_hiking_boots",
                 getEnchantabilityByRarity(TransitionalArmorConstants.CUSHION_HIKING_BOOTS_RARITY),
-                TransitionalArmorConstants.CUSHION_HIKING_BOOTS_DEFENSE,
+                (int) TransitionalArmorConstants.CUSHION_HIKING_BOOTS_DEFENSE,
                 TransitionalArmorConstants.CUSHION_HIKING_BOOTS_TOUGHNESS,
                 getRepairIngredientByRarity(TransitionalArmorConstants.CUSHION_HIKING_BOOTS_RARITY)
         );

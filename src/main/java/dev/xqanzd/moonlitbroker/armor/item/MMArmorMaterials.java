@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.armor.item;
 
 import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorMaterial;
+import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ArmorMaterial;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.util.Rarity;
@@ -32,9 +33,9 @@ public final class MMArmorMaterials {
         MM_LEATHERLIKE_B = TransitionalArmorMaterial.PATCHWORK_COAT;
     }
 
-    public static RegistryEntry<ArmorMaterial> merchantByRarity(Rarity rarity) {
+    public static RegistryEntry<ArmorMaterial> merchantByRarityAndType(Rarity rarity, ArmorItem.Type type) {
         register();
-        return MerchantArmorMaterial.byRarity(rarity);
+        return MerchantArmorMaterial.byRarityAndType(rarity, type);
     }
 
     public static RegistryEntry<ArmorMaterial> bootsByRarityAndProtection(Rarity rarity, int protection) {

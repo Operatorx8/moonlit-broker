@@ -59,10 +59,25 @@ public final class BootsEffectConstants {
     public static final int GOSSAMER_REFRESH_TICKS = 25;
 
     // ==================== 靴子基础属性 ====================
-    /** 韧性 (所有靴子) */
-    public static final float BOOTS_TOUGHNESS = 4.0f;
+    /** 韧性硬上限（防回归） */
+    public static final float BOOTS_TOUGHNESS_CAP = 0.8f;
+    /** 韧性分档：armor=1 */
+    public static final float BOOTS_TOUGHNESS_ARMOR_1 = 0.5f;
+    /** 韧性分档：armor=2 */
+    public static final float BOOTS_TOUGHNESS_ARMOR_2 = 0.6f;
+    /** 韧性分档：armor=3 */
+    public static final float BOOTS_TOUGHNESS_ARMOR_3 = 0.8f;
     /** 击退抗性 (所有靴子) */
     public static final float BOOTS_KNOCKBACK_RESISTANCE = 0.0f;
+
+    public static float toughnessByProtection(int protection) {
+        return switch (protection) {
+            case 1 -> BOOTS_TOUGHNESS_ARMOR_1;
+            case 2 -> BOOTS_TOUGHNESS_ARMOR_2;
+            case 3 -> BOOTS_TOUGHNESS_ARMOR_3;
+            default -> BOOTS_TOUGHNESS_ARMOR_2;
+        };
+    }
 
     // ==================== 靴子耐久 ====================
     public static final int UNTRACEABLE_TREADS_DURABILITY = 380;

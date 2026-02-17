@@ -1,6 +1,8 @@
 package dev.xqanzd.moonlitbroker.armor.item;
 
 import dev.xqanzd.moonlitbroker.armor.ArmorConfig;
+import dev.xqanzd.moonlitbroker.armor.ArmorSpec;
+import dev.xqanzd.moonlitbroker.armor.ArmorSpecs;
 import dev.xqanzd.moonlitbroker.armor.BootsEffectConstants;
 import dev.xqanzd.moonlitbroker.util.ModLog;
 import net.minecraft.item.ArmorItem;
@@ -110,6 +112,7 @@ public final class ArmorItems {
 
     /**
      * 注册单个头盔
+     * 若 ArmorSpecs 中存在该 item 的覆写，则创建专属材质。
      */
     private static Item registerHelmet(String name, Rarity rarity) {
         int defaultColor = ArmorColorPalette.colorFor(name);
@@ -118,7 +121,26 @@ public final class ArmorItems {
                 .rarity(rarity)
                 .fireproof();
 
-        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        ArmorSpec spec = ArmorSpecs.forItemPath(name);
+        RegistryEntry<ArmorMaterial> material;
+        if (spec != null && spec.hasAnyOverride()) {
+            int protection = spec.protectionOr(ArmorConfig.HELMET_PROTECTION);
+            float toughness = spec.toughnessOr(ArmorConfig.HELMET_TOUGHNESS);
+            float kbResist = spec.knockbackResistanceOr(ArmorConfig.KNOCKBACK_RESISTANCE);
+            material = MerchantArmorMaterial.registerItemSpecificMaterial(
+                    name,
+                    net.minecraft.item.ArmorMaterials.IRON.value().enchantability(),
+                    ArmorItem.Type.HELMET,
+                    protection, toughness, kbResist,
+                    net.minecraft.recipe.Ingredient.ofItems(net.minecraft.item.Items.IRON_INGOT)
+            );
+            LOGGER.info(ModLog.armorBootPrefix()
+                            + " action=register_override item={} toughness={} protection={} kbResist={}",
+                    name, toughness, protection, kbResist);
+        } else {
+            material = MMArmorMaterials.merchantByRarityAndType(rarity, ArmorItem.Type.HELMET);
+        }
+
         Item helmet = new DefaultDyedLeatherArmorItem(
                 material,
                 ArmorItem.Type.HELMET,
@@ -135,6 +157,7 @@ public final class ArmorItems {
     /**
      * 注册单个胸甲
      * 胸甲耐久 = 25 × 16 = 400
+     * 若 ArmorSpecs 中存在该 item 的覆写，则创建专属材质。
      */
     private static Item registerChestplate(String name, Rarity rarity) {
         int defaultColor = ArmorColorPalette.colorFor(name);
@@ -143,7 +166,31 @@ public final class ArmorItems {
                 .rarity(rarity)
                 .fireproof();
 
-        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        // 查询 ArmorSpecs 覆写
+        ArmorSpec spec = ArmorSpecs.forItemPath(name);
+        RegistryEntry<ArmorMaterial> material;
+        if (spec != null && spec.hasAnyOverride()) {
+            // 有覆写：创建该装备的专属材质
+            int protection = spec.protectionOr(ArmorConfig.CHESTPLATE_PROTECTION);
+            float toughness = spec.toughnessOr(ArmorConfig.CHESTPLATE_TOUGHNESS);
+            float kbResist = spec.knockbackResistanceOr(ArmorConfig.KNOCKBACK_RESISTANCE);
+            material = MerchantArmorMaterial.registerItemSpecificMaterial(
+                    name,
+                    net.minecraft.item.ArmorMaterials.IRON.value().enchantability(),
+                    ArmorItem.Type.CHESTPLATE,
+                    protection,
+                    toughness,
+                    kbResist,
+                    net.minecraft.recipe.Ingredient.ofItems(net.minecraft.item.Items.IRON_INGOT)
+            );
+            LOGGER.info(ModLog.armorBootPrefix()
+                            + " action=register_override item={} toughness={} protection={} kbResist={}",
+                    name, toughness, protection, kbResist);
+        } else {
+            // 无覆写：使用共享的 rarity 材质
+            material = MMArmorMaterials.merchantByRarityAndType(rarity, ArmorItem.Type.CHESTPLATE);
+        }
+
         Item chestplate = new DefaultDyedLeatherArmorItem(
                 material,
                 ArmorItem.Type.CHESTPLATE,
@@ -160,6 +207,7 @@ public final class ArmorItems {
     /**
      * 注册单个护腿
      * 护腿耐久 = 25 × 15 = 375
+     * 若 ArmorSpecs 中存在该 item 的覆写，则创建专属材质。
      */
     private static Item registerLeggings(String name, Rarity rarity) {
         int defaultColor = ArmorColorPalette.colorFor(name);
@@ -168,7 +216,26 @@ public final class ArmorItems {
                 .rarity(rarity)
                 .fireproof();
 
-        RegistryEntry<ArmorMaterial> material = MMArmorMaterials.merchantByRarity(rarity);
+        ArmorSpec spec = ArmorSpecs.forItemPath(name);
+        RegistryEntry<ArmorMaterial> material;
+        if (spec != null && spec.hasAnyOverride()) {
+            int protection = spec.protectionOr(ArmorConfig.LEGGINGS_PROTECTION);
+            float toughness = spec.toughnessOr(ArmorConfig.LEGGINGS_TOUGHNESS);
+            float kbResist = spec.knockbackResistanceOr(ArmorConfig.KNOCKBACK_RESISTANCE);
+            material = MerchantArmorMaterial.registerItemSpecificMaterial(
+                    name,
+                    net.minecraft.item.ArmorMaterials.IRON.value().enchantability(),
+                    ArmorItem.Type.LEGGINGS,
+                    protection, toughness, kbResist,
+                    net.minecraft.recipe.Ingredient.ofItems(net.minecraft.item.Items.IRON_INGOT)
+            );
+            LOGGER.info(ModLog.armorBootPrefix()
+                            + " action=register_override item={} toughness={} protection={} kbResist={}",
+                    name, toughness, protection, kbResist);
+        } else {
+            material = MMArmorMaterials.merchantByRarityAndType(rarity, ArmorItem.Type.LEGGINGS);
+        }
+
         Item leggings = new DefaultDyedLeatherArmorItem(
                 material,
                 ArmorItem.Type.LEGGINGS,

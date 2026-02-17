@@ -19,7 +19,7 @@ import java.util.Map;
 /**
  * 靴子专用盔甲材质
  * 每个靴子有独立的护甲值，因此需要按 (稀有度, 护甲值) 组合注册材质
- * 韧性 0、击退抗性 0
+ * 韧性按护甲值分档，击退抗性 0
  */
 public class BootsArmorMaterial {
 
@@ -91,7 +91,7 @@ public class BootsArmorMaterial {
                 SoundEvents.ITEM_ARMOR_EQUIP_CHAIN,
                 () -> repairIngredient,
                 dyedLeatherLayers(),
-                BootsEffectConstants.BOOTS_TOUGHNESS,
+                BootsEffectConstants.toughnessByProtection(bootsProtection),
                 BootsEffectConstants.BOOTS_KNOCKBACK_RESISTANCE
         );
 
