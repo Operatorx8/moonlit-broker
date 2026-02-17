@@ -1,18 +1,26 @@
-# Gradle
+# Gradle / Build outputs
 .gradle/
 build/
-bin/
+out/
+
+# Dev run dir (Fabric Loom)
+run/
 
 # IDE
 .idea/
 *.iml
+
+# OS
+.DS_Store
+
+# Aider
+.aider*
+.aider*/
+
+# Eclipse / misc
 .classpath
 .project
 .settings/
 
-# Runtime
-run/
-
-# OS
-.DS_Store
-.aider*
+# Local compiled output
+bin/
