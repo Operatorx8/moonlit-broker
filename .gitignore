@@ -44,3 +44,4 @@ logs/
 .DS_Store
 Thumbs.db
 .vscode/
+src/main/resources/assets/minecraft/
