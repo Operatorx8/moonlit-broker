@@ -24,3 +24,23 @@ run/
 
 # Local compiled output
 bin/
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+build/
+
+# Fabric Loom run dir
+run/
+
+# Logs
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
