@@ -752,6 +752,8 @@
   "actionbar.xqanzd_moonlit_broker.merchant.kill_omen": "You feel an ill omen",
   "actionbar.xqanzd_moonlit_broker.mark.reissued": "Merchant Mark reissued — it was missing from your inventory",
   "actionbar.xqanzd_moonlit_broker.mark.reissue_exhausted": "No Mark in your inventory — buy one from the Broker (Mark trade)",
+  "actionbar.xqanzd_moonlit_broker.gift.delivery_failed": "Inventory full — clear one slot and talk to the Broker again.",
+  "actionbar.xqanzd_moonlit_broker.gift.dropped": "Items were dropped at your feet.",
   "actionbar.xqanzd_moonlit_broker.merchant.busy_try_later": "Broker is trading now, try later",
   "actionbar.xqanzd_moonlit_broker.merchant.busy_with_other": "Broker is trading with another player",
   "actionbar.xqanzd_moonlit_broker.merchant.sendoff_confirm": "Sneak-right-click again to send off (%1$s ×%2$s)",

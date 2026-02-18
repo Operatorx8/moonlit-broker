@@ -23,6 +23,7 @@ import net.minecraft.component.type.NbtComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -358,6 +359,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     private long spawnTick = -1;
     private boolean isInWarningPhase = false;
 
+    // ========== Routine Night Invisibility (transient, no NBT) ==========
+    private long nightInvisRollDay = Long.MIN_VALUE;
+    private boolean nightInvisRollResult = false;
+    private long lastGraceLogDay = Long.MIN_VALUE;
+
     // Ritual Reveal: 仪式召唤后的可见窗口（禁止隐身）
     private long ritualRevealUntilTick = 0L;
     /** P0-1: 是否已通知 SpawnerState 清除（防 discard 重入） */
@@ -407,6 +413,46 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
      */
     public boolean isRitualRevealActive(long now) {
         return ritualRevealUntilTick > 0L && now < ritualRevealUntilTick;
+    }
+
+    /**
+     * 日常夜间隐身是否允许（grace window + 概率 roll）。
+     * 仅用于 DrinkPotionGoal 的日常夜间分支；不影响受伤/威胁隐身。
+     */
+    public boolean shouldAllowRoutineNightInvis(ServerWorld world) {
+        long tod = world.getTimeOfDay() % 24000L;
+        long duskStart = 12000L;
+
+        // Grace window：黄昏刚开始的 N ticks 内禁止日常隐身
+        if (tod >= duskStart && tod < duskStart + TradeConfig.MERCHANT_DUSK_NO_INVIS_TICKS) {
+            if (DEBUG_AI) {
+                long dayIndex = world.getTimeOfDay() / 24000L;
+                if (dayIndex != lastGraceLogDay) {
+                    lastGraceLogDay = dayIndex;
+                    LOGGER.debug("[MerchantAI] ROUTINE_INVIS_BLOCKED reason=DUSK_GRACE tod={} grace={} entity={}",
+                            tod, TradeConfig.MERCHANT_DUSK_NO_INVIS_TICKS, this.getUuidAsString());
+                }
+            }
+            return false;
+        }
+
+        // 夜间窗口 (13000..23000)
+        boolean isNight = (tod >= 13000L && tod <= 23000L);
+        if (!isNight) {
+            return false;
+        }
+
+        // 每个 MC 日只 roll 一次
+        long dayIndex = world.getTimeOfDay() / 24000L;
+        if (dayIndex != nightInvisRollDay) {
+            nightInvisRollDay = dayIndex;
+            nightInvisRollResult = this.random.nextFloat() < TradeConfig.MERCHANT_NIGHT_INVIS_CHANCE;
+            if (DEBUG_AI) {
+                LOGGER.debug("[MerchantAI] NIGHT_INVIS_ROLL day={} result={} chance={}",
+                        dayIndex, nightInvisRollResult, TradeConfig.MERCHANT_NIGHT_INVIS_CHANCE);
+            }
+        }
+        return nightInvisRollResult;
     }
 
     /**
@@ -949,6 +995,36 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     /**
+     * 尝试将物品放入玩家背包；背包满则掉落在脚下（发光 + 无拾取延迟）。
+     * @return true 如果物品成功交付（背包或掉落），false 如果彻底失败
+     */
+    private static boolean giveOrDrop(ServerPlayerEntity player, ItemStack stack, String logLabel) {
+        if (stack == null || stack.isEmpty()) return true;
+
+        boolean inserted = player.getInventory().insertStack(stack);
+        if (inserted && stack.isEmpty()) {
+            LOGGER.info("[Gift] {} result=INVENTORY player={}", logLabel, player.getName().getString());
+            return true;
+        }
+
+        // 背包满或部分剩余，掉落在脚下
+        ItemEntity dropped = player.dropItem(stack, false);
+        if (dropped != null) {
+            dropped.setGlowing(true);
+            dropped.setPickupDelay(0);
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.gift.dropped")
+                            .formatted(Formatting.YELLOW),
+                    true);
+            LOGGER.info("[Gift] {} result=DROP player={} pos={}", logLabel, player.getName().getString(), player.getBlockPos());
+            return true;
+        }
+
+        LOGGER.error("[Gift] {} result=FAILED player={}", logLabel, player.getName().getString());
+        return false;
+    }
+
+    /**
      * 首次见面赠送指南卷轴和商人印记
      */
     private void grantFirstMeetGuideIfNeeded(ServerPlayerEntity player) {
@@ -960,29 +1036,37 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
 
         if (!progress.isFirstMeetGuideGiven()) {
+            // 准备物品
+            ItemStack guideScroll = new ItemStack(ModItems.GUIDE_SCROLL, 1);
+            dev.xqanzd.moonlitbroker.trade.item.GuideScrollItem.ensureGuideContent(guideScroll);
+
+            ItemStack merchantMark = new ItemStack(ModItems.MERCHANT_MARK, 1);
+            dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(merchantMark, player);
+
+            // 尝试交付——两件都成功才算完成
+            boolean guideOk = giveOrDrop(player, guideScroll, "FIRST_MEET_GUIDE");
+            boolean markOk  = giveOrDrop(player, merchantMark, "FIRST_MEET_MARK");
+
+            if (!guideOk || !markOk) {
+                // 交付失败：不设进度标记，下次交互重试
+                player.sendMessage(
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
+                                .formatted(Formatting.RED),
+                        true);
+                LOGGER.error("[Gift] FIRST_MEET_DELIVERY_FAILED player={} guideOk={} markOk={}",
+                        player.getName().getString(), guideOk, markOk);
+                return;
+            }
+
+            // 全部交付成功，标记进度
             progress.setFirstMeetGuideGiven(true);
             state.markDirty();
 
-            // 赠送指南卷轴
-            ItemStack guideScroll = new ItemStack(ModItems.GUIDE_SCROLL, 1);
-            dev.xqanzd.moonlitbroker.trade.item.GuideScrollItem.ensureGuideContent(guideScroll);
-            if (!player.giveItemStack(guideScroll)) {
-                // 背包满了，掉落在地上
-                player.dropItem(guideScroll, false);
-            }
-
-            // 4 FIX: 赠送商人印记并绑定到玩家
-            ItemStack merchantMark = new ItemStack(ModItems.MERCHANT_MARK, 1);
-            dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(merchantMark, player);
-            if (!player.giveItemStack(merchantMark)) {
-                player.dropItem(merchantMark, false);
-            }
             if (serverWorld.getRegistryKey() == World.OVERWORLD) {
                 MerchantSpawnerState spawnerState = MerchantSpawnerState.getServerState(serverWorld);
                 spawnerState.markBootstrapComplete(serverWorld, player.getUuid());
             }
 
-            // 发送消息
             player.sendMessage(
                     Text.translatable("msg.xqanzd_moonlit_broker.merchant.first_meet_gift")
                             .formatted(Formatting.GOLD),
@@ -1006,7 +1090,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
 
         if (progress.isReissuedMark()) {
-            // 已用过一次性补发，提示玩家通过交易获取
             player.sendMessage(
                     Text.translatable("actionbar.xqanzd_moonlit_broker.mark.reissue_exhausted")
                             .formatted(Formatting.YELLOW),
@@ -1016,8 +1099,14 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
         ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
         dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(mark, player);
-        if (!player.giveItemStack(mark)) {
-            player.dropItem(mark, false);
+
+        if (!giveOrDrop(player, mark, "REISSUE_MARK")) {
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
+                            .formatted(Formatting.RED),
+                    true);
+            LOGGER.error("[Gift] REISSUE_DELIVERY_FAILED player={}", player.getName().getString());
+            return;
         }
 
         progress.setReissuedMark(true);

@@ -31,6 +31,12 @@ public final class TradeConfig {
     public static final boolean SCROLL_DEBUG = MASTER_DEBUG;
 
     // ========== Debug Trade Gate ==========
+    // ========== Routine Night Invisibility ==========
+    /** 黄昏后禁止日常隐身的恩惠窗口 (2 分钟 = 2400 ticks) */
+    public static final long  MERCHANT_DUSK_NO_INVIS_TICKS = 2400L;
+    /** 恩惠窗口结束后，每夜 roll 一次的隐身概率 (25% → 大概率不喝) */
+    public static final float MERCHANT_NIGHT_INVIS_CHANCE  = 0.25f;
+
     /** 仅在 debug 时出现 Emerald->Diamond / Emerald->Netherite 等测试交易 */
     public static final boolean DEBUG_TRADES = MASTER_DEBUG;
     /** DEBUG only: 创造模式送别跳过全局冷却推进（仅 DEBUG_TRADES=true 时生效） */

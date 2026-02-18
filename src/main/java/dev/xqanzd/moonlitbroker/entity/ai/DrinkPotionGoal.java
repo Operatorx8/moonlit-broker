@@ -1,7 +1,7 @@
 package dev.xqanzd.moonlitbroker.entity.ai;
 
 import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
-import dev.xqanzd.moonlitbroker.katana.sound.ModSounds;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
@@ -101,7 +101,7 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 播放喝药音效
-        merchant.playSound(ModSounds.MERCHANT_DRINK, 1.0f, 1.0f);
+        merchant.playSound(SoundEvents.ENTITY_GENERIC_DRINK, 1.0f, 1.0f);
     }
 
     @Override
@@ -165,7 +165,7 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 播放完成音效
-        merchant.playSound(ModSounds.MERCHANT_DRINK, 1.0f, 1.05f);
+        merchant.playSound(SoundEvents.ENTITY_GENERIC_DRINK, 1.0f, 1.05f);
     }
 
     /**
@@ -196,7 +196,16 @@ public class DrinkPotionGoal extends Goal {
         }
 
         // 条件2：附近有敌对生物
-        return hasNearbyThreat();
+        if (hasNearbyThreat()) {
+            return true;
+        }
+
+        // 条件3：日常夜间隐身（概率制 + 黄昏恩惠窗口）
+        if (merchant.getEntityWorld() instanceof ServerWorld sw) {
+            return merchant.shouldAllowRoutineNightInvis(sw);
+        }
+
+        return false;
     }
 
     /**
