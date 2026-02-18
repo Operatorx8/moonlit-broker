@@ -9,6 +9,7 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
@@ -54,8 +55,13 @@ public class NmapScanHandler {
             return;
         }
 
+        float penetrationBefore = NmapManager.getCurrentPenetration(player, currentTick);
         int threatCount = countThreats(player, currentTick);
+        float penetrationAfter = NmapManager.getCurrentPenetration(player, currentTick);
         if (threatCount > 0) {
+            if (penetrationAfter > penetrationBefore + 0.0001f) {
+                showPenetrationBoostEffect(player, penetrationBefore, penetrationAfter);
+            }
             int chainCount = NmapManager.getChainCount(player);
             if (chainCount >= NmapConfig.MAX_CHAIN_REFRESHES) {
                 forceCooldown(player, currentTick, "[Nmap] uptime cap reached -> forced cooldown 12s");
@@ -131,9 +137,10 @@ public class NmapScanHandler {
             false, true, true
         ));
         NmapManager.activateShield(player, currentTick);
+        showShieldActivationEffect(player);
 
         if (NmapConfig.DEBUG) {
-            LOGGER.info("[Nmap] scan hit threats={} -> RESISTANCE V 2s (chain={}/{})",
+            LOGGER.info("[Nmap] scan hit threats={} -> RESISTANCE V 5s (chain={}/{})",
                 threatCount, chainCount, NmapConfig.MAX_CHAIN_REFRESHES);
         }
         player.playSound(ModSounds.NMAP_SCAN_ON, 0.5f, 1.5f);
@@ -155,9 +162,50 @@ public class NmapScanHandler {
         if (!NmapManager.isShieldActive(player, currentTick)) return;
         player.removeStatusEffect(StatusEffects.RESISTANCE);
         NmapManager.cancelShieldAndEnterCooldown(player, currentTick);
+        showShieldBreakEffect(player);
         if (NmapConfig.DEBUG) {
             LOGGER.info("[Nmap] damaged -> cancel + cooldown 12s");
         }
         player.playSound(ModSounds.NMAP_SCAN_BREAK, 0.8f, 0.8f);
+    }
+
+    private static void showShieldActivationEffect(ServerPlayerEntity player) {
+        ServerWorld world = player.getServerWorld();
+        world.spawnParticles(
+            ParticleTypes.ENCHANT,
+            player.getX(), player.getBodyY(0.75), player.getZ(),
+            24, 0.55, 0.65, 0.55, 0.03
+        );
+        world.spawnParticles(
+            ParticleTypes.END_ROD,
+            player.getX(), player.getBodyY(0.9), player.getZ(),
+            10, 0.35, 0.5, 0.35, 0.01
+        );
+    }
+
+    private static void showPenetrationBoostEffect(ServerPlayerEntity player, float before, float after) {
+        ServerWorld world = player.getServerWorld();
+        int gainSteps = Math.max(1, Math.round((after - before) / NmapConfig.PENETRATION_PER_HOSTILE));
+        int sparkCount = Math.min(8 + gainSteps * 2, 22);
+
+        world.spawnParticles(
+            ParticleTypes.ELECTRIC_SPARK,
+            player.getX(), player.getBodyY(0.8), player.getZ(),
+            sparkCount, 0.45, 0.35, 0.45, 0.05
+        );
+        world.spawnParticles(
+            ParticleTypes.ENCHANTED_HIT,
+            player.getX(), player.getBodyY(1.05), player.getZ(),
+            Math.min(6 + gainSteps, 12), 0.3, 0.25, 0.3, 0.0
+        );
+    }
+
+    private static void showShieldBreakEffect(ServerPlayerEntity player) {
+        ServerWorld world = player.getServerWorld();
+        world.spawnParticles(
+            ParticleTypes.SMOKE,
+            player.getX(), player.getBodyY(0.8), player.getZ(),
+            12, 0.35, 0.5, 0.35, 0.02
+        );
     }
 }

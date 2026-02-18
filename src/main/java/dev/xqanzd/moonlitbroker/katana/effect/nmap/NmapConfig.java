@@ -8,7 +8,7 @@ public class NmapConfig {
     public static final double SCAN_RADIUS = 24.0;
     public static final double ABS_DY_MAX = 10.0;
     public static final int SCAN_INTERVAL_TICKS = 80;            // 4 seconds
-    public static final int RESISTANCE_DURATION_TICKS = 40;      // 2 seconds
+    public static final int RESISTANCE_DURATION_TICKS = 100;     // 5 seconds
     public static final int RESISTANCE_AMPLIFIER = 4;            // Level V
     public static final int MAX_CHAIN_REFRESHES = 3;
     public static final int COOLDOWN_TICKS = 240;                // 12 seconds

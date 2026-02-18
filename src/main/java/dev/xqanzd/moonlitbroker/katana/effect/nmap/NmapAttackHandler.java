@@ -55,6 +55,7 @@ public class NmapAttackHandler {
 
         if (bonusDamage > 0.3f) {
             target.damage(player.getDamageSources().magic(), bonusDamage);
+            showPenetrationHitEffect(target);
 
             if (NmapConfig.DEBUG) {
                 LOGGER.info("[Nmap] PENETRATION: {}% -> +{} damage",
@@ -89,5 +90,22 @@ public class NmapAttackHandler {
         }
 
         player.playSound(ModSounds.NMAP_CRIT, 1.0f, 1.2f);
+    }
+
+    private static void showPenetrationHitEffect(LivingEntity target) {
+        if (!(target.getWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+
+        serverWorld.spawnParticles(
+            ParticleTypes.ENCHANTED_HIT,
+            target.getX(), target.getY() + target.getHeight() * 0.55, target.getZ(),
+            10, 0.25, 0.25, 0.25, 0.0
+        );
+        serverWorld.spawnParticles(
+            ParticleTypes.ELECTRIC_SPARK,
+            target.getX(), target.getY() + target.getHeight() * 0.5, target.getZ(),
+            8, 0.3, 0.2, 0.3, 0.05
+        );
     }
 }
