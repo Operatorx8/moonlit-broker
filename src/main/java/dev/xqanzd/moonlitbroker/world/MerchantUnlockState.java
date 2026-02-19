@@ -51,7 +51,7 @@ public class MerchantUnlockState extends PersistentState {
                 "Overworld is null (server world not available)");
     }
 
-    private static long getOverworldTick(ServerWorld world) {
+    public static long getOverworldTick(ServerWorld world) {
         return requireOverworld(world).getTime();
     }
 
@@ -89,8 +89,16 @@ public class MerchantUnlockState extends PersistentState {
         Progress progress = state.getOrCreateProgress(player.getUuid());
         if (progress.isMarkBound()) {
             // 已绑定，但确保 bountyEligible 一致
+            boolean changed = false;
             if (!progress.isBountyEligible()) {
                 progress.setBountyEligible(true);
+                changed = true;
+            }
+            if (progress.getLastUnregisteredHintTick() != 0L) {
+                progress.setLastUnregisteredHintTick(0L);
+                changed = true;
+            }
+            if (changed) {
                 state.markDirty();
             }
             return false;
@@ -99,6 +107,7 @@ public class MerchantUnlockState extends PersistentState {
         progress.setMarkBoundTick(getOverworldTick(world));
         progress.setMarkBoundMerchantUuid(merchantUuid);
         progress.setBountyEligible(true);
+        progress.setLastUnregisteredHintTick(0L);
         state.markDirty();
         return true;
     }
@@ -240,6 +249,8 @@ public class MerchantUnlockState extends PersistentState {
         private boolean reissuedMark = false;
         /** 是否已有资格触发悬赏掉落（只要与商人交互过即 true，不依赖背包） */
         private boolean bountyEligible = false;
+        /** 未登记悬赏提示上次发送 tick（0=从未发送） */
+        private long lastUnregisteredHintTick = 0L;
         /** 首次赠送的 Mark 是否已发放（独立于 guide，防止玩家已自购 mark 时重复发放） */
         private boolean initialMarkGranted = false;
         /** MarkBound 版本号（首次绑定时置 1） */
@@ -790,6 +801,7 @@ public class MerchantUnlockState extends PersistentState {
             this.markBoundMerchantUuid = null;
             this.bountyEligible = false;
             this.lastContractDropTick = 0L;
+            this.lastUnregisteredHintTick = 0L;
         }
 
         public long getSilverWindowStart() {
@@ -830,6 +842,14 @@ public class MerchantUnlockState extends PersistentState {
 
         public void setHasEverReceivedBountyCoin(boolean value) {
             this.hasEverReceivedBountyCoin = value;
+        }
+
+        public long getLastUnregisteredHintTick() {
+            return lastUnregisteredHintTick;
+        }
+
+        public void setLastUnregisteredHintTick(long tick) {
+            this.lastUnregisteredHintTick = Math.max(0L, tick);
         }
 
         // ========== P0-A FIX: sigil hash getter/setter ==========
@@ -955,6 +975,7 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
             nbt.putBoolean("ReissuedMark", this.reissuedMark);
             nbt.putBoolean("BountyEligible", this.bountyEligible);
+            nbt.putLong("LastUnregHintTick", this.lastUnregisteredHintTick);
             nbt.putBoolean("InitialMarkGranted", this.initialMarkGranted);
             nbt.putInt("MarkBoundVer", this.markBoundVersion);
             nbt.putLong("MarkBoundTick", this.markBoundTick);
@@ -1099,6 +1120,12 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("BountyEligible")) {
                 progress.bountyEligible = nbt.getBoolean("BountyEligible");
+            }
+            if (nbt.contains("LastUnregHintTick")) {
+                progress.lastUnregisteredHintTick = Math.max(0L, nbt.getLong("LastUnregHintTick"));
+            } else if (nbt.contains("BountyUnregisteredHintShown") && nbt.getBoolean("BountyUnregisteredHintShown")) {
+                // Compatibility with intermediate saves that used a boolean gate.
+                progress.lastUnregisteredHintTick = 1L;
             }
             if (nbt.contains("InitialMarkGranted")) {
                 progress.initialMarkGranted = nbt.getBoolean("InitialMarkGranted");

@@ -24,12 +24,9 @@ import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Bounty v2: 怪物击杀 → 掉落悬赏契约
@@ -58,10 +55,6 @@ public class BountyDropHandler {
     private static final float MAX_DROP_CHANCE = 0.02f; // 2%
     // cooldown 值从 TradeConfig.BOUNTY_DROP_COOLDOWN_TICKS 读取
     private static volatile boolean bountyTagEmptyWarned = false;
-
-    // ===== Rate-limited actionbar hints for blocked gates =====
-    private static final long BOUNTY_HINT_COOLDOWN_TICKS = 600L; // 30 seconds
-    private static final Map<UUID, Long> lastHintTickByPlayer = new ConcurrentHashMap<>();
 
     // ===== Elite density tiers (caps required for rare elites) =====
     enum DensityTier {
@@ -147,7 +140,7 @@ public class BountyDropHandler {
                 LOGGER.info("[MoonTrade] action=BOUNTY_GATE result=NOT_ELIGIBLE mob={} player={} dim={}",
                         mobId, player.getName().getString(), world.getRegistryKey().getValue());
             }
-            sendRateLimitedHint(player, world);
+            maybeSendUnregisteredHint(world, player);
             return;
         }
 
@@ -308,18 +301,22 @@ public class BountyDropHandler {
         return false;
     }
 
-    /**
-     * 向未登记玩家发送 rate-limited actionbar 提示（30 秒冷却）。
-     */
-    private static void sendRateLimitedHint(ServerPlayerEntity player, ServerWorld world) {
-        long now = world.getTime();
-        Long last = lastHintTickByPlayer.get(player.getUuid());
-        if (last != null && now - last < BOUNTY_HINT_COOLDOWN_TICKS) return;
-        lastHintTickByPlayer.put(player.getUuid(), now);
-        player.sendMessage(
-                net.minecraft.text.Text.translatable(
-                        "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered"
-                ).formatted(net.minecraft.util.Formatting.GRAY),
-                true);
+    private static void maybeSendUnregisteredHint(ServerWorld world, ServerPlayerEntity player) {
+        MerchantUnlockState state = MerchantUnlockState.getServerState(world);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+
+        long now = MerchantUnlockState.getOverworldTick(world);
+        long last = progress.getLastUnregisteredHintTick();
+        if (last != 0L && now - last < TradeConfig.BOUNTY_UNREGISTERED_HINT_COOLDOWN_TICKS) {
+            return;
+        }
+
+        progress.setLastUnregisteredHintTick(now);
+        state.markDirty();
+
+        net.minecraft.text.Text msg = net.minecraft.text.Text.translatable(
+                "msg.xqanzd_moonlit_broker.bounty.hint_register"
+        ).formatted(net.minecraft.util.Formatting.GRAY);
+        player.sendMessage(msg, TradeConfig.BOUNTY_UNREGISTERED_HINT_USE_ACTIONBAR);
     }
 }

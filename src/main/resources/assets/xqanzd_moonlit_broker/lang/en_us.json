@@ -782,5 +782,7 @@
   "msg.xqanzd_moonlit_broker.mark.check_result": "[%1$s] bound=%2$s ver=%3$s elapsed=%4$s merchant=%5$s",
   "msg.xqanzd_moonlit_broker.bounty.contract_expired": "This bounty contract has expired — the target is no longer valid",
   "msg.xqanzd_moonlit_broker.bounty.contract_expired_refunded": "Expired contract (%1$s) recycled — refunded %2$s %3$s",
-  "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered": "Find a Moonlit Broker to begin receiving bounty contracts"
+  "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered": "Find a Moonlit Broker to begin receiving bounty contracts",
+  "msg.xqanzd_moonlit_broker.bounty.hint_register": "Find a Moonlit Broker to register before bounty contracts can drop",
+  "msg.xqanzd_moonlit_broker.bounty.register_enabled": "Registration complete: bounty contracts can now drop from valid targets"
 }

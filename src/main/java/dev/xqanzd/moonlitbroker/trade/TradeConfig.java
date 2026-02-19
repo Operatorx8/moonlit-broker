@@ -203,6 +203,10 @@ public final class TradeConfig {
     // ========== Bounty Progress Hint ==========
     /** 悬赏进度 actionbar 提示冷却 (30 ticks = 1.5s) */
     public static final int BOUNTY_PROGRESS_HINT_CD_TICKS = 30;
+    /** 未登记悬赏提示冷却（默认 1 MC 天，避免刷屏） */
+    public static final long BOUNTY_UNREGISTERED_HINT_COOLDOWN_TICKS = 24000L;
+    /** true=actionbar，false=聊天栏（默认聊天栏，避免覆盖战斗提示） */
+    public static final boolean BOUNTY_UNREGISTERED_HINT_USE_ACTIONBAR = false;
 
     // ========== NBT 键名 ==========
     public static final String NBT_SCROLL_USES = "Uses";

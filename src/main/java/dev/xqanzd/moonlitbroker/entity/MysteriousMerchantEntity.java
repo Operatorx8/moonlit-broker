@@ -978,6 +978,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         Text.translatable("actionbar.xqanzd_moonlit_broker.mark.bound")
                                 .formatted(Formatting.GREEN),
                         true);
+                serverPlayer.sendMessage(
+                        Text.translatable("msg.xqanzd_moonlit_broker.bounty.register_enabled")
+                                .formatted(Formatting.GREEN),
+                        false);
                 LOGGER.info("[Bounty] MARK_BOUND player={} merchant={} reason=FIRST_INTERACT",
                         serverPlayer.getName().getString(), this.getUuid().toString().substring(0, 8));
             }

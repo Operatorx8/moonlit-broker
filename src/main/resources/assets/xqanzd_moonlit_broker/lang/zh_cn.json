@@ -777,5 +777,7 @@
   "tooltip.xqanzd_moonlit_broker.contract.dormant": "契约失效（沉寂）",
   "msg.xqanzd_moonlit_broker.bounty.contract_expired": "该悬赏契约已失效——目标已不再有效",
   "msg.xqanzd_moonlit_broker.bounty.contract_expired_refunded": "失效契约（%1$s）已回收——返还 %2$s %3$s",
-  "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered": "找到月下掮客完成登记后，才能获得悬赏契约"
+  "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered": "找到月下掮客完成登记后，才能获得悬赏契约",
+  "msg.xqanzd_moonlit_broker.bounty.hint_register": "找到月下掮客完成登记后，才能获得悬赏契约",
+  "msg.xqanzd_moonlit_broker.bounty.register_enabled": "已完成登记：现在可从目标怪物掉落悬赏契约"
 }
