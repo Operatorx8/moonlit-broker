@@ -250,7 +250,11 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
     private void onTradeRowClicked(int localRow) {
         int offersTotal = this.handler.getRecipes().size();
         int globalIndex = this.indexStartOffset + localRow;
+        // Task B: Debug log — confirm absoluteIndex is sent (indexStartOffset already includes page offset)
+        LOGGER.debug("[MoonTrade] TRADE_CLICK localRow={} indexStartOffset={} absIndex={} offersTotal={} page={}",
+                localRow, this.indexStartOffset, globalIndex, offersTotal, getCurrentPage());
         if (globalIndex >= offersTotal) {
+            LOGGER.warn("[MoonTrade] TRADE_CLICK_OOB localRow={} absIndex={} offersTotal={}", localRow, globalIndex, offersTotal);
             return;
         }
         this.selectedIndex = globalIndex;

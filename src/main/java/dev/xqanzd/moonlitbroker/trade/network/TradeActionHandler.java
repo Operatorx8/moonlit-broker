@@ -231,8 +231,8 @@ public class TradeActionHandler {
         // Mark as on normal page
         setOnSecretPage(player, merchant, false);
 
-        // Sync offers to client - merchant.setOffers triggers sync via setCustomer
-        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+        // P0-1 FIX: Sync offers without reopening screen handler
+        merchant.syncOffersToCustomer(player);
 
         LOGGER.info(
                 "[MoonTrade] action=OPEN_NORMAL side=S player={} merchant={} cost={} offersTotal={} base={} sigil={} hidden={} offersHash={}",
@@ -311,8 +311,8 @@ public class TradeActionHandler {
         // Mark as on secret page
         setOnSecretPage(player, merchant, true);
 
-        // Sync offers to client
-        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+        // P0-1 FIX: Sync offers without reopening screen handler
+        merchant.syncOffersToCustomer(player);
 
         LOGGER.info(
                 "[MoonTrade] action=SWITCH_SECRET side=S player={} merchant={} secretSold={} blocked=0 allowed=1 reason=OK cost={}",
@@ -425,7 +425,8 @@ public class TradeActionHandler {
         int afterHash = afterCounters.offersHash();
         int haveAfter = countItem(player, REFRESH_SCROLL_ITEM);
 
-        merchant.sendOffers(player, merchant.getDisplayName(), merchant.getExperience());
+        // P0-1 FIX: Sync offers without reopening screen handler
+        merchant.syncOffersToCustomer(player);
 
         player.sendMessage(
                 Text.translatable("message.xqanzd_moonlit_broker.trade.refresh.success",

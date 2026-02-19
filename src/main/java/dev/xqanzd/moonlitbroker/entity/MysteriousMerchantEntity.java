@@ -46,6 +46,7 @@ import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
+import net.minecraft.screen.MerchantScreenHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.stat.Stats;
@@ -358,6 +359,11 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     // Phase 2.3: 交易统计
     private boolean hasEverTraded = false;
+    /** P0-2: Same-tick guard — afterUsing skips katana sync if already done this tick. */
+    private long lastKatanaSyncTick = -1;
+    /** P2-1: Grace window counter for soft stale-customer conditions (distance/UI). */
+    private int staleCustomerSoftTicks = 0;
+    private static final int STALE_CUSTOMER_GRACE_TICKS = 40; // ~2 seconds
 
     // Phase 4: Despawn 数据
     private long spawnTick = -1;
@@ -476,6 +482,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         // 只在服务端处理 despawn 逻辑
         if (this.getEntityWorld().isClient()) {
             return;
+        }
+
+        // P2-1: Stale customer cleanup — release busy lock if customer is gone
+        cleanupStaleCustomer();
+
+        // P2-3: Periodic pending claims cleanup (every ~1200 ticks = 60s)
+        long tickTime = this.getEntityWorld().getTime();
+        if (tickTime % 1200 == 0 && this.getEntityWorld() instanceof ServerWorld sw) {
+            KatanaOwnershipState.getServerState(sw).cleanExpiredPending(tickTime);
         }
 
         // 幂等 ensure：防止首次 tick 前交互路径读取到空名字/空固定神器 ID
@@ -838,6 +853,89 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
     }
 
+    /**
+     * P0-1 FIX: Send offers packet to the player WITHOUT reopening the screen handler.
+     * Use this for REFRESH / OPEN_NORMAL / SWITCH_SECRET actions that happen while
+     * the UI is already open, to avoid triggering onClosed → setCustomer(null).
+     */
+    public void syncOffersToCustomer(ServerPlayerEntity player) {
+        if (!(player.currentScreenHandler instanceof MerchantScreenHandler handler)) {
+            return;
+        }
+        // P1-3: Verify the handler's merchant is actually this entity, not a stale/different one
+        if (handler instanceof dev.xqanzd.moonlitbroker.mixin.MerchantScreenHandlerAccessor accessor
+                && accessor.getMerchant() != this) {
+            LOGGER.warn("[MoonTrade] SYNC_OFFERS_MERCHANT_MISMATCH player={} syncId={} handlerType={} expectedMerchant={} actualMerchant={}",
+                    player.getName().getString(), handler.syncId,
+                    handler.getClass().getSimpleName(), this.getUuid(),
+                    accessor.getMerchant() instanceof net.minecraft.entity.Entity e ? e.getUuid() : "non-entity");
+            return;
+        }
+        TradeOfferList offers = this.getOffers();
+        if (!offers.isEmpty()) {
+            player.sendTradeOffers(
+                handler.syncId, offers, 0,
+                this.getExperience(), this.isLeveledMerchant(), this.canRefreshTrades()
+            );
+        }
+    }
+
+    /**
+     * P2-1: Release stale customer reference if the player is gone.
+     * Hard conditions (offline/removed/different world) release immediately.
+     * Soft conditions (distance/UI closed) require {@link #STALE_CUSTOMER_GRACE_TICKS}
+     * consecutive ticks before releasing, to avoid transient false positives
+     * (e.g. knockback, screen switch frame).
+     */
+    private void cleanupStaleCustomer() {
+        PlayerEntity customer = this.getCustomer();
+        if (customer == null) {
+            staleCustomerSoftTicks = 0;
+            return;
+        }
+
+        // Hard conditions — immediate release
+        String hardReason = null;
+        if (customer.isRemoved()) {
+            hardReason = "removed";
+        } else if (customer instanceof ServerPlayerEntity sp && sp.isDisconnected()) {
+            hardReason = "disconnected";
+        } else if (customer.getWorld() != this.getWorld()) {
+            hardReason = "different_world";
+        }
+        if (hardReason != null) {
+            LOGGER.info("[MoonTrade] STALE_CUSTOMER_CLEANUP merchant={} customer={} reason={}",
+                    this.getUuid(), customer.getUuid(), hardReason);
+            this.setCustomer(null);
+            staleCustomerSoftTicks = 0;
+            return;
+        }
+
+        // Soft conditions — require grace window
+        boolean softStale = false;
+        String softReason = null;
+        if (customer.squaredDistanceTo(this) > 64 * 64) {
+            softStale = true;
+            softReason = "distance_gt_64";
+        } else if (!(customer.currentScreenHandler instanceof MerchantScreenHandler)) {
+            softStale = true;
+            softReason = "ui_closed";
+        }
+
+        if (softStale) {
+            staleCustomerSoftTicks++;
+            if (staleCustomerSoftTicks >= STALE_CUSTOMER_GRACE_TICKS) {
+                LOGGER.info("[MoonTrade] STALE_CUSTOMER_CLEANUP merchant={} customer={} reason={} graceTicks={}",
+                        this.getUuid(), customer.getUuid(), softReason, staleCustomerSoftTicks);
+                this.setCustomer(null);
+                staleCustomerSoftTicks = 0;
+            }
+        } else {
+            // Customer is healthy — reset grace counter
+            staleCustomerSoftTicks = 0;
+        }
+    }
+
     // ========== Phase 5: 特殊交互 ==========
 
     /**
@@ -854,16 +952,15 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         if (heldItem.getItem() instanceof SpawnEggItem) {
             return super.interactMob(player, hand);
         }
-        // P0: 商人忙碌时，手持契约的玩家收到 actionbar 提示
+        // P0: 商人忙碌时，阻止其他玩家交互（不再 fallthrough 到 super 以避免重开 screen handler）
         if (this.hasCustomer()) {
             if (heldItem.isOf(ModItems.BOUNTY_CONTRACT) && player instanceof ServerPlayerEntity sp) {
                 sp.sendMessage(
                         Text.translatable("actionbar.xqanzd_moonlit_broker.merchant.busy_try_later")
                                 .formatted(Formatting.YELLOW),
                         true);
-                return ActionResult.CONSUME;
             }
-            return super.interactMob(player, hand);
+            return ActionResult.CONSUME;
         }
 
         // ========== 送别机制：潜行 + 手持 Trade Scroll 右键 ==========
@@ -1502,6 +1599,36 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 }
                 LOGGER.info("[MoonTrade] CONTRACT_ACTIVATE player={} katanaId={} instanceId={} reclaim={} merchant={}",
                         player.getUuid(), soldKatanaId, instanceId, isReclaim, this.getUuid());
+            }
+
+            // Task C: After successful katana delivery, disable all same-type katana offers
+            // and sync to client so UI immediately reflects sold-out state.
+            // P0-2: Same-tick guard — skip if already synced this tick (e.g. from takeStack commit path).
+            long currentTick = serverWorld.getTime();
+            if (currentTick != this.lastKatanaSyncTick) {
+                TradeOfferList currentOffers = this.getOffers();
+                int disabledCount = 0;
+                for (TradeOffer o : currentOffers) {
+                    if (KatanaContractUtil.isReclaimOutput(o.getSellItem())) continue;
+                    String offerKatanaId = KatanaIdUtil.extractCanonicalKatanaId(o.getSellItem());
+                    if (soldKatanaId.equals(offerKatanaId) && !o.isDisabled()) {
+                        o.disable();
+                        disabledCount++;
+                    }
+                }
+                if (disabledCount > 0 && player instanceof ServerPlayerEntity sp
+                        && sp.currentScreenHandler instanceof MerchantScreenHandler) {
+                    sp.sendTradeOffers(
+                            sp.currentScreenHandler.syncId,
+                            currentOffers,
+                            0,
+                            this.getExperience(),
+                            this.isLeveledMerchant(),
+                            this.canRefreshTrades());
+                    this.lastKatanaSyncTick = currentTick;
+                    LOGGER.info("[MoonTrade] POST_TRADE_KATANA_SYNC player={} katanaId={} disabled={} merchant={}",
+                            player.getUuid(), soldKatanaId, disabledCount, this.getUuid());
+                }
             }
         }
 
@@ -3246,6 +3373,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         restoreOfferUsageStatesInPlace(offers, usageSnapshot);
         if (ownershipState != null) {
             applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
+            sanitizeKatanaOffersForPlayer(offers, player.getUuid(), ownershipState, source.name());
         }
 
         OfferCounters counters = classifyOffers(offers);
@@ -3355,6 +3483,7 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         refillAndVerifyFinalPages(offers, new int[] { 4 });
         restoreOfferUsageStatesInPlace(offers, usageSnapshot);
         applyKatanaOwnershipSoldOut(offers, player.getUuid(), ownershipState);
+        sanitizeKatanaOffersForPlayer(offers, player.getUuid(), ownershipState, OfferBuildSource.OPEN_SECRET.name());
 
         // P0-C FIX: Structured HIDDEN_BUILD log
         String resolvedItem = "EMPTY";
@@ -3769,6 +3898,91 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                         playerUuid, katanaId, this.getUuid());
             }
         }
+    }
+
+    /**
+     * Task A: Post-build katana sanitization.
+     * 1. Removes offers whose sell-item is a katana the player already owns (except reclaim).
+     * 2. Deduplicates remaining katana offers by type, preferring coin route
+     *    (second buy item = MYSTERIOUS_COIN) over silver route.
+     * Returns total number of removed offers.
+     */
+    private int sanitizeKatanaOffersForPlayer(TradeOfferList offers, UUID playerUuid,
+            KatanaOwnershipState ownershipState, String sourceTag) {
+        if (ownershipState == null || playerUuid == null) {
+            return 0;
+        }
+        // Pass 1: collect indices of katana offers to remove (owned or non-preferred duplicate)
+        // Key: katanaId → index of the preferred offer to keep
+        java.util.Map<String, Integer> keptIndexByType = new java.util.HashMap<>();
+        Set<Integer> indicesToRemove = new HashSet<>();
+        int removedOwned = 0;
+        int removedDupe = 0;
+
+        for (int i = 0; i < offers.size(); i++) {
+            TradeOffer offer = offers.get(i);
+            if (KatanaContractUtil.isReclaimOutput(offer.getSellItem())) {
+                continue;
+            }
+            String katanaId = KatanaIdUtil.extractCanonicalKatanaId(offer.getSellItem());
+            if (katanaId.isEmpty() || !KatanaIdUtil.isSecretKatana(katanaId)) {
+                continue;
+            }
+
+            // Already owned: mark for removal
+            if (ownershipState.hasOwned(playerUuid, katanaId)) {
+                indicesToRemove.add(i);
+                removedOwned++;
+                continue;
+            }
+
+            // Dedup: prefer coin route (second buy = MYSTERIOUS_COIN)
+            Integer existingIdx = keptIndexByType.get(katanaId);
+            if (existingIdx == null) {
+                keptIndexByType.put(katanaId, i);
+            } else {
+                boolean newIsCoin = isCoinRoute(offer);
+                boolean existingIsCoin = isCoinRoute(offers.get(existingIdx));
+                if (newIsCoin && !existingIsCoin) {
+                    // New offer is coin route, old is not: evict old, keep new
+                    indicesToRemove.add(existingIdx);
+                    keptIndexByType.put(katanaId, i);
+                } else {
+                    // Keep existing (either both coin, both silver, or existing is coin)
+                    indicesToRemove.add(i);
+                }
+                removedDupe++;
+            }
+        }
+
+        // Pass 2: remove marked indices (reverse order to preserve indices)
+        StringBuilder remaining = new StringBuilder();
+        for (String type : keptIndexByType.values().stream()
+                .sorted().map(idx -> KatanaIdUtil.extractCanonicalKatanaId(offers.get(idx).getSellItem()))
+                .toList()) {
+            if (remaining.length() > 0) remaining.append(',');
+            remaining.append(type);
+        }
+        java.util.List<Integer> sortedRemoval = new java.util.ArrayList<>(indicesToRemove);
+        sortedRemoval.sort(java.util.Comparator.reverseOrder());
+        for (int idx : sortedRemoval) {
+            offers.remove(idx);
+        }
+
+        int totalRemoved = removedOwned + removedDupe;
+        if (totalRemoved > 0) {
+            LOGGER.warn("[MoonTrade] SANITIZE_KATANA player={} merchant={} source={} removedOwned={} removedDupe={} remaining=[{}]",
+                    playerUuid, this.getUuid(), sourceTag, removedOwned, removedDupe, remaining);
+        } else if (!keptIndexByType.isEmpty()) {
+            LOGGER.info("[MoonTrade] SANITIZE_KATANA player={} merchant={} source={} types=[{}] clean",
+                    playerUuid, this.getUuid(), sourceTag, remaining);
+        }
+        return totalRemoved;
+    }
+
+    private static boolean isCoinRoute(TradeOffer offer) {
+        ItemStack secondBuy = offer.getDisplayedSecondBuyItem();
+        return !secondBuy.isEmpty() && secondBuy.isOf(ModItems.MYSTERIOUS_COIN);
     }
 
     private java.util.List<TradeOffer> createKatanaOffers(ServerPlayerEntity player) {

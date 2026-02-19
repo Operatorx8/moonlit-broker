@@ -38,6 +38,14 @@ public class KatanaOwnershipState extends PersistentState {
     private final Map<UUID, Map<String, UUID>> activeInstanceByPlayer = new HashMap<>();
     private final Map<UUID, Map<String, Long>> lastReclaimTickByPlayer = new HashMap<>();
 
+    // ========== P0-2 FIX: Transient pending claims (NOT persisted) ==========
+    private static final long PENDING_TTL_TICKS = 600L; // 30 seconds — generous to survive lag spikes
+
+    public record PendingClaim(String katanaId, long tickCreated) {}
+
+    /** Transient: not saved to NBT. One pending claim per player at a time. */
+    private final Map<UUID, PendingClaim> pendingClaims = new HashMap<>();
+
     private static final Type<KatanaOwnershipState> TYPE = new Type<>(
         KatanaOwnershipState::new,
         KatanaOwnershipState::fromNbt,
@@ -49,6 +57,16 @@ public class KatanaOwnershipState extends PersistentState {
         ServerWorld overworld = server.getWorld(World.OVERWORLD);
         assert overworld != null;
         return overworld.getPersistentStateManager().getOrCreate(TYPE, DATA_NAME);
+    }
+
+    /**
+     * Canonical tick source for all pending TTL operations — always uses Overworld time
+     * to avoid cross-dimension tick drift.
+     */
+    public static long getOverworldTick(ServerWorld world) {
+        ServerWorld overworld = world.getServer().getWorld(World.OVERWORLD);
+        assert overworld != null;
+        return overworld.getTime();
     }
 
     // ========== Ownership (existing) ==========
@@ -124,6 +142,97 @@ public class KatanaOwnershipState extends PersistentState {
         lastReclaimTickByPlayer.computeIfAbsent(playerUuid, id -> new HashMap<>())
                 .put(normalized, tick);
         markDirty();
+    }
+
+    // ========== Pending Claims (P0-2 two-phase commit) ==========
+
+    /**
+     * Write a pending claim. Returns false if the player already has ANY live pending claim
+     * (same or different type) — one pending per player at a time.
+     */
+    public boolean setPending(UUID playerUuid, String katanaId, long currentTick) {
+        String normalized = normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) return false;
+        cleanExpiredPending(currentTick);
+        PendingClaim existing = pendingClaims.get(playerUuid);
+        if (existing != null) {
+            if (existing.katanaId().equals(normalized)) {
+                LOGGER.debug("[MoonTrade] PENDING_REJECT_SAME player={} katanaId={}", playerUuid, normalized);
+            } else {
+                LOGGER.info("[MoonTrade] PENDING_REJECT_DIFF player={} existing={} requested={}",
+                        playerUuid, existing.katanaId(), normalized);
+            }
+            return false;
+        }
+        pendingClaims.put(playerUuid, new PendingClaim(normalized, currentTick));
+        return true;
+    }
+
+    /**
+     * Check if the player has a live pending claim for the given katanaId.
+     */
+    public boolean hasPending(UUID playerUuid, String katanaId, long currentTick) {
+        String normalized = normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) return false;
+        PendingClaim claim = pendingClaims.get(playerUuid);
+        if (claim == null) return false;
+        if (currentTick - claim.tickCreated() > PENDING_TTL_TICKS) {
+            pendingClaims.remove(playerUuid);
+            return false;
+        }
+        return claim.katanaId().equals(normalized);
+    }
+
+    /**
+     * Check if the player has ANY live pending claim (regardless of type).
+     */
+    public boolean hasAnyPending(UUID playerUuid, long currentTick) {
+        PendingClaim claim = pendingClaims.get(playerUuid);
+        if (claim == null) return false;
+        if (currentTick - claim.tickCreated() > PENDING_TTL_TICKS) {
+            pendingClaims.remove(playerUuid);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Commit a pending claim: write ownership and clear pending state.
+     * Only commits if pending exists AND matches the given katanaId.
+     * Returns true if ownership was newly added.
+     */
+    public boolean commitPending(UUID playerUuid, String katanaId) {
+        String normalized = normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) return false;
+
+        PendingClaim claim = pendingClaims.get(playerUuid);
+        if (claim == null) {
+            return false;
+        }
+        if (!claim.katanaId().equals(normalized)) {
+            // Mismatch: don't write wrong katanaId as owned. Clear stale pending.
+            pendingClaims.remove(playerUuid);
+            LOGGER.warn("[MoonTrade] PENDING_COMMIT_MISMATCH player={} pending={} commitArg={}",
+                    playerUuid, claim.katanaId(), normalized);
+            return false;
+        }
+
+        pendingClaims.remove(playerUuid);
+        return addOwned(playerUuid, normalized);
+    }
+
+    /**
+     * Roll back (clear) pending claim without writing ownership.
+     */
+    public void clearPending(UUID playerUuid) {
+        pendingClaims.remove(playerUuid);
+    }
+
+    /**
+     * Evict expired pending claims.
+     */
+    public void cleanExpiredPending(long currentTick) {
+        pendingClaims.entrySet().removeIf(e -> currentTick - e.getValue().tickCreated() > PENDING_TTL_TICKS);
     }
 
     // ========== Helpers ==========
