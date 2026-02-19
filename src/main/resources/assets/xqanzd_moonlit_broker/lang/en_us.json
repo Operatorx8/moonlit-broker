@@ -715,6 +715,7 @@
   "msg.xqanzd_moonlit_broker.bounty.completed": "Bounty complete. Right-click the merchant to submit",
   "msg.xqanzd_moonlit_broker.contract.unowned": "Katana bond not established — obtain/reclaim the katana contract from the Moonlit Broker.",
   "msg.xqanzd_moonlit_broker.contract.dormant": "Katana bond mismatch — this katana instance is not active. Reclaim it from the Moonlit Broker.",
+  "error.xqanzd_moonlit_broker.katana.already_owned": "\u2718 You already own this katana.",
   "error.xqanzd_moonlit_broker.command.player_only": "This command can only be run by a player",
   "error.xqanzd_moonlit_broker.bounty.need_item": "Need %2$s ×%1$s (You have ×%3$s)",
   "error.xqanzd_moonlit_broker.bounty.remove_failed": "Bounty submit failed: item removal error",
