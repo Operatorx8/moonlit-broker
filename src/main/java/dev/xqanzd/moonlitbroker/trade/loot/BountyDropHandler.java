@@ -8,7 +8,6 @@ import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.Angerable;
 import net.minecraft.entity.mob.MobEntity;
@@ -25,9 +24,12 @@ import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Bounty v2: 怪物击杀 → 掉落悬赏契约
@@ -49,11 +51,17 @@ import java.util.Set;
 public class BountyDropHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(BountyDropHandler.class);
     private static final Random RANDOM = new Random();
+    private static boolean REGISTERED = false;
 
     private static final float BASE_DROP_CHANCE = 0.005f; // 0.5%
     private static final float LOOTING_BONUS_PER_LEVEL = 0.001f; // +0.1% / level
     private static final float MAX_DROP_CHANCE = 0.02f; // 2%
+    // cooldown 值从 TradeConfig.BOUNTY_DROP_COOLDOWN_TICKS 读取
     private static volatile boolean bountyTagEmptyWarned = false;
+
+    // ===== Rate-limited actionbar hints for blocked gates =====
+    private static final long BOUNTY_HINT_COOLDOWN_TICKS = 600L; // 30 seconds
+    private static final Map<UUID, Long> lastHintTickByPlayer = new ConcurrentHashMap<>();
 
     // ===== Elite density tiers (caps required for rare elites) =====
     enum DensityTier {
@@ -88,6 +96,10 @@ public class BountyDropHandler {
     }
 
     public static void register() {
+        if (REGISTERED) {
+            return;
+        }
+        REGISTERED = true;
         ServerLivingEntityEvents.AFTER_DEATH.register(BountyDropHandler::onMobDeath);
         LOGGER.info("[MoonTrade] action=BOUNTY_DROP_HANDLER_REGISTER side=S");
     }
@@ -110,8 +122,8 @@ public class BountyDropHandler {
             return;
         }
 
-        // neutral 目标只有“正在对该玩家仇恨/激怒”时才允许掉落
-        if (entity.getType().isIn(ModEntityTypeTags.SILVERNOTE_NEUTRAL_DROPPERS) && !isAngeredAtPlayer(entity, player)) {
+        // (4) neutral gate：中立目标只有"正在对该玩家仇恨/激怒"时才允许掉落
+        if (entity.getType().isIn(ModEntityTypeTags.BOUNTY_NEUTRAL_TARGETS) && !isAngeredAtPlayer(entity, player)) {
             if (TradeConfig.TRADE_DEBUG) {
                 LOGGER.info(
                         "[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=SKIP_NEUTRAL_NOT_ANGRY mob={} player={} dim={}",
@@ -120,11 +132,42 @@ public class BountyDropHandler {
             return;
         }
 
-        // Gate: 玩家需已解锁商人系统（Progress 标记，不再要求背包持有 Mark）
-        if (!MerchantUnlockState.isMerchantUnlocked(world, player.getUuid())) return;
+        // (5) creative gate：避免创造模式测试刷物品污染生态
+        if (player.isCreative()) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info("[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=SKIP_CREATIVE player={}", player.getName().getString());
+            }
+            return;
+        }
 
-        // 背包中已有契约则不掉落（maxCount=1 精神）
-        if (playerHasBountyContract(player)) return;
+        // (6) MarkBound gate：玩家需曾与商人交互过
+        boolean eligible = MerchantUnlockState.isBountyEligible(world, player.getUuid());
+        if (!eligible) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info("[MoonTrade] action=BOUNTY_GATE result=NOT_ELIGIBLE mob={} player={} dim={}",
+                        mobId, player.getName().getString(), world.getRegistryKey().getValue());
+            }
+            sendRateLimitedHint(player, world);
+            return;
+        }
+
+        // (7) "背包已有契约" gate（maxCount=1 精神）
+        boolean hasContract = playerHasBountyContract(player);
+        if (hasContract) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info("[MoonTrade] action=BOUNTY_GATE result=HAS_CONTRACT mob={} player={} dim={}",
+                        mobId, player.getName().getString(), world.getRegistryKey().getValue());
+            }
+            return;
+        }
+
+        // (8) 并发掉落冷却：同 tick 多怪死亡只掉 1 张
+        if (MerchantUnlockState.isDropCooldownActive(world, player.getUuid(), TradeConfig.BOUNTY_DROP_COOLDOWN_TICKS)) {
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.info("[MoonTrade] action=BOUNTY_CONTRACT_DROP_CHECK result=SKIP_COOLDOWN player={}", player.getName().getString());
+            }
+            return;
+        }
 
         // 概率判定
         int lootingLevel = getLootingLevel(world, player);
@@ -134,6 +177,10 @@ public class BountyDropHandler {
         float chance = (TradeConfig.ENABLE_ELITE_DROP_BONUS && isElite)
                 ? Math.min(1.0f, baseChance * TradeConfig.BOUNTY_ELITE_CHANCE_MULTIPLIER)
                 : baseChance;
+        // 仅在 dev + debug + FORCE_BOUNTY_DROP 三重门同时为 true 时强制 chance=1.0f
+        if (TradeConfig.MASTER_DEBUG && TradeConfig.TRADE_DEBUG && TradeConfig.FORCE_BOUNTY_DROP) {
+            chance = 1.0f;
+        }
         float roll = RANDOM.nextFloat();
         if (roll >= chance) {
             if (TradeConfig.TRADE_DEBUG) {
@@ -146,19 +193,31 @@ public class BountyDropHandler {
         }
         int required = rollRequired(entity);
 
-        if (TradeConfig.TRADE_DEBUG) {
-            DensityTier tier = isElite ? getEliteDensityTier(entity.getType()) : null;
-            LOGGER.debug("[Bounty] CONTRACT_GEN target={} elite={} tier={} required={}",
-                    mobId, isElite, tier, required);
+        // Tier 判定：rare > elite > common
+        String bountyTier;
+        if (entity.getType().isIn(ModEntityTypeTags.BOUNTY_RARE_TARGETS)) {
+            bountyTier = BountyContractItem.TIER_RARE;
+        } else if (isElite) {
+            bountyTier = BountyContractItem.TIER_ELITE;
+        } else {
+            bountyTier = BountyContractItem.TIER_COMMON;
         }
 
-        // 生成契约
+        if (TradeConfig.TRADE_DEBUG) {
+            DensityTier densityTier = isElite ? getEliteDensityTier(entity.getType()) : null;
+            LOGGER.debug("[Bounty] CONTRACT_GEN target={} elite={} tier={} densityTier={} required={}",
+                    mobId, isElite, bountyTier, densityTier, required);
+        }
+
+        // 生成契约（含 Tier + Schema）
         ItemStack contract = new ItemStack(ModItems.BOUNTY_CONTRACT, 1);
-        BountyContractItem.initialize(contract, mobId.toString(), required);
+        BountyContractItem.initializeWithTier(contract, mobId.toString(), required, bountyTier);
         net.minecraft.entity.ItemEntity itemEntity = entity.dropStack(contract);
 
         // P0: 掉落反馈 - 发光 + actionbar + 音效（仅 dropStack 成功时）
         if (itemEntity != null) {
+            // 记录掉落 tick，启动冷却窗口
+            MerchantUnlockState.recordContractDrop(world, player.getUuid());
             itemEntity.setGlowing(true);
 
             // actionbar: 目标名 + 初始进度
@@ -182,8 +241,8 @@ public class BountyDropHandler {
         }
 
         LOGGER.info(
-                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} roll={} chance={} elite={} looting={} side=S player={} dim={}",
-                mobId, required, roll, chance, isElite, lootingLevel, player.getName().getString(),
+                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} tier={} roll={} chance={} elite={} looting={} side=S player={} dim={}",
+                mobId, required, bountyTier, roll, chance, isElite, lootingLevel, player.getName().getString(),
                 world.getRegistryKey().getValue());
     }
 
@@ -247,5 +306,20 @@ public class BountyDropHandler {
             return player.getUuid().equals(angerable.getAngryAt());
         }
         return false;
+    }
+
+    /**
+     * 向未登记玩家发送 rate-limited actionbar 提示（30 秒冷却）。
+     */
+    private static void sendRateLimitedHint(ServerPlayerEntity player, ServerWorld world) {
+        long now = world.getTime();
+        Long last = lastHintTickByPlayer.get(player.getUuid());
+        if (last != null && now - last < BOUNTY_HINT_COOLDOWN_TICKS) return;
+        lastHintTickByPlayer.put(player.getUuid(), now);
+        player.sendMessage(
+                net.minecraft.text.Text.translatable(
+                        "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered"
+                ).formatted(net.minecraft.util.Formatting.GRAY),
+                true);
     }
 }

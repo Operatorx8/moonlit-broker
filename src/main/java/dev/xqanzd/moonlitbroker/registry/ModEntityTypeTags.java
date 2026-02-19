@@ -36,4 +36,14 @@ public final class ModEntityTypeTags {
     public static final TagKey<EntityType<?>> BOUNTY_ELITE_TARGETS = TagKey.of(
             RegistryKeys.ENTITY_TYPE,
             Identifier.of(ModItems.MOD_ID, "bounty_elite_targets"));
+
+    /** data/xqanzd_moonlit_broker/tags/entity_type/bounty_rare_targets.json */
+    public static final TagKey<EntityType<?>> BOUNTY_RARE_TARGETS = TagKey.of(
+            RegistryKeys.ENTITY_TYPE,
+            Identifier.of(ModItems.MOD_ID, "bounty_rare_targets"));
+
+    /** data/xqanzd_moonlit_broker/tags/entity_type/bounty_neutral_targets.json */
+    public static final TagKey<EntityType<?>> BOUNTY_NEUTRAL_TARGETS = TagKey.of(
+            RegistryKeys.ENTITY_TYPE,
+            Identifier.of(ModItems.MOD_ID, "bounty_neutral_targets"));
 }

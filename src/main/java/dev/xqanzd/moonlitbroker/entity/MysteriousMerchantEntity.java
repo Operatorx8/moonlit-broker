@@ -3,6 +3,9 @@ package dev.xqanzd.moonlitbroker.entity;
 import dev.xqanzd.moonlitbroker.entity.ai.DrinkPotionGoal;
 import dev.xqanzd.moonlitbroker.entity.ai.EnhancedFleeGoal;
 import dev.xqanzd.moonlitbroker.entity.ai.SeekLightGoal;
+import net.minecraft.entity.ai.goal.Goal;
+import net.minecraft.entity.ai.goal.HoldInHandsGoal;
+import net.minecraft.entity.ai.goal.PrioritizedGoal;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import dev.xqanzd.moonlitbroker.armor.transitional.TransitionalArmorItems;
@@ -62,6 +65,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -966,8 +970,22 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         }
 
         ensureVariantIdentityIfNeeded();
-        grantFirstMeetGuideIfNeeded(serverPlayer);
-        reissueMarkIfNeeded(serverPlayer);
+        // MarkBound: 首次交互时绑定，并发送一次性 actionbar 提示
+        if (this.getEntityWorld() instanceof ServerWorld sw) {
+            boolean firstBind = MerchantUnlockState.bindMarkOnInteract(sw, serverPlayer, this.getUuid());
+            if (firstBind) {
+                serverPlayer.sendMessage(
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.mark.bound")
+                                .formatted(Formatting.GREEN),
+                        true);
+                LOGGER.info("[Bounty] MARK_BOUND player={} merchant={} reason=FIRST_INTERACT",
+                        serverPlayer.getName().getString(), this.getUuid().toString().substring(0, 8));
+            }
+        }
+        boolean justGrantedFirstMeet = grantFirstMeetGuideIfNeeded(serverPlayer);
+        if (!justGrantedFirstMeet) {
+            reissueMarkIfNeeded(serverPlayer);
+        }
         initSecretKatanaIdIfNeeded();
 
         OfferBuildAudit audit = rebuildOffersForPlayer(serverPlayer, OfferBuildSource.INTERACT_PREOPEN);
@@ -1024,42 +1042,87 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         return false;
     }
 
+    // markBountyEligible removed — replaced by MerchantUnlockState.bindMarkOnInteract()
+
     /**
-     * 首次见面赠送指南卷轴和商人印记
+     * 首次见面按缺失项发放指南卷轴和/或商人印记。
+     * <ul>
+     *   <li>缺 guide → 发 guide（需 1 空位）</li>
+     *   <li>缺首次 mark → 发 mark（需 1 空位）</li>
+     *   <li>两者都缺 → 需 2 空位</li>
+     * </ul>
+     * insertStack 成功才写对应进度标记，防止"进度走了但玩家没拿到"。
+     *
+     * @return true 如果首次赠送分支被触发（无论成功或背包满），调用方应跳过补发逻辑
      */
-    private void grantFirstMeetGuideIfNeeded(ServerPlayerEntity player) {
+    private boolean grantFirstMeetGuideIfNeeded(ServerPlayerEntity player) {
         if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
-            return;
+            return false;
         }
 
         MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
         MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
 
-        if (!progress.isFirstMeetGuideGiven()) {
-            // 准备物品
+        boolean needGuide = !progress.isFirstMeetGuideGiven();
+        boolean needMark  = !progress.isInitialMarkGranted();
+
+        if (!needGuide && !needMark) {
+            return false; // 首次赠送流程已全部完成
+        }
+
+        // 按实际缺失项计算所需空位
+        int required = (needGuide ? 1 : 0) + (needMark ? 1 : 0);
+        if (countFreeInventorySlots(player) < required) {
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
+                            .formatted(Formatting.RED),
+                    true);
+            LOGGER.info("[Gift] FIRST_MEET_NO_SPACE player={} need={} freeSlots={}",
+                    player.getName().getString(), required, countFreeInventorySlots(player));
+            return true; // 跳过补发，避免白白消耗补发机会
+        }
+
+        boolean changed = false;
+
+        if (needGuide) {
             ItemStack guideScroll = new ItemStack(ModItems.GUIDE_SCROLL, 1);
             dev.xqanzd.moonlitbroker.trade.item.GuideScrollItem.ensureGuideContent(guideScroll);
 
-            ItemStack merchantMark = new ItemStack(ModItems.MERCHANT_MARK, 1);
-            dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(merchantMark, player);
-
-            // 尝试交付——两件都成功才算完成
-            boolean guideOk = giveOrDrop(player, guideScroll, "FIRST_MEET_GUIDE");
-            boolean markOk  = giveOrDrop(player, merchantMark, "FIRST_MEET_MARK");
-
-            if (!guideOk || !markOk) {
-                // 交付失败：不设进度标记，下次交互重试
+            boolean ok = player.getInventory().insertStack(guideScroll) && guideScroll.isEmpty();
+            if (ok) {
+                progress.setFirstMeetGuideGiven(true);
+                changed = true;
+            } else {
                 player.sendMessage(
                         Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
                                 .formatted(Formatting.RED),
                         true);
-                LOGGER.error("[Gift] FIRST_MEET_DELIVERY_FAILED player={} guideOk={} markOk={}",
-                        player.getName().getString(), guideOk, markOk);
-                return;
+                LOGGER.error("[Gift] FIRST_MEET_GUIDE_INSERT_FAILED player={}", player.getName().getString());
+                if (changed) state.markDirty();
+                return true;
             }
+        }
 
-            // 全部交付成功，标记进度
-            progress.setFirstMeetGuideGiven(true);
+        if (needMark) {
+            ItemStack merchantMark = new ItemStack(ModItems.MERCHANT_MARK, 1);
+            dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(merchantMark, player);
+
+            boolean ok = player.getInventory().insertStack(merchantMark) && merchantMark.isEmpty();
+            if (ok) {
+                progress.setInitialMarkGranted(true);
+                changed = true;
+            } else {
+                player.sendMessage(
+                        Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
+                                .formatted(Formatting.RED),
+                        true);
+                LOGGER.error("[Gift] FIRST_MEET_MARK_INSERT_FAILED player={}", player.getName().getString());
+                if (changed) state.markDirty();
+                return true;
+            }
+        }
+
+        if (changed) {
             state.markDirty();
 
             if (serverWorld.getRegistryKey() == World.OVERWORLD) {
@@ -1072,13 +1135,17 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                             .formatted(Formatting.GOLD),
                     false);
 
-            LOGGER.info("[MoonTrade] FIRST_MEET_GUIDE player={}", player.getName().getString());
+            LOGGER.info("[MoonTrade] FIRST_MEET_GRANT player={} guide={} mark={}",
+                    player.getName().getString(), needGuide, needMark);
         }
+
+        return true;
     }
 
     /**
      * Mark 补发：已解锁玩家背包无 Mark 时自动补发 1 个绑定印记（仅限一次）。
      * 补发后 Progress.reissuedMark 置 true；后续丢失需通过交易重新获取。
+     * 背包满时不补发也不消耗补发机会，提示清理后重试。
      */
     private void reissueMarkIfNeeded(ServerPlayerEntity player) {
         if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) return;
@@ -1097,15 +1164,25 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
 
-        ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
-        dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(mark, player);
-
-        if (!giveOrDrop(player, mark, "REISSUE_MARK")) {
+        // 背包至少需要 1 个空位，否则提示清理后重试（不消耗补发机会）
+        if (countFreeInventorySlots(player) < 1) {
             player.sendMessage(
                     Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
                             .formatted(Formatting.RED),
                     true);
-            LOGGER.error("[Gift] REISSUE_DELIVERY_FAILED player={}", player.getName().getString());
+            return;
+        }
+
+        ItemStack mark = new ItemStack(ModItems.MERCHANT_MARK, 1);
+        dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem.bindToPlayer(mark, player);
+
+        boolean ok = player.getInventory().insertStack(mark) && mark.isEmpty();
+        if (!ok) {
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.gift.delivery_failed")
+                            .formatted(Formatting.RED),
+                    true);
+            LOGGER.error("[Gift] REISSUE_INSERT_FAILED player={}", player.getName().getString());
             return;
         }
 
@@ -1131,6 +1208,17 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             if (stack.isOf(ModItems.MERCHANT_MARK)) return true;
         }
         return false;
+    }
+
+    /**
+     * 统计玩家主背包（36 格）中的空槽位数量。
+     */
+    private static int countFreeInventorySlots(PlayerEntity player) {
+        int free = 0;
+        for (ItemStack stack : player.getInventory().main) {
+            if (stack.isEmpty()) free++;
+        }
+        return free;
     }
 
     /**
@@ -1245,6 +1333,30 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return ActionResult.CONSUME;
         }
 
+        // 1.5) 失效契约回收：目标已不在 bounty_targets 或 registry 无法解析
+        if (!BountyContractItem.isTargetStillValid(contractStack)) {
+            String expiredTarget = BountyContractItem.getTarget(contractStack);
+            String reason = BountyContractItem.validateTarget(contractStack);
+            // 消耗契约
+            contractStack.decrement(1);
+            // 返还少量银票补偿
+            int refund = TradeConfig.BOUNTY_EXPIRED_REFUND_SILVER;
+            if (refund > 0) {
+                ItemStack silver = new ItemStack(ModItems.SILVER_NOTE, refund);
+                if (!serverPlayer.giveItemStack(silver)) {
+                    serverPlayer.dropItem(silver, false);
+                }
+            }
+            serverPlayer.sendMessage(
+                    Text.translatable("msg.xqanzd_moonlit_broker.bounty.contract_expired_refunded",
+                            expiredTarget, refund, new ItemStack(ModItems.SILVER_NOTE).getName())
+                            .formatted(Formatting.YELLOW),
+                    false);
+            LOGGER.info("[MoonTrade] action=BOUNTY_SUBMIT_EXPIRED_RECYCLE side=S player={} target={} reason={} refund={}",
+                    serverPlayer.getName().getString(), expiredTarget, reason, refund);
+            return ActionResult.CONSUME;
+        }
+
         // 2) 严格完成判定：boolean + progress >= required
         if (!BountyContractItem.isCompletedStrict(contractStack)) {
             int progress = BountyContractItem.getProgress(contractStack);
@@ -1310,16 +1422,20 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     protected void initGoals() {
         super.initGoals();
 
-        // 优先级说明：数字越小优先级越高
-        // 原版 WanderingTrader 的 goals:
-        // - 0: SwimGoal
-        // - 1: EscapeDangerGoal (panic)
-        // - 1: LookAtCustomerGoal
-        // - 2: WanderTowardTargetGoal
-        // - 4: MoveTowardsRestrictionGoal
-        // - 8: WanderAroundFarGoal
-        // - 9: StopAndLookAtEntityGoal
-        // - 10: LookAtEntityGoal
+        // 移除原版 WanderingTrader 的 HoldInHandsGoal（隐身药水 + 牛奶）
+        // 按类型精确匹配，不按 priority 大扫除，避免误删未来新增的 Goal。
+        List<Goal> drinkGoals = new ArrayList<>();
+        for (PrioritizedGoal pg : this.goalSelector.getGoals()) {
+            if (pg.getGoal() instanceof HoldInHandsGoal) {
+                drinkGoals.add(pg.getGoal());
+            }
+        }
+        for (Goal g : drinkGoals) {
+            this.goalSelector.remove(g);
+        }
+        if (DEBUG_AI && !drinkGoals.isEmpty()) {
+            LOGGER.debug("[MysteriousMerchant] Removed {} vanilla HoldInHandsGoal instances", drinkGoals.size());
+        }
 
         // Phase 3.1: 强化逃跑 - 优先级 1（与 panic 同级，但会更积极）
         this.goalSelector.add(1, new EnhancedFleeGoal(this, BASE_MOVEMENT_SPEED));

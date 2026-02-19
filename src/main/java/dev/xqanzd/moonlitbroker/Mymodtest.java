@@ -15,6 +15,7 @@ import dev.xqanzd.moonlitbroker.registry.ModItemGroups;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.command.BountyContractCommand;
 import dev.xqanzd.moonlitbroker.trade.command.BountySubmitCommand;
+import dev.xqanzd.moonlitbroker.trade.command.MoonlitCommands;
 import dev.xqanzd.moonlitbroker.trade.loot.BountyDropHandler;
 import dev.xqanzd.moonlitbroker.trade.loot.BountyProgressHandler;
 import dev.xqanzd.moonlitbroker.trade.loot.LootTableInjector;
@@ -32,8 +33,12 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Mymodtest implements ModInitializer {
     public static final String MOD_ID = "xqanzd_moonlit_broker";
@@ -95,6 +100,9 @@ public class Mymodtest implements ModInitializer {
         // Trade System: 注册悬赏契约掉落处理器
         BountyDropHandler.register();
 
+        // Trade System: 注册 /moonlit 命令
+        MoonlitCommands.register();
+
         // 护栏 A: 服务器启动后验证掉落相关 tag 非空（datapack 已加载）
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             verifyTagNotEmpty(ModEntityTypeTags.SILVERNOTE_DROPPERS, "silvernote_droppers");
@@ -102,6 +110,11 @@ public class Mymodtest implements ModInitializer {
             verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_TARGETS, "bounty_targets");
             verifyTagNotEmpty(ModEntityTypeTags.SILVERNOTE_ELITE_DROPPERS, "silvernote_elite_droppers");
             verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_ELITE_TARGETS, "bounty_elite_targets");
+            verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_RARE_TARGETS, "bounty_rare_targets");
+            verifyTagNotEmpty(ModEntityTypeTags.BOUNTY_NEUTRAL_TARGETS, "bounty_neutral_targets");
+
+            // 护栏 B: elite 子集校验 — bounty_elite_targets 必须是 bounty_targets 的子集
+            validateEliteSubset();
         });
 
         // Phase 4: 注册世界 tick 事件，用于自然生成
@@ -130,6 +143,57 @@ public class Mymodtest implements ModInitializer {
                     name, MOD_ID, name);
         } else {
             LOGGER.info("[MoonTrade] TAG_OK tag={}", name);
+        }
+    }
+
+    /**
+     * 护栏 B: 校验 bounty_elite_targets 必须是 bounty_targets 的子集。
+     * 若存在孤立条目，打出 WARN 日志指引服主修数据包。不会崩服。
+     */
+    private static void validateEliteSubset() {
+        Set<EntityType<?>> targets = new HashSet<>();
+        Registries.ENTITY_TYPE.streamTagsAndEntries()
+                .filter(pair -> pair.getFirst().equals(ModEntityTypeTags.BOUNTY_TARGETS))
+                .flatMap(pair -> pair.getSecond().stream())
+                .forEach(entry -> targets.add(entry.value()));
+
+        List<String> orphans = new ArrayList<>();
+        Registries.ENTITY_TYPE.streamTagsAndEntries()
+                .filter(pair -> pair.getFirst().equals(ModEntityTypeTags.BOUNTY_ELITE_TARGETS))
+                .flatMap(pair -> pair.getSecond().stream())
+                .forEach(entry -> {
+                    if (!targets.contains(entry.value())) {
+                        orphans.add(Registries.ENTITY_TYPE.getId(entry.value()).toString());
+                    }
+                });
+
+        if (!orphans.isEmpty()) {
+            LOGGER.warn("[MoonTrade] ELITE_SUBSET_VIOLATION — bounty_elite_targets contains {} entries NOT in bounty_targets: {}",
+                    orphans.size(), orphans);
+            LOGGER.warn("[MoonTrade] Fix: add these to data/{}/tags/entity_type/bounty_targets.json or remove from bounty_elite_targets.json",
+                    MOD_ID);
+        } else {
+            LOGGER.info("[MoonTrade] ELITE_SUBSET_OK — all bounty_elite_targets are in bounty_targets");
+        }
+
+        // Also validate bounty_rare_targets subset
+        List<String> rareOrphans = new ArrayList<>();
+        Registries.ENTITY_TYPE.streamTagsAndEntries()
+                .filter(pair -> pair.getFirst().equals(ModEntityTypeTags.BOUNTY_RARE_TARGETS))
+                .flatMap(pair -> pair.getSecond().stream())
+                .forEach(entry -> {
+                    if (!targets.contains(entry.value())) {
+                        rareOrphans.add(Registries.ENTITY_TYPE.getId(entry.value()).toString());
+                    }
+                });
+
+        if (!rareOrphans.isEmpty()) {
+            LOGGER.warn("[MoonTrade] RARE_SUBSET_VIOLATION — bounty_rare_targets contains {} entries NOT in bounty_targets: {}",
+                    rareOrphans.size(), rareOrphans);
+            LOGGER.warn("[MoonTrade] Fix: add these to data/{}/tags/entity_type/bounty_targets.json or remove from bounty_rare_targets.json",
+                    MOD_ID);
+        } else {
+            LOGGER.info("[MoonTrade] RARE_SUBSET_OK — all bounty_rare_targets are in bounty_targets");
         }
     }
 }

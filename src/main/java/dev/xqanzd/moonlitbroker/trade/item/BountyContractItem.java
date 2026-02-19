@@ -1,6 +1,8 @@
 package dev.xqanzd.moonlitbroker.trade.item;
 
+import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
+import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.NbtComponent;
 import net.minecraft.entity.EntityType;
@@ -12,7 +14,7 @@ import net.minecraft.util.Identifier;
 
 /**
  * 悬赏契约物品
- * NBT: BountyTarget, BountyRequired, BountyProgress, BountyCompleted
+ * NBT: BountyTarget, BountyRequired, BountyProgress, BountyCompleted, BountyTier, BountySchema
  */
 public class BountyContractItem extends Item {
 
@@ -20,6 +22,12 @@ public class BountyContractItem extends Item {
     private static final String NBT_REQUIRED = "BountyRequired";
     private static final String NBT_PROGRESS = "BountyProgress";
     private static final String NBT_COMPLETED = "BountyCompleted";
+    public static final String NBT_TIER = "BountyTier";
+    public static final String NBT_SCHEMA = "BountySchema";
+
+    public static final String TIER_COMMON = "common";
+    public static final String TIER_ELITE = "elite";
+    public static final String TIER_RARE = "rare";
 
     public BountyContractItem(Settings settings) {
         super(settings);
@@ -47,6 +55,16 @@ public class BountyContractItem extends Item {
         return nbt != null && nbt.contains(NBT_COMPLETED) && nbt.getBoolean(NBT_COMPLETED);
     }
 
+    public static String getTier(ItemStack stack) {
+        NbtCompound nbt = getNbt(stack);
+        return nbt != null && nbt.contains(NBT_TIER) ? nbt.getString(NBT_TIER) : "";
+    }
+
+    public static int getSchema(ItemStack stack) {
+        NbtCompound nbt = getNbt(stack);
+        return nbt != null && nbt.contains(NBT_SCHEMA) ? nbt.getInt(NBT_SCHEMA) : 0;
+    }
+
     /**
      * 严格完成判定：NBT boolean + progress >= required + required > 0
      */
@@ -61,7 +79,7 @@ public class BountyContractItem extends Item {
 
     /**
      * 增加进度，若达到 required 则标记 completed
-     * 
+     *
      * @return true if newly completed
      */
     public static boolean incrementProgress(ItemStack stack) {
@@ -82,15 +100,77 @@ public class BountyContractItem extends Item {
     }
 
     /**
-     * 初始化一张新契约
+     * 初始化一张新契约（幂等：若已有核心字段则不覆盖）
      */
     public static void initialize(ItemStack stack, String targetEntityId, int required) {
-        NbtCompound nbt = new NbtCompound();
+        NbtCompound nbt = getOrCreateNbt(stack);
+        // 幂等：已有 target/required 等核心字段时不重新 roll
+        if (nbt.contains(NBT_TARGET) && nbt.contains(NBT_REQUIRED)) {
+            stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+            return;
+        }
         nbt.putString(NBT_TARGET, targetEntityId);
         nbt.putInt(NBT_REQUIRED, required);
         nbt.putInt(NBT_PROGRESS, 0);
         nbt.putBoolean(NBT_COMPLETED, false);
+        // Tier/Schema: 写入默认值（调用方可覆盖）
+        if (!nbt.contains(NBT_TIER)) {
+            nbt.putString(NBT_TIER, TIER_COMMON);
+        }
+        if (!nbt.contains(NBT_SCHEMA)) {
+            nbt.putInt(NBT_SCHEMA, TradeConfig.BOUNTY_SCHEMA_VERSION);
+        }
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+    }
+
+    /**
+     * 完整初始化（含 tier + schema），供 BountyDropHandler 和命令使用。
+     */
+    public static void initializeWithTier(ItemStack stack, String targetEntityId, int required, String tier) {
+        NbtCompound nbt = getOrCreateNbt(stack);
+        if (nbt.contains(NBT_TARGET) && nbt.contains(NBT_REQUIRED)) {
+            stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+            return;
+        }
+        nbt.putString(NBT_TARGET, targetEntityId);
+        nbt.putInt(NBT_REQUIRED, required);
+        nbt.putInt(NBT_PROGRESS, 0);
+        nbt.putBoolean(NBT_COMPLETED, false);
+        nbt.putString(NBT_TIER, tier);
+        nbt.putInt(NBT_SCHEMA, TradeConfig.BOUNTY_SCHEMA_VERSION);
+        stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+    }
+
+    /**
+     * 检查契约目标是否仍然有效（在 registry 中存在且仍在 bounty_targets tag 内）。
+     * @return null 表示有效，非 null 字符串描述失效原因
+     */
+    public static String validateTarget(ItemStack stack) {
+        String target = getTarget(stack);
+        if (target.isEmpty()) {
+            return "empty_target";
+        }
+        Identifier targetId = Identifier.tryParse(target);
+        if (targetId == null) {
+            return "invalid_identifier";
+        }
+        // 检查 registry 中是否存在（默认 entity type = pig，如果不存在也会返回 pig）
+        EntityType<?> entityType = Registries.ENTITY_TYPE.get(targetId);
+        Identifier resolvedId = Registries.ENTITY_TYPE.getId(entityType);
+        if (!resolvedId.equals(targetId)) {
+            return "unresolved_entity_type";
+        }
+        if (!entityType.isIn(ModEntityTypeTags.BOUNTY_TARGETS)) {
+            return "not_in_bounty_targets";
+        }
+        return null; // valid
+    }
+
+    /**
+     * 快捷方法：目标是否仍然有效
+     */
+    public static boolean isTargetStillValid(ItemStack stack) {
+        return validateTarget(stack) == null;
     }
 
     /**

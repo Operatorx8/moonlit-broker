@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,10 +44,19 @@ public class MerchantUnlockState extends PersistentState {
             null
     );
 
-    public static MerchantUnlockState getServerState(ServerWorld world) {
+    private static ServerWorld requireOverworld(ServerWorld world) {
         MinecraftServer server = world.getServer();
-        ServerWorld overworld = server.getWorld(World.OVERWORLD);
-        assert overworld != null;
+        return Objects.requireNonNull(
+                server.getWorld(World.OVERWORLD),
+                "Overworld is null (server world not available)");
+    }
+
+    private static long getOverworldTick(ServerWorld world) {
+        return requireOverworld(world).getTime();
+    }
+
+    public static MerchantUnlockState getServerState(ServerWorld world) {
+        ServerWorld overworld = requireOverworld(world);
         return overworld.getPersistentStateManager().getOrCreate(TYPE, DATA_NAME);
     }
 
@@ -58,6 +68,79 @@ public class MerchantUnlockState extends PersistentState {
         MerchantUnlockState state = getServerState(world);
         Progress progress = state.progressByPlayer.get(playerUuid);
         return progress != null && progress.isFirstMeetGuideGiven();
+    }
+
+    /**
+     * 判断玩家是否有资格触发悬赏掉落。
+     * 只要曾与商人发生有效交互（interactMob 到达 gate），立即 true，不依赖背包物品。
+     */
+    public static boolean isBountyEligible(ServerWorld world, UUID playerUuid) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.progressByPlayer.get(playerUuid);
+        return progress != null && progress.isBountyEligible();
+    }
+
+    /**
+     * 首次交互商人时绑定 MarkBound，同时设置 bountyEligible=true。
+     * @return true 如果是首次绑定（调用方可据此发送一次性提示）
+     */
+    public static boolean bindMarkOnInteract(ServerWorld world, net.minecraft.server.network.ServerPlayerEntity player, UUID merchantUuid) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.getOrCreateProgress(player.getUuid());
+        if (progress.isMarkBound()) {
+            // 已绑定，但确保 bountyEligible 一致
+            if (!progress.isBountyEligible()) {
+                progress.setBountyEligible(true);
+                state.markDirty();
+            }
+            return false;
+        }
+        progress.setMarkBoundVersion(1);
+        progress.setMarkBoundTick(getOverworldTick(world));
+        progress.setMarkBoundMerchantUuid(merchantUuid);
+        progress.setBountyEligible(true);
+        state.markDirty();
+        return true;
+    }
+
+    /**
+     * 检查该玩家是否允许掉落契约（冷却 N tick）。
+     */
+    public static boolean canDropContract(ServerWorld world, UUID playerUuid, int cooldownTicks) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.progressByPlayer.get(playerUuid);
+        if (progress == null) return false;
+        long now = getOverworldTick(world);
+        return now - progress.getLastContractDropTick() >= cooldownTicks;
+    }
+
+    /**
+     * 掉落冷却 gate（spec 命名）：返回 true 表示冷却中，不允许掉落。
+     */
+    public static boolean isDropCooldownActive(ServerWorld world, UUID playerUuid, long cooldownTicks) {
+        return !canDropContract(world, playerUuid, (int) cooldownTicks);
+    }
+
+    /**
+     * 更新上次契约掉落 tick 并标脏。
+     */
+    public static void updateLastContractDropTick(ServerWorld world, UUID playerUuid) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.progressByPlayer.get(playerUuid);
+        if (progress == null) return;
+        progress.setLastContractDropTick(getOverworldTick(world));
+        state.markDirty();
+    }
+
+    /**
+     * 记录契约掉落 tick（spec 命名）。
+     */
+    public static void recordContractDrop(ServerWorld world, UUID playerUuid) {
+        MerchantUnlockState state = getServerState(world);
+        Progress progress = state.progressByPlayer.get(playerUuid);
+        if (progress == null) return;
+        progress.setLastContractDropTick(getOverworldTick(world));
+        state.markDirty();
     }
 
     public Progress getOrCreateProgress(UUID playerUuid) {
@@ -155,6 +238,18 @@ public class MerchantUnlockState extends PersistentState {
         private boolean hasEverReceivedBountyCoin = false;
         /** 是否已自动补发过 Mark（一次性，丢失后只救一次） */
         private boolean reissuedMark = false;
+        /** 是否已有资格触发悬赏掉落（只要与商人交互过即 true，不依赖背包） */
+        private boolean bountyEligible = false;
+        /** 首次赠送的 Mark 是否已发放（独立于 guide，防止玩家已自购 mark 时重复发放） */
+        private boolean initialMarkGranted = false;
+        /** MarkBound 版本号（首次绑定时置 1） */
+        private int markBoundVersion = 0;
+        /** MarkBound 时刻（ServerWorld#getTime），0 表示未绑定 */
+        private long markBoundTick = 0L;
+        /** 绑定时所交互的商人 UUID（可空） */
+        private UUID markBoundMerchantUuid = null;
+        /** 上次契约掉落 tick（用于同 tick 并发掉落冷却） */
+        private long lastContractDropTick = 0L;
 
         // ========== P0-A FIX: per-player sigil offers hash (跨玩家隔离) ==========
         /** Per-(player,merchant) 上次 sigil offers hash */
@@ -633,6 +728,70 @@ public class MerchantUnlockState extends PersistentState {
             this.reissuedMark = reissuedMark;
         }
 
+        public boolean isBountyEligible() {
+            return bountyEligible;
+        }
+
+        public void setBountyEligible(boolean bountyEligible) {
+            this.bountyEligible = bountyEligible;
+        }
+
+        public boolean isInitialMarkGranted() {
+            return initialMarkGranted;
+        }
+
+        public void setInitialMarkGranted(boolean initialMarkGranted) {
+            this.initialMarkGranted = initialMarkGranted;
+        }
+
+        public int getMarkBoundVersion() {
+            return markBoundVersion;
+        }
+
+        public void setMarkBoundVersion(int markBoundVersion) {
+            this.markBoundVersion = Math.max(0, markBoundVersion);
+        }
+
+        public long getMarkBoundTick() {
+            return markBoundTick;
+        }
+
+        public void setMarkBoundTick(long markBoundTick) {
+            this.markBoundTick = Math.max(0L, markBoundTick);
+        }
+
+        public UUID getMarkBoundMerchantUuid() {
+            return markBoundMerchantUuid;
+        }
+
+        public void setMarkBoundMerchantUuid(UUID markBoundMerchantUuid) {
+            this.markBoundMerchantUuid = markBoundMerchantUuid;
+        }
+
+        public long getLastContractDropTick() {
+            return lastContractDropTick;
+        }
+
+        public void setLastContractDropTick(long lastContractDropTick) {
+            this.lastContractDropTick = Math.max(0L, lastContractDropTick);
+        }
+
+        public boolean isMarkBound() {
+            return markBoundVersion > 0;
+        }
+
+        /**
+         * 重置 MarkBound 相关字段（管理员 reset 用）。
+         * 同时将 bountyEligible 设为 false，要求玩家重新交互商人。
+         */
+        public void resetMarkBound() {
+            this.markBoundVersion = 0;
+            this.markBoundTick = 0L;
+            this.markBoundMerchantUuid = null;
+            this.bountyEligible = false;
+            this.lastContractDropTick = 0L;
+        }
+
         public long getSilverWindowStart() {
             return silverWindowStart;
         }
@@ -795,6 +954,14 @@ public class MerchantUnlockState extends PersistentState {
             nbt.putInt("Reputation", this.reputation);
             nbt.putBoolean("FirstMeetGuideGiven", this.firstMeetGuideGiven);
             nbt.putBoolean("ReissuedMark", this.reissuedMark);
+            nbt.putBoolean("BountyEligible", this.bountyEligible);
+            nbt.putBoolean("InitialMarkGranted", this.initialMarkGranted);
+            nbt.putInt("MarkBoundVer", this.markBoundVersion);
+            nbt.putLong("MarkBoundTick", this.markBoundTick);
+            if (this.markBoundMerchantUuid != null) {
+                nbt.putString("MarkBoundMerchant", this.markBoundMerchantUuid.toString());
+            }
+            nbt.putLong("LastContractDropTick", this.lastContractDropTick);
             nbt.putLong("SilverWindowStart", this.silverWindowStart);
             nbt.putInt("SilverDropCount", this.silverDropCount);
             nbt.putLong(NBT_LAST_SUMMON_TICK, this.lastSummonTick);
@@ -929,6 +1096,45 @@ public class MerchantUnlockState extends PersistentState {
             }
             if (nbt.contains("ReissuedMark")) {
                 progress.reissuedMark = nbt.getBoolean("ReissuedMark");
+            }
+            if (nbt.contains("BountyEligible")) {
+                progress.bountyEligible = nbt.getBoolean("BountyEligible");
+            }
+            if (nbt.contains("InitialMarkGranted")) {
+                progress.initialMarkGranted = nbt.getBoolean("InitialMarkGranted");
+            }
+            if (nbt.contains("MarkBoundVer")) {
+                progress.markBoundVersion = Math.max(0, nbt.getInt("MarkBoundVer"));
+            }
+            if (nbt.contains("MarkBoundTick")) {
+                progress.markBoundTick = Math.max(0L, nbt.getLong("MarkBoundTick"));
+            }
+            if (nbt.contains("MarkBoundMerchant")) {
+                try {
+                    progress.markBoundMerchantUuid = UUID.fromString(nbt.getString("MarkBoundMerchant"));
+                } catch (IllegalArgumentException e) {
+                    LOGGER.warn("[MerchantUnlockState] Invalid MarkBoundMerchant UUID: {}", nbt.getString("MarkBoundMerchant"));
+                }
+            }
+            if (nbt.contains("LastContractDropTick")) {
+                progress.lastContractDropTick = Math.max(0L, nbt.getLong("LastContractDropTick"));
+            }
+            // Legacy compat: 旧存档没有 BountyEligible 字段，但有 FirstMeetGuideGiven=true
+            // 说明已与商人交互过，应自动升级
+            if (!progress.bountyEligible && progress.firstMeetGuideGiven) {
+                progress.bountyEligible = true;
+            }
+            // Legacy compat: 旧存档没有 InitialMarkGranted 字段，但有 FirstMeetGuideGiven=true
+            // 说明首次赠送流程曾完成，mark 也已发过
+            if (!progress.initialMarkGranted && progress.firstMeetGuideGiven) {
+                progress.initialMarkGranted = true;
+            }
+            // Legacy compat: 旧存档已有 bountyEligible 或 initialMarkGranted 但没有 MarkBound
+            // 自动升级为 markBound，保证老玩家掉落不中断
+            if (progress.markBoundVersion == 0
+                    && (progress.bountyEligible || progress.initialMarkGranted || progress.firstMeetGuideGiven)) {
+                progress.markBoundVersion = 1;
+                // markBoundTick 无法回溯，留 0 标识 legacy 迁移
             }
             if (nbt.contains("SilverWindowStart")) {
                 progress.silverWindowStart = nbt.getLong("SilverWindowStart");

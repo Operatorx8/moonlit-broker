@@ -114,6 +114,16 @@ public final class TradeConfig {
     /** 是否启用 elite 掉落加成 */
     public static final boolean ENABLE_ELITE_DROP_BONUS = true;
 
+    // ===== Bounty contract drop cooldown (prevents multi-drop on same tick) =====
+    /** 契约掉落 per-player 冷却 (20 ticks = 1 秒) */
+    public static final int BOUNTY_DROP_COOLDOWN_TICKS = 20;
+    /** 失效契约回收返还 Silver Note 数量 */
+    public static final int BOUNTY_EXPIRED_REFUND_SILVER = 1;
+    /** 契约 NBT schema 版本号（未来迁移用） */
+    public static final int BOUNTY_SCHEMA_VERSION = 1;
+    /** DEBUG only: 强制契约 100% 掉落（需同时 MASTER_DEBUG + TRADE_DEBUG） */
+    public static final boolean FORCE_BOUNTY_DROP = false;
+
     // ===== Bounty reward scaling (coin chance scales with required kills) =====
     /** 总开关：是否启用悬赏奖励缩放 */
     public static final boolean BOUNTY_ENABLE_REWARD_SCALING = true;

@@ -10,9 +10,12 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,7 +38,7 @@ public final class KatanaContractUtil {
             "oblivion",
             "nmap");
     private static final Map<String, Long> LAST_HINT_TICK_BY_KEY = new ConcurrentHashMap<>();
-    private static final long HINT_COOLDOWN_TICKS = TradeConfig.DORMANT_HINT_COOLDOWN_TICKS;
+    private static final long HINT_COOLDOWN_TICKS = 20L * 30L; // 30s
     private static final int HINT_CACHE_MAX_SIZE = 2048;
 
     // ========== ItemStack readers ==========
@@ -178,7 +181,10 @@ public final class KatanaContractUtil {
         if (!TradeConfig.DORMANT_SHOW_ACTIONBAR_HINT) {
             return;
         }
-        long now = world.getTime();
+        ServerWorld overworld = Objects.requireNonNull(
+                world.getServer().getWorld(World.OVERWORLD),
+                "Overworld is null (server world not available)");
+        long now = overworld.getTime();
         String key = player.getUuid() + ":" + type + ":" + reason;
         Long last = LAST_HINT_TICK_BY_KEY.get(key);
         if (last != null && now - last < HINT_COOLDOWN_TICKS) {
@@ -188,7 +194,7 @@ public final class KatanaContractUtil {
             LAST_HINT_TICK_BY_KEY.clear();
         }
         LAST_HINT_TICK_BY_KEY.put(key, now);
-        player.sendMessage(Text.translatable(messageKey), true);
+        player.sendMessage(Text.translatable(messageKey).formatted(Formatting.GRAY), true);
     }
 
     // ========== Internal ==========
