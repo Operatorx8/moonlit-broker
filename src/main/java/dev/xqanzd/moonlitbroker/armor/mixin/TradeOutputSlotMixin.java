@@ -28,12 +28,18 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.UUID;
+
 @Mixin(TradeOutputSlot.class)
 public class TradeOutputSlotMixin {
     private static final Logger LOGGER = LoggerFactory.getLogger("TradeOutputSlotMixin");
     /** Rate-limit deny hints: key = playerUUID:katanaId, value = last hint tick */
     private static final java.util.Map<String, Long> DENY_HINT_COOLDOWN = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long DENY_HINT_INTERVAL_TICKS = 100; // 5 seconds
+    /** Rate-limit commit-miss error logs: key = playerUUID:katanaId, value = last log tick. */
+    private static final java.util.Map<String, Long> COMMIT_MISS_LOG_COOLDOWN = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long COMMIT_MISS_LOG_INTERVAL_TICKS = 20L * 60L * 5L; // 5 minutes
+    private static final int COMMIT_MISS_LOG_CACHE_MAX_SIZE = 2048;
 
     @Shadow
     @Final
@@ -147,11 +153,18 @@ public class TradeOutputSlotMixin {
             // Verify the delivered item actually matches the pending katanaId
             String resultKatanaId = KatanaIdUtil.extractCanonicalKatanaId(result);
             if (!xqanzd_pendingKatanaId.equals(resultKatanaId)) {
-                // Result is a different item than what we pended — rollback, don't commit wrong type
-                state.clearPending(serverPlayer.getUuid());
+                // Result differs from pending id. Only clear matching pending and still
+                // record ownership for the actually delivered katana as fallback.
+                boolean clearedMatchingPending = state.clearPendingIfMatches(serverPlayer.getUuid(), xqanzd_pendingKatanaId);
+                boolean fallbackOwned = false;
+                if (KatanaIdUtil.isSecretKatana(resultKatanaId)) {
+                    fallbackOwned = state.addOwned(serverPlayer.getUuid(), resultKatanaId);
+                }
                 LOGGER.warn("[MoonTrade] MM_KATANA_RESULT_MISMATCH player={} pendingId={} resultId={} resultItem={} merchant={}",
                         serverPlayer.getUuid(), xqanzd_pendingKatanaId, resultKatanaId,
                         Registries.ITEM.getId(result.getItem()), merchantTag(this.merchant));
+                LOGGER.warn("[MoonTrade] MM_KATANA_RESULT_MISMATCH_FALLBACK player={} clearedMatchingPending={} fallbackOwned={}",
+                        serverPlayer.getUuid(), clearedMatchingPending, fallbackOwned);
             } else {
                 // Result matches pending — commit ownership
                 boolean committed = state.commitPending(serverPlayer.getUuid(), xqanzd_pendingKatanaId);
@@ -159,12 +172,17 @@ public class TradeOutputSlotMixin {
                     LOGGER.info("[MoonTrade] MM_KATANA_COMMIT player={} katanaId={} merchant={}",
                             serverPlayer.getUuid(), xqanzd_pendingKatanaId, merchantTag(this.merchant));
                 } else {
+                    boolean fallbackOwned = KatanaIdUtil.isSecretKatana(resultKatanaId)
+                            && state.addOwned(serverPlayer.getUuid(), resultKatanaId);
                     // P1-1: Assertion — take succeeded with matching katana but commitPending returned false.
                     // Pending was TTL-expired, already committed, or mismatched internally.
-                    LOGGER.error("[MoonTrade] MM_KATANA_COMMIT_MISS player={} katanaId={} resultItem={} merchant={} — " +
-                                    "item delivered but pending commit failed; ownership may not be recorded!",
-                            serverPlayer.getUuid(), xqanzd_pendingKatanaId,
-                            Registries.ITEM.getId(result.getItem()), merchantTag(this.merchant));
+                    long now = KatanaOwnershipState.getOverworldTick(serverWorld);
+                    if (shouldLogCommitMiss(serverPlayer.getUuid(), resultKatanaId, now)) {
+                        LOGGER.error("[MoonTrade] MM_KATANA_COMMIT_MISS player={} katanaId={} resultItem={} merchant={} fallbackOwned={} — " +
+                                        "item delivered but pending commit failed; ownership fallback applied.",
+                                serverPlayer.getUuid(), resultKatanaId,
+                                Registries.ITEM.getId(result.getItem()), merchantTag(this.merchant), fallbackOwned);
+                    }
                 }
             }
         } else {
@@ -233,12 +251,40 @@ public class TradeOutputSlotMixin {
         }
 
         KatanaOwnershipState state = KatanaOwnershipState.getServerState(serverWorld);
+        UUID playerUuid = player.getUuid();
         boolean added = state.addOwned(player.getUuid(), katanaId);
         if (added) {
             TradeOffer offer = this.merchantInventory.getTradeOffer();
             LOGGER.info("[MoonTrade] MM_KATANA_OWNED_ADD player={} katanaId={} merchant={} offerIndex={} takenItem={}",
                     player.getUuid(), katanaId, merchantTag(this.merchant), resolveOfferIndex(offer),
                     Registries.ITEM.getId(taken.getItem()));
+        }
+
+        // Legacy migration + reclaim hardening:
+        // ensure delivered stack has instanceId and always move active pointer to delivered instance.
+        UUID instanceId = KatanaContractUtil.getInstanceId(taken);
+        if (instanceId == null) {
+            instanceId = UUID.randomUUID();
+            KatanaContractUtil.writeKatanaContract(taken, playerUuid, katanaId, instanceId);
+            LOGGER.info("[MoonTrade] CONTRACT_STAMP_ON_TAKE player={} katanaId={} instanceId={} merchant={}",
+                    playerUuid, katanaId, instanceId, merchantTag(this.merchant));
+        }
+        UUID previousActive = state.getActiveInstanceId(playerUuid, katanaId);
+        if (!instanceId.equals(previousActive)) {
+            state.setActiveInstanceId(playerUuid, katanaId, instanceId);
+            LOGGER.info("[MoonTrade] CONTRACT_ACTIVATE_ON_TAKE player={} katanaId={} previousActive={} newActive={} merchant={}",
+                    playerUuid, katanaId, previousActive, instanceId, merchantTag(this.merchant));
+        }
+        if (KatanaContractUtil.isReclaimOutput(taken)) {
+            state.setLastReclaimTick(playerUuid, katanaId, KatanaOwnershipState.getOverworldTick(serverWorld));
+        }
+
+        // Consistency assertion: active pointer and delivered stack must agree.
+        UUID activeAfter = state.getActiveInstanceId(playerUuid, katanaId);
+        UUID stackAfter = KatanaContractUtil.getInstanceId(taken);
+        if (!instanceId.equals(activeAfter) || !instanceId.equals(stackAfter)) {
+            LOGGER.error("[MoonTrade] CONTRACT_CONSISTENCY_FAIL player={} katanaId={} merchant={} expected={} active={} stackId={}",
+                    playerUuid, katanaId, merchantTag(this.merchant), instanceId, activeAfter, stackAfter);
         }
     }
 
@@ -270,5 +316,22 @@ public class TradeOutputSlotMixin {
             return entity.getUuid().toString();
         }
         return merchant.getClass().getSimpleName();
+    }
+
+    private static boolean shouldLogCommitMiss(UUID playerUuid, String katanaId, long nowTick) {
+        String normalized = KatanaOwnershipState.normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) {
+            normalized = "unknown";
+        }
+        String key = playerUuid + ":" + normalized;
+        Long last = COMMIT_MISS_LOG_COOLDOWN.get(key);
+        if (last != null && nowTick - last < COMMIT_MISS_LOG_INTERVAL_TICKS) {
+            return false;
+        }
+        if (COMMIT_MISS_LOG_COOLDOWN.size() > COMMIT_MISS_LOG_CACHE_MAX_SIZE) {
+            COMMIT_MISS_LOG_COOLDOWN.clear();
+        }
+        COMMIT_MISS_LOG_COOLDOWN.put(key, nowTick);
+        return true;
     }
 }

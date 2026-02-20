@@ -711,7 +711,7 @@
   "actionbar.xqanzd_moonlit_broker.armor.stealth_shin.charge_ready": "【潜行之胫】充能就绪（%1$s/%2$s）",
   "msg.xqanzd_moonlit_broker.bounty.completed": "悬赏完成，可右键商人提交契约",
   "msg.xqanzd_moonlit_broker.contract.unowned": "太刀契约未建立：请向月下掮客获取/补办太刀契约（与悬赏契约无关）。",
-  "msg.xqanzd_moonlit_broker.contract.dormant": "太刀契约不匹配：当前手持的太刀实例未激活，请向月下掮客取回。",
+  "msg.xqanzd_moonlit_broker.contract.dormant": "太刀契约不匹配：当前手持实例未激活。仅当太刀不在主背包/副手/护甲栏时才会出现补契。",
   "error.xqanzd_moonlit_broker.command.player_only": "此命令只能由玩家执行",
   "error.xqanzd_moonlit_broker.bounty.need_item": "需要 %2$s ×%1$s（当前 ×%3$s）",
   "error.xqanzd_moonlit_broker.bounty.remove_failed": "悬赏提交失败：物品移除异常",
@@ -780,5 +780,6 @@
   "actionbar.xqanzd_moonlit_broker.bounty.hint_not_registered": "找到月下掮客完成登记后，才能获得悬赏契约",
   "msg.xqanzd_moonlit_broker.bounty.hint_register": "找到月下掮客完成登记后，才能获得悬赏契约",
   "msg.xqanzd_moonlit_broker.bounty.register_enabled": "已完成登记：现在可从目标怪物掉落悬赏契约",
+  "msg.xqanzd_moonlit_broker.reclaim.reforged": "补契完成：旧太刀实例已进入沉寂（失效）状态。",
   "error.xqanzd_moonlit_broker.katana.already_owned": "\u2718 你已拥有此太刀。"
 }

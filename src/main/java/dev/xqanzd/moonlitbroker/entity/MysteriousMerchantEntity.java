@@ -844,12 +844,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         );
         if (syncId.isPresent()) {
             TradeOfferList offers = this.getOffers();
-            if (!offers.isEmpty()) {
-                serverPlayer.sendTradeOffers(
-                    syncId.getAsInt(), offers, levelProgress,
-                    this.getExperience(), this.isLeveledMerchant(), this.canRefreshTrades()
-                );
-            }
+            serverPlayer.sendTradeOffers(
+                syncId.getAsInt(), offers, levelProgress,
+                this.getExperience(), this.isLeveledMerchant(), this.canRefreshTrades()
+            );
         }
     }
 
@@ -872,12 +870,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return;
         }
         TradeOfferList offers = this.getOffers();
-        if (!offers.isEmpty()) {
-            player.sendTradeOffers(
-                handler.syncId, offers, 0,
-                this.getExperience(), this.isLeveledMerchant(), this.canRefreshTrades()
-            );
-        }
+        player.sendTradeOffers(
+            handler.syncId, offers, 0,
+            this.getExperience(), this.isLeveledMerchant(), this.canRefreshTrades()
+        );
     }
 
     /**
@@ -1596,6 +1592,10 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                 ownershipState.setActiveInstanceId(player.getUuid(), soldKatanaId, instanceId);
                 if (isReclaim) {
                     ownershipState.setLastReclaimTick(player.getUuid(), soldKatanaId, serverWorld.getTime());
+                    player.sendMessage(
+                            Text.translatable("msg.xqanzd_moonlit_broker.reclaim.reforged")
+                                    .formatted(Formatting.YELLOW),
+                            true);
                 }
                 LOGGER.info("[MoonTrade] CONTRACT_ACTIVATE player={} katanaId={} instanceId={} reclaim={} merchant={}",
                         player.getUuid(), soldKatanaId, instanceId, isReclaim, this.getUuid());
@@ -3834,6 +3834,19 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         MerchantUnlockState.Progress progress = unlockState.getOrCreateProgress(playerUuid, variantKey);
         if (!progress.isUnlockedKatanaHidden(variantKey)) return null;
 
+        UUID activeInstanceId = ownershipState.getActiveInstanceId(playerUuid, katanaType);
+        if (activeInstanceId != null) {
+            if (hasActiveKatanaInstanceInInventory(player, katanaType, activeInstanceId)) {
+                LOGGER.info("[MoonTrade] RECLAIM_SKIP player={} type={} reason=active_instance_present activeInstanceId={}",
+                        playerUuid, katanaType, activeInstanceId);
+                return null;
+            }
+        } else if (hasKatanaTypeInInventory(player, katanaType)) {
+            LOGGER.info("[MoonTrade] RECLAIM_SKIP player={} type={} reason=type_present_no_active_instance",
+                    playerUuid, katanaType);
+            return null;
+        }
+
         long lastReclaim = ownershipState.getLastReclaimTick(playerUuid, katanaType);
         long nowTick = serverWorld.getTime();
         if (lastReclaim > 0 && (nowTick - lastReclaim) < TradeConfig.RECLAIM_CD_TICKS) {
@@ -3902,21 +3915,21 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
 
     /**
      * Task A: Post-build katana sanitization.
-     * 1. Removes offers whose sell-item is a katana the player already owns (except reclaim).
-     * 2. Deduplicates remaining katana offers by type, preferring coin route
+     * 1. Keeps owned normal-buy katana offers so sold-out rows stay visible.
+     * 2. Deduplicates normal-buy katana offers by type, preferring coin route
      *    (second buy item = MYSTERIOUS_COIN) over silver route.
-     * Returns total number of removed offers.
+     * Reclaim offers are never removed here.
+     * Returns total number of deduplicated offers removed.
      */
     private int sanitizeKatanaOffersForPlayer(TradeOfferList offers, UUID playerUuid,
             KatanaOwnershipState ownershipState, String sourceTag) {
         if (ownershipState == null || playerUuid == null) {
             return 0;
         }
-        // Pass 1: collect indices of katana offers to remove (owned or non-preferred duplicate)
+        // Pass 1: collect indices of non-preferred duplicate normal-buy offers.
         // Key: katanaId → index of the preferred offer to keep
         java.util.Map<String, Integer> keptIndexByType = new java.util.HashMap<>();
         Set<Integer> indicesToRemove = new HashSet<>();
-        int removedOwned = 0;
         int removedDupe = 0;
 
         for (int i = 0; i < offers.size(); i++) {
@@ -3926,13 +3939,6 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             }
             String katanaId = KatanaIdUtil.extractCanonicalKatanaId(offer.getSellItem());
             if (katanaId.isEmpty() || !KatanaIdUtil.isSecretKatana(katanaId)) {
-                continue;
-            }
-
-            // Already owned: mark for removal
-            if (ownershipState.hasOwned(playerUuid, katanaId)) {
-                indicesToRemove.add(i);
-                removedOwned++;
                 continue;
             }
 
@@ -3969,20 +3975,71 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             offers.remove(idx);
         }
 
-        int totalRemoved = removedOwned + removedDupe;
-        if (totalRemoved > 0) {
-            LOGGER.warn("[MoonTrade] SANITIZE_KATANA player={} merchant={} source={} removedOwned={} removedDupe={} remaining=[{}]",
-                    playerUuid, this.getUuid(), sourceTag, removedOwned, removedDupe, remaining);
+        if (removedDupe > 0) {
+            LOGGER.warn("[MoonTrade] SANITIZE_KATANA player={} merchant={} source={} removedDupe={} remaining=[{}]",
+                    playerUuid, this.getUuid(), sourceTag, removedDupe, remaining);
         } else if (!keptIndexByType.isEmpty()) {
             LOGGER.info("[MoonTrade] SANITIZE_KATANA player={} merchant={} source={} types=[{}] clean",
                     playerUuid, this.getUuid(), sourceTag, remaining);
         }
-        return totalRemoved;
+        return removedDupe;
     }
 
     private static boolean isCoinRoute(TradeOffer offer) {
         ItemStack secondBuy = offer.getDisplayedSecondBuyItem();
         return !secondBuy.isEmpty() && secondBuy.isOf(ModItems.MYSTERIOUS_COIN);
+    }
+
+    private static boolean hasKatanaTypeInInventory(ServerPlayerEntity player, String katanaId) {
+        if (player == null) {
+            return false;
+        }
+        String normalized = KatanaOwnershipState.normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        for (ItemStack stack : player.getInventory().main) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (normalized.equals(stackKatanaId)) return true;
+        }
+        for (ItemStack stack : player.getInventory().offHand) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (normalized.equals(stackKatanaId)) return true;
+        }
+        for (ItemStack stack : player.getInventory().armor) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (normalized.equals(stackKatanaId)) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasActiveKatanaInstanceInInventory(ServerPlayerEntity player, String katanaId, UUID activeInstanceId) {
+        if (activeInstanceId == null || player == null) {
+            return false;
+        }
+        String normalized = KatanaOwnershipState.normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        for (ItemStack stack : player.getInventory().main) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (!normalized.equals(stackKatanaId)) continue;
+            UUID stackInstanceId = KatanaContractUtil.getInstanceId(stack);
+            if (activeInstanceId.equals(stackInstanceId)) return true;
+        }
+        for (ItemStack stack : player.getInventory().offHand) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (!normalized.equals(stackKatanaId)) continue;
+            UUID stackInstanceId = KatanaContractUtil.getInstanceId(stack);
+            if (activeInstanceId.equals(stackInstanceId)) return true;
+        }
+        for (ItemStack stack : player.getInventory().armor) {
+            String stackKatanaId = KatanaIdUtil.extractCanonicalKatanaId(stack);
+            if (!normalized.equals(stackKatanaId)) continue;
+            UUID stackInstanceId = KatanaContractUtil.getInstanceId(stack);
+            if (activeInstanceId.equals(stackInstanceId)) return true;
+        }
+        return false;
     }
 
     private java.util.List<TradeOffer> createKatanaOffers(ServerPlayerEntity player) {

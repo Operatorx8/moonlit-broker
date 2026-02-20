@@ -22,9 +22,6 @@ import net.minecraft.village.TradeOfferList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Book UI v2 for the custom moonlit merchant handler.
  * Uses a fixed 320x200 canvas with 1:1 texture rendering.
@@ -73,10 +70,10 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
     private ButtonWidget prevButton;
     private ButtonWidget nextButton;
     private ButtonWidget refreshButton;
-    private final List<ButtonWidget> tradeRowButtons = new ArrayList<>();
     private boolean initialOfferSyncDone;
     private int lastOfferCount = -1;
     private boolean hasManualTradeSelection;
+    private boolean consumeTradeRowRelease;
 
     public MoonlitMerchantScreen(MoonlitMerchantScreenHandler handler, PlayerInventory inventory, Text title) {
         super(handler, inventory, title);
@@ -106,31 +103,17 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
                         .build());
         this.refreshButton.setAlpha(0.0F);
 
-        this.tradeRowButtons.clear();
-        for (int row = 0; row < VISIBLE_ROWS; row++) {
-            final int rowIndex = row;
-            ButtonWidget rowBtn = addDrawableChild(
-                    ButtonWidget.builder(Text.empty(), btn -> onTradeRowClicked(rowIndex))
-                            .dimensions(
-                                    this.x + LIST_X,
-                                    this.y + LIST_Y + row * LIST_ROW_HEIGHT,
-                                    LIST_ROW_WIDTH,
-                                    LIST_ROW_HEIGHT)
-                            .build());
-            rowBtn.setAlpha(0.0F);
-            this.tradeRowButtons.add(rowBtn);
-        }
-
         this.selectedIndex = 0;
         this.indexStartOffset = 0;
         this.hasManualTradeSelection = false;
+        this.consumeTradeRowRelease = false;
         clampOffsetToOfferCount();
         this.lastOfferCount = this.handler.getRecipes().size();
         this.initialOfferSyncDone = false;
         if (this.lastOfferCount > 0) {
             // Do not auto-fill on first open. Only user actions (row click/page switch)
             // should trigger server-side recipe selection + autofill.
-            syncSelectedOffer(false, false);
+            syncSelectedOffer(false);
             this.initialOfferSyncDone = true;
         }
         updateControlState();
@@ -194,7 +177,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
             this.indexStartOffset = (this.selectedIndex / LOGICAL_PAGE_SIZE) * LOGICAL_PAGE_SIZE;
             clampOffsetToOfferCount();
             // Keep UI selection stable after first offer sync, but avoid auto-fill.
-            syncSelectedOffer(false, false);
+            syncSelectedOffer(false);
             this.initialOfferSyncDone = true;
         }
 
@@ -239,6 +222,27 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
     }
 
     @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && isInTradeList(mouseX, mouseY)) {
+            int localRow = getTradeListRow(mouseY);
+            onTradeRowClicked(localRow);
+            this.consumeTradeRowRelease = true;
+            return true;
+        }
+        this.consumeTradeRowRelease = false;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (this.consumeTradeRowRelease) {
+            this.consumeTradeRowRelease = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
     protected void drawSlot(DrawContext context, Slot slot) {
         // Render slot background in the exact same coordinate space used by vanilla item rendering.
         int sx = slot.x - 1;
@@ -249,18 +253,15 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
 
     private void onTradeRowClicked(int localRow) {
         int offersTotal = this.handler.getRecipes().size();
-        int globalIndex = this.indexStartOffset + localRow;
-        // Task B: Debug log — confirm absoluteIndex is sent (indexStartOffset already includes page offset)
-        LOGGER.debug("[MoonTrade] TRADE_CLICK localRow={} indexStartOffset={} absIndex={} offersTotal={} page={}",
-                localRow, this.indexStartOffset, globalIndex, offersTotal, getCurrentPage());
-        if (globalIndex >= offersTotal) {
-            LOGGER.warn("[MoonTrade] TRADE_CLICK_OOB localRow={} absIndex={} offersTotal={}", localRow, globalIndex, offersTotal);
+        int absIndex = this.indexStartOffset + localRow;
+        if (absIndex >= offersTotal) {
             return;
         }
-        this.selectedIndex = globalIndex;
+        this.selectedIndex = absIndex;
         this.hasManualTradeSelection = true;
-        // User-triggered selection should immediately auto-fill trade slots.
-        syncSelectedOffer(true, true);
+        // User-triggered selection should immediately auto-fill trade slots locally.
+        syncSelectedOffer(true);
+        sendSelectRecipe(absIndex, localRow, offersTotal);
     }
 
     private void changePage(int delta) {
@@ -313,13 +314,6 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
                     new ItemStack(ModItems.TRADE_SCROLL).getName(),
                     need,
                     have)));
-        }
-        for (int row = 0; row < this.tradeRowButtons.size(); row++) {
-            ButtonWidget rowButton = this.tradeRowButtons.get(row);
-            int globalIndex = this.indexStartOffset + row;
-            boolean hasOffer = globalIndex < offersTotal;
-            rowButton.visible = hasOffer;
-            rowButton.active = hasOffer;
         }
     }
 
@@ -479,7 +473,7 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         return count;
     }
 
-    private void syncSelectedOffer(boolean sendPacket, boolean applyLocalSwitch) {
+    private void syncSelectedOffer(boolean applyLocalSwitch) {
         TradeOfferList offers = this.handler.getRecipes();
         if (offers.isEmpty()) {
             return;
@@ -488,11 +482,6 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         this.handler.setRecipeIndex(this.selectedIndex);
         if (applyLocalSwitch) {
             this.handler.switchTo(this.selectedIndex);
-        }
-        if (sendPacket && this.client != null && this.client.getNetworkHandler() != null) {
-            // Match vanilla MerchantScreen behavior: use SelectMerchantTradeC2SPacket,
-            // not generic clickButton.
-            this.client.getNetworkHandler().sendPacket(new SelectMerchantTradeC2SPacket(this.selectedIndex));
         }
     }
 
@@ -508,11 +497,6 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
         if (this.refreshButton != null) {
             this.refreshButton.setX(this.x + BTN_REFRESH_X);
             this.refreshButton.setY(this.y + BTN_Y);
-        }
-        for (int i = 0; i < this.tradeRowButtons.size(); i++) {
-            ButtonWidget rowBtn = this.tradeRowButtons.get(i);
-            rowBtn.setX(this.x + LIST_X);
-            rowBtn.setY(this.y + LIST_Y + i * LIST_ROW_HEIGHT);
         }
     }
 
@@ -548,5 +532,30 @@ public class MoonlitMerchantScreen extends HandledScreen<MoonlitMerchantScreenHa
 
     private static boolean isInside(int mouseX, int mouseY, int x, int y, int w, int h) {
         return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
+    }
+
+    private boolean isInTradeList(double mouseX, double mouseY) {
+        int left = this.x + LIST_X;
+        int top = this.y + LIST_Y;
+        int right = left + LIST_ROW_WIDTH;
+        int bottom = top + VISIBLE_ROWS * LIST_ROW_HEIGHT;
+        return mouseX >= left && mouseX < right && mouseY >= top && mouseY < bottom;
+    }
+
+    private int getTradeListRow(double mouseY) {
+        int top = this.y + LIST_Y;
+        int row = ((int) mouseY - top) / LIST_ROW_HEIGHT;
+        return MathHelper.clamp(row, 0, VISIBLE_ROWS - 1);
+    }
+
+    private void sendSelectRecipe(int absIndex, int localRow, int offersTotal) {
+        if (this.client == null || this.client.getNetworkHandler() == null) {
+            return;
+        }
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.info("[MoonTrade] action=SEND_SELECT_RECIPE side=C localRow={} indexStartOffset={} absIndex={} offersTotal={} page={}",
+                    localRow, this.indexStartOffset, absIndex, offersTotal, getCurrentPage());
+        }
+        this.client.getNetworkHandler().sendPacket(new SelectMerchantTradeC2SPacket(absIndex));
     }
 }

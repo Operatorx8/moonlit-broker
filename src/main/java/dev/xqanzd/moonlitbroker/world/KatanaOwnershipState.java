@@ -210,8 +210,8 @@ public class KatanaOwnershipState extends PersistentState {
             return false;
         }
         if (!claim.katanaId().equals(normalized)) {
-            // Mismatch: don't write wrong katanaId as owned. Clear stale pending.
-            pendingClaims.remove(playerUuid);
+            // Mismatch: don't write wrong katanaId as owned and don't clear
+            // unrelated pending claim.
             LOGGER.warn("[MoonTrade] PENDING_COMMIT_MISMATCH player={} pending={} commitArg={}",
                     playerUuid, claim.katanaId(), normalized);
             return false;
@@ -219,6 +219,21 @@ public class KatanaOwnershipState extends PersistentState {
 
         pendingClaims.remove(playerUuid);
         return addOwned(playerUuid, normalized);
+    }
+
+    /**
+     * Clear pending claim only if it matches the given katanaId.
+     * Returns true if a matching pending claim existed and was removed.
+     */
+    public boolean clearPendingIfMatches(UUID playerUuid, String katanaId) {
+        String normalized = normalizeKatanaId(katanaId);
+        if (normalized.isEmpty()) return false;
+        PendingClaim claim = pendingClaims.get(playerUuid);
+        if (claim == null || !claim.katanaId().equals(normalized)) {
+            return false;
+        }
+        pendingClaims.remove(playerUuid);
+        return true;
     }
 
     /**
