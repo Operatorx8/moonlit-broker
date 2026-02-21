@@ -3376,6 +3376,8 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             sanitizeKatanaOffersForPlayer(offers, player.getUuid(), ownershipState, source.name());
         }
 
+        auditMinCoinPathForFirstKatana(offers, source.name(), unlocked);
+
         OfferCounters counters = classifyOffers(offers);
         int offersHash = computeOffersHash(offers);
         int epicSellCount = countEpicSellOffers(offers);
@@ -3434,6 +3436,97 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
                     playerTag(player), merchantTag(), audit.source(), forbiddenCoinMintRouteIds);
         }
         return audit;
+    }
+
+    private void auditMinCoinPathForFirstKatana(TradeOfferList offers, String sourceTag, boolean unlocked) {
+        if (!TradeConfig.TRADE_DEBUG || offers == null || offers.isEmpty()) {
+            return;
+        }
+
+        int sealedCoinCost = Integer.MAX_VALUE;
+        int unsealCoinCost = Integer.MAX_VALUE;
+        int katanaCoinCost = Integer.MAX_VALUE;
+        boolean hasSealedOffer = false;
+        boolean hasUnsealOffer = false;
+        boolean hasKatanaCoinRoute = false;
+
+        for (TradeOffer offer : offers) {
+            if (offer == null) {
+                continue;
+            }
+            int coinCost = getCoinCost(offer);
+            if (isSealedLedgerOffer(offer)) {
+                hasSealedOffer = true;
+                sealedCoinCost = Math.min(sealedCoinCost, coinCost);
+            }
+            if (isUnsealOffer(offer)) {
+                hasUnsealOffer = true;
+                unsealCoinCost = Math.min(unsealCoinCost, coinCost);
+            }
+            if (isKatanaCoinRouteOffer(offer)) {
+                hasKatanaCoinRoute = true;
+                katanaCoinCost = Math.min(katanaCoinCost, coinCost);
+            }
+        }
+
+        int sealed = hasSealedOffer ? sealedCoinCost : -1;
+        int unseal = hasUnsealOffer ? unsealCoinCost : -1;
+        int katana = hasKatanaCoinRoute ? katanaCoinCost : -1;
+        int minCoinToFirstKatana = (sealed >= 0 && unseal >= 0 && katana >= 0) ? sealed + unseal + katana : -1;
+
+        LOGGER.info(
+                "[MoonTrade] COIN_PATH_AUDIT source={} unlock={} sealedCoinCost={} unsealCoinCost={} katanaCoinCost={} MIN_COIN_TO_FIRST_KATANA={}",
+                sourceTag,
+                unlocked ? 1 : 0,
+                sealed,
+                unseal,
+                katana,
+                minCoinToFirstKatana);
+
+        if (hasUnsealOffer && unseal != 0) {
+            LOGGER.error(
+                    "[MoonTrade] COIN_PATH_ASSERT_FAIL source={} reason=unseal_coin_gate_detected unsealCoinCost={}",
+                    sourceTag,
+                    unseal);
+        }
+        if (unlocked && !hasKatanaCoinRoute) {
+            LOGGER.error(
+                    "[MoonTrade] COIN_PATH_ASSERT_FAIL source={} reason=missing_katana_coin_route",
+                    sourceTag);
+        }
+        if (minCoinToFirstKatana >= 0 && minCoinToFirstKatana > 2) {
+            LOGGER.error(
+                    "[MoonTrade] COIN_PATH_ASSERT_FAIL source={} reason=min_coin_raised expectedMax=2 actual={}",
+                    sourceTag,
+                    minCoinToFirstKatana);
+        }
+    }
+
+    private static boolean isSealedLedgerOffer(TradeOffer offer) {
+        return offer.getSellItem().isOf(ModItems.SEALED_LEDGER);
+    }
+
+    private static boolean isKatanaCoinRouteOffer(TradeOffer offer) {
+        if (!offer.getOriginalFirstBuyItem().isOf(ModItems.ARCANE_LEDGER)) {
+            return false;
+        }
+        if (!KATANA_WHITELIST.containsValue(offer.getSellItem().getItem())) {
+            return false;
+        }
+        Optional<TradedItem> second = offer.getSecondBuyItem();
+        return second.isPresent() && second.get().itemStack().isOf(ModItems.MYSTERIOUS_COIN);
+    }
+
+    private static int getCoinCost(TradeOffer offer) {
+        int coinCost = 0;
+        if (offer.getOriginalFirstBuyItem().isOf(ModItems.MYSTERIOUS_COIN)) {
+            coinCost += offer.getOriginalFirstBuyItem().getCount();
+        }
+        Optional<TradedItem> second = offer.getSecondBuyItem();
+        if (second.isPresent() && second.get().itemStack().isOf(ModItems.MYSTERIOUS_COIN)) {
+            coinCost += second.get().itemStack().getCount();
+        }
+        return coinCost;
     }
 
     /**
