@@ -1,6 +1,7 @@
 package dev.xqanzd.moonlitbroker.trade.loot;
 
 import dev.xqanzd.moonlitbroker.armor.util.CooldownManager;
+import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
 import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
@@ -8,9 +9,12 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.mob.Angerable;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
@@ -23,7 +27,8 @@ import java.util.List;
 /**
  * 悬赏进度处理器
  * 监听击杀事件，更新玩家背包中匹配的 BountyContract 进度
- * P0: 扫描 main + offhand；进度提示在 25/50/75/100% 阈值触发 actionbar，带冷却
+ * P0: 扫描 main + offhand；进度提示在 25/50/75% 阈值触发 actionbar，带冷却
+ * 完成后自动结算（不掉地上）；背包满则延迟到下次击杀重试。
  */
 public class BountyProgressHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(BountyProgressHandler.class);
@@ -50,6 +55,8 @@ public class BountyProgressHandler {
             candidates.add(player.getInventory().offHand.get(i));
         }
 
+        boolean newlyCompleted = false;
+
         for (ItemStack stack : candidates) {
             if (!stack.isOf(ModItems.BOUNTY_CONTRACT))
                 continue;
@@ -62,10 +69,21 @@ public class BountyProgressHandler {
             if (!BountyContractItem.matchesTarget(stack, entity.getType()))
                 continue;
 
+            // Neutral gate: contract target in BOUNTY_NEUTRAL_TARGETS requires angry check
+            Identifier contractTargetId = Identifier.tryParse(BountyContractItem.getTarget(stack));
+            if (contractTargetId != null) {
+                EntityType<?> contractTargetType = Registries.ENTITY_TYPE.get(contractTargetId);
+                if (contractTargetType != null && contractTargetType.isIn(ModEntityTypeTags.BOUNTY_NEUTRAL_TARGETS)) {
+                    if (!isAngeredAtPlayer(entity, player)) {
+                        continue; // skip this contract
+                    }
+                }
+            }
+
             // 更新进度
             int prevProgress = BountyContractItem.getProgress(stack);
             int required = BountyContractItem.getRequired(stack);
-            boolean newlyCompleted = BountyContractItem.incrementProgress(stack);
+            newlyCompleted = BountyContractItem.incrementProgress(stack);
             int progress = BountyContractItem.getProgress(stack);
             String target = BountyContractItem.getTarget(stack);
 
@@ -73,27 +91,20 @@ public class BountyProgressHandler {
                     player.getName().getString(), target, progress, required,
                     newlyCompleted || BountyContractItem.isCompleted(stack));
 
-            if (newlyCompleted) {
-                // 100% 完成：始终发送，不受冷却限制
-                Text targetName = resolveTargetName(target);
-                player.sendMessage(
-                        Text.translatable(
-                                "actionbar.xqanzd_moonlit_broker.bounty.completed",
-                                targetName, progress, required
-                        ).formatted(Formatting.GREEN),
-                        true);
-                // 同时发送 chat 提示
-                player.sendMessage(
-                        Text.translatable("msg.xqanzd_moonlit_broker.bounty.completed")
-                                .formatted(Formatting.GREEN),
-                        false);
-            } else {
+            if (!newlyCompleted) {
                 // 里程碑提示：25/50/75%，带冷却
                 sendMilestoneHintIfNeeded(player, target, prevProgress, progress, required);
             }
+            // newlyCompleted 的提示由下面的 tryAutoSettle 处理
 
             // 只更新第一张匹配的契约
             break;
+        }
+
+        // 自动结算：无论本次击杀是否推进了进度，都尝试结算背包中已完成的契约
+        // 这同时覆盖"newlyCompleted"和"重试"两种场景
+        if (player.getWorld() instanceof ServerWorld serverWorld) {
+            BountySettleHelper.tryAutoSettleIfCompleted(serverWorld, player);
         }
     }
 
@@ -145,5 +156,18 @@ public class BountyProgressHandler {
             }
         }
         return Text.literal(target);
+    }
+
+    private static boolean isAngeredAtPlayer(LivingEntity entity, ServerPlayerEntity player) {
+        if (entity instanceof MobEntity mobEntity) {
+            LivingEntity target = mobEntity.getTarget();
+            if (target != null && target.getUuid().equals(player.getUuid())) {
+                return true;
+            }
+        }
+        if (entity instanceof Angerable angerable) {
+            return player.getUuid().equals(angerable.getAngryAt());
+        }
+        return false;
     }
 }

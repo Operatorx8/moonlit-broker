@@ -1,8 +1,10 @@
 package dev.xqanzd.moonlitbroker.trade.loot;
 
+import dev.xqanzd.moonlitbroker.armor.util.CooldownManager;
 import dev.xqanzd.moonlitbroker.entity.MysteriousMerchantEntity;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
+import dev.xqanzd.moonlitbroker.trade.item.BountyContractItem;
 import dev.xqanzd.moonlitbroker.trade.item.MerchantMarkItem;
 import dev.xqanzd.moonlitbroker.trade.item.TradeScrollItem;
 import dev.xqanzd.moonlitbroker.world.MerchantUnlockState;
@@ -28,6 +30,10 @@ import java.util.Random;
 public class BountyHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(BountyHandler.class);
     private static final Random RANDOM = new Random();
+
+    /** Coin cooldown hint throttle key + duration */
+    private static final String COOLDOWN_COIN_CD_HINT = "bounty_coin_cd_hint";
+    private static final long COIN_CD_HINT_TICKS = 2400L;
 
     // 悬赏物品组合（可配置）
     private static final Item BOUNTY_ITEM_A = Items.ZOMBIE_HEAD;
@@ -92,7 +98,7 @@ public class BountyHandler {
         }
 
         // 发放奖励 (only after successful removal) — legacy skull path, no contract context
-        grantRewards(player, 0, false);
+        grantRewards(player, 0, BountyContractItem.TIER_COMMON);
 
         player.sendMessage(
                 Text.translatable(
@@ -221,14 +227,97 @@ public class BountyHandler {
         return count - remaining;
     }
 
+    /** Coin roll 结果 */
+    public enum CoinRollResult {
+        COOLDOWN_ACTIVE, // 冷却中，未 roll
+        MISS,            // roll 了但未命中
+        HIT              // roll 并命中
+    }
+
+    /**
+     * 复用的 Coin roll 逻辑（冷却 + 首次保底 + 概率），不发放物品。
+     * 调用方根据返回值决定如何处理（直接给 / 写 pending）。
+     * 冷却按"尝试"写入，即使 MISS 也会消耗冷却。
+     */
+    public static CoinRollResult tryRollCoin(ServerWorld world, ServerPlayerEntity player, int required, String tier) {
+        MerchantUnlockState state = MerchantUnlockState.getServerState(world);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+        long now = world.getTime();
+        long last = progress.getLastCoinBountyTick();
+
+        if (last >= 0 && now - last < TradeConfig.COIN_BOUNTY_CD_TICKS) {
+            return CoinRollResult.COOLDOWN_ACTIVE;
+        }
+
+        progress.setLastCoinBountyTick(now);
+        state.markDirty();
+
+        boolean isEliteOrRare = BountyContractItem.TIER_ELITE.equals(tier)
+                || BountyContractItem.TIER_RARE.equals(tier);
+
+        float bonusCoinChance = 0f;
+        if (TradeConfig.BOUNTY_ENABLE_REWARD_SCALING && required > 0) {
+            if (isEliteOrRare) {
+                bonusCoinChance = Math.max(0f, Math.min(
+                        (required - 5) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_ELITE,
+                        TradeConfig.BOUNTY_COIN_BONUS_MAX_ELITE));
+            } else {
+                bonusCoinChance = Math.max(0f, Math.min(
+                        (required - 10) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_NORMAL,
+                        TradeConfig.BOUNTY_COIN_BONUS_MAX_NORMAL));
+            }
+        }
+        float effectiveCoinChance = Math.min(1f, TradeConfig.COIN_BOUNTY_CHANCE + bonusCoinChance);
+
+        // Tier-based coin chance adjustment
+        if (BountyContractItem.TIER_RARE.equals(tier)) {
+            effectiveCoinChance = Math.min(TradeConfig.COIN_RARE_CAP,
+                    effectiveCoinChance * TradeConfig.COIN_RARE_MULT + TradeConfig.COIN_RARE_ADD);
+        } else if (BountyContractItem.TIER_ELITE.equals(tier)) {
+            effectiveCoinChance = Math.min(TradeConfig.COIN_ELITE_CAP,
+                    effectiveCoinChance * TradeConfig.COIN_ELITE_MULT + TradeConfig.COIN_ELITE_ADD);
+        }
+        // common: no adjustment (keeps original behavior)
+
+        boolean guaranteeUsed = false;
+        if (TradeConfig.COIN_FIRST_BOUNTY_GUARANTEE && !progress.hasEverReceivedBountyCoin()) {
+            guaranteeUsed = true;
+            progress.setHasEverReceivedBountyCoin(true);
+            state.markDirty();
+            if (TradeConfig.TRADE_DEBUG) {
+                LOGGER.debug("[Bounty] COIN_ROLL tier={} required={} baseChance={} bonus={} tierChance={} cap={} guaranteeUsed=true result=HIT player={}",
+                        tier, required, TradeConfig.COIN_BOUNTY_CHANCE, bonusCoinChance, effectiveCoinChance,
+                        BountyContractItem.TIER_RARE.equals(tier) ? TradeConfig.COIN_RARE_CAP
+                                : BountyContractItem.TIER_ELITE.equals(tier) ? TradeConfig.COIN_ELITE_CAP : "none",
+                        player.getName().getString());
+            }
+            LOGGER.info("[Bounty] COIN_GUARANTEE_FIRST player={} now={}",
+                    player.getName().getString(), now);
+            return CoinRollResult.HIT;
+        }
+
+        float coinRoll = RANDOM.nextFloat();
+        CoinRollResult result = coinRoll < effectiveCoinChance ? CoinRollResult.HIT : CoinRollResult.MISS;
+
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.debug("[Bounty] COIN_ROLL tier={} required={} baseChance={} bonus={} tierChance={} cap={} roll={} result={} player={}",
+                    tier, required, TradeConfig.COIN_BOUNTY_CHANCE, bonusCoinChance, effectiveCoinChance,
+                    BountyContractItem.TIER_RARE.equals(tier) ? TradeConfig.COIN_RARE_CAP
+                            : BountyContractItem.TIER_ELITE.equals(tier) ? TradeConfig.COIN_ELITE_CAP : "none",
+                    coinRoll, result, player.getName().getString());
+        }
+
+        return result;
+    }
+
     /**
      * AUDIT FIX: Added logging for reward grant/drop outcome (guarded under
      * TRADE_DEBUG)
      *
      * @param required   contract kill requirement (0 = legacy/unknown, no scaling)
-     * @param isElite    whether the bounty target was an elite mob
+     * @param tier       bounty tier string (common/elite/rare)
      */
-    public static void grantRewards(ServerPlayerEntity player, int required, boolean isElite) {
+    public static void grantRewards(ServerPlayerEntity player, int required, String tier) {
         final int rewardScroll = 1;
         final int rewardSilver = TradeConfig.BOUNTY_SILVER_REWARD;
         boolean anyDropped = false;
@@ -251,65 +340,36 @@ public class BountyHandler {
             anyDropped = true;
         }
 
-        // Reward scaling: compute bonus coin chance from required + isElite
-        float bonusCoinChance = 0f;
-        if (TradeConfig.BOUNTY_ENABLE_REWARD_SCALING && required > 0) {
-            if (isElite) {
-                bonusCoinChance = Math.max(0f, Math.min(
-                        (required - 5) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_ELITE,
-                        TradeConfig.BOUNTY_COIN_BONUS_MAX_ELITE));
-            } else {
-                bonusCoinChance = Math.max(0f, Math.min(
-                        (required - 10) * TradeConfig.BOUNTY_COIN_BONUS_PER_REQUIRED_NORMAL,
-                        TradeConfig.BOUNTY_COIN_BONUS_MAX_NORMAL));
-            }
-        }
-        float effectiveCoinChance = Math.min(1f, TradeConfig.COIN_BOUNTY_CHANCE + bonusCoinChance);
-
-        if (TradeConfig.TRADE_DEBUG) {
-            LOGGER.debug("[Bounty] COIN_CHANCE_SCALE elite={} required={} base={} bonus={} effective={}",
-                    isElite, required, TradeConfig.COIN_BOUNTY_CHANCE, bonusCoinChance, effectiveCoinChance);
-        }
-
-        // 奖励3：Coin（按"尝试"冷却，2 MC 日内不再 roll）
+        // 奖励3：Coin（复用 tryRollCoin 保证公式一致）
         if (player.getWorld() instanceof ServerWorld serverWorld) {
-            MerchantUnlockState state = MerchantUnlockState.getServerState(serverWorld);
-            MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
-            long now = serverWorld.getTime();
-            long last = progress.getLastCoinBountyTick();
-            if (last < 0 || now - last >= TradeConfig.COIN_BOUNTY_CD_TICKS) {
-                coinCooldownReady = true;
-                progress.setLastCoinBountyTick(now); // 按尝试写入
-                state.markDirty();
-                coinRolled = true;
+            CoinRollResult coinResult = tryRollCoin(serverWorld, player, required, tier);
+            coinRolled = coinResult != CoinRollResult.COOLDOWN_ACTIVE;
+            coinCooldownReady = coinRolled;
+            coinGranted = coinResult == CoinRollResult.HIT;
+            if (coinGranted) {
+                ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
+                if (!player.giveItemStack(coin)) {
+                    player.dropItem(coin, false);
+                    anyDropped = true;
+                }
+            }
 
-                // 首次保底：第一次进入 coin roll 必得 1 Coin
-                if (TradeConfig.COIN_FIRST_BOUNTY_GUARANTEE && !progress.hasEverReceivedBountyCoin()) {
-                    coinGranted = true;
-                    progress.setHasEverReceivedBountyCoin(true);
-                    state.markDirty();
-                    ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
-                    if (!player.giveItemStack(coin)) {
-                        player.dropItem(coin, false);
-                        anyDropped = true;
-                    }
-                    LOGGER.info("[Bounty] COIN_GUARANTEE_FIRST_GRANTED player={} now={}",
-                            player.getName().getString(), now);
-                } else if (RANDOM.nextFloat() < effectiveCoinChance) {
-                    coinGranted = true;
-                    ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
-                    if (!player.giveItemStack(coin)) {
-                        player.dropItem(coin, false);
-                        anyDropped = true;
-                    }
+            // Coin cooldown hint: rate-limited actionbar when on cooldown
+            if (coinResult == CoinRollResult.COOLDOWN_ACTIVE) {
+                long now = serverWorld.getTime();
+                if (CooldownManager.isReady(player.getUuid(), COOLDOWN_COIN_CD_HINT, now)) {
+                    CooldownManager.setCooldown(player.getUuid(), COOLDOWN_COIN_CD_HINT, now, COIN_CD_HINT_TICKS);
+                    player.sendMessage(
+                            Text.translatable("actionbar.xqanzd_moonlit_broker.bounty.coin_cooldown")
+                                    .formatted(Formatting.GRAY),
+                            true);
                 }
             }
 
             if (TradeConfig.TRADE_DEBUG) {
                 LOGGER.info(
-                        "[MoonTrade] BOUNTY_COIN_ROLL player={} now={} last={} cdTicks={} cdReady={} rolled={} granted={}",
-                        player.getName().getString(), now, last, TradeConfig.COIN_BOUNTY_CD_TICKS,
-                        coinCooldownReady, coinRolled, coinGranted);
+                        "[MoonTrade] BOUNTY_COIN_ROLL player={} cdReady={} rolled={} granted={}",
+                        player.getName().getString(), coinCooldownReady, coinRolled, coinGranted);
             }
         }
 

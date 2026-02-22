@@ -11,12 +11,17 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Set;
 
 /**
  * 悬赏契约物品
  * NBT: BountyTarget, BountyRequired, BountyProgress, BountyCompleted, BountyTier, BountySchema
  */
 public class BountyContractItem extends Item {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BountyContractItem.class);
 
     private static final String NBT_TARGET = "BountyTarget";
     private static final String NBT_REQUIRED = "BountyRequired";
@@ -28,6 +33,9 @@ public class BountyContractItem extends Item {
     public static final String TIER_COMMON = "common";
     public static final String TIER_ELITE = "elite";
     public static final String TIER_RARE = "rare";
+
+    private static final Set<String> VALID_TIERS = Set.of(TIER_COMMON, TIER_ELITE, TIER_RARE);
+    private static volatile boolean unknownTierWarned = false;
 
     public BountyContractItem(Settings settings) {
         super(settings);
@@ -57,7 +65,21 @@ public class BountyContractItem extends Item {
 
     public static String getTier(ItemStack stack) {
         NbtCompound nbt = getNbt(stack);
-        return nbt != null && nbt.contains(NBT_TIER) ? nbt.getString(NBT_TIER) : "";
+        if (nbt == null || !nbt.contains(NBT_TIER)) return "";
+        return normalizeTier(nbt.getString(NBT_TIER));
+    }
+
+    /**
+     * Normalize a tier string: unknown values fall back to TIER_COMMON with a one-time warning.
+     */
+    public static String normalizeTier(String tier) {
+        if (tier == null || tier.isEmpty()) return TIER_COMMON;
+        if (VALID_TIERS.contains(tier)) return tier;
+        if (!unknownTierWarned) {
+            unknownTierWarned = true;
+            LOGGER.warn("[BountyContract] action=UNKNOWN_TIER_NORMALIZED raw={} fallback={}", tier, TIER_COMMON);
+        }
+        return TIER_COMMON;
     }
 
     public static int getSchema(ItemStack stack) {

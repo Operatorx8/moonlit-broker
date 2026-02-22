@@ -138,6 +138,18 @@ public final class TradeConfig {
     /** Elite 悬赏：每多 1 required 的 coin 概率增量 (0.10 / 10) */
     public static final float BOUNTY_COIN_BONUS_PER_REQUIRED_ELITE = BOUNTY_COIN_BONUS_MAX_ELITE / 10f;
 
+    // ===== Bounty target picking weights =====
+    public static final float BOUNTY_PICK_ELITE_WEIGHT = 0.10f;
+    public static final float BOUNTY_PICK_RARE_WEIGHT  = 0.02f;
+
+    // ===== Coin tier multipliers =====
+    public static final float COIN_ELITE_MULT = 1.35f;
+    public static final float COIN_ELITE_ADD  = 0.03f;
+    public static final float COIN_ELITE_CAP  = 0.40f;
+    public static final float COIN_RARE_MULT  = 1.70f;
+    public static final float COIN_RARE_ADD   = 0.06f;
+    public static final float COIN_RARE_CAP   = 0.60f;
+
     // ========== 冷却时间 ==========
     /** 页面操作冷却 (0.5秒 = 10 ticks) */
     public static final int PAGE_ACTION_COOLDOWN_TICKS = 10;

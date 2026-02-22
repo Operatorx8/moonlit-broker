@@ -52,7 +52,7 @@ public final class BountySubmitCommand {
         }
 
         // 发放奖励（复用 BountyHandler）— debug command, no contract context
-        BountyHandler.grantRewards(player, 0, false);
+        BountyHandler.grantRewards(player, 0, dev.xqanzd.moonlitbroker.trade.item.BountyContractItem.TIER_COMMON);
 
         // 统一日志格式
         LOGGER.info("[MoonTrade] action=BOUNTY_SUBMIT side=S player={} rewardScroll=1 rewardSilver={}",

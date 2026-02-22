@@ -1,7 +1,6 @@
 {
   "replace": false,
   "values": [
-    "minecraft:warden",
     "minecraft:elder_guardian",
     "minecraft:shulker",
     "minecraft:ghast",

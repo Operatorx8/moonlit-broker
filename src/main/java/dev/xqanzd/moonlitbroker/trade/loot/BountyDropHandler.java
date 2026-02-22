@@ -1,5 +1,6 @@
 package dev.xqanzd.moonlitbroker.trade.loot;
 
+import dev.xqanzd.moonlitbroker.armor.util.CooldownManager;
 import dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags;
 import dev.xqanzd.moonlitbroker.registry.ModItems;
 import dev.xqanzd.moonlitbroker.trade.TradeConfig;
@@ -24,9 +25,14 @@ import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import net.minecraft.world.World;
 
 /**
  * Bounty v2: 怪物击杀 → 掉落悬赏契约
@@ -50,11 +56,19 @@ public class BountyDropHandler {
     private static final Random RANDOM = new Random();
     private static boolean REGISTERED = false;
 
-    private static final float BASE_DROP_CHANCE = 0.005f; // 0.5%
+    private static final float BASE_DROP_CHANCE = 0.008f; // 0.8%
     private static final float LOOTING_BONUS_PER_LEVEL = 0.001f; // +0.1% / level
     private static final float MAX_DROP_CHANCE = 0.02f; // 2%
     // cooldown 值从 TradeConfig.BOUNTY_DROP_COOLDOWN_TICKS 读取
     private static volatile boolean bountyTagEmptyWarned = false;
+    private static volatile boolean pickWeightWarned = false;
+    private static volatile boolean commonPoolEmptyWarned = false;
+
+    /** Dimension hint cooldown (2400 ticks = 2 minutes) per player per dimension type */
+    private static final long DIM_HINT_CD_TICKS = 2400L;
+    private static final String COOLDOWN_DIM_HINT_NETHER = "bounty_dim_hint_nether";
+    private static final String COOLDOWN_DIM_HINT_END = "bounty_dim_hint_end";
+    private static final String COOLDOWN_DIM_HINT_OCEAN = "bounty_dim_hint_ocean";
 
     // ===== Elite density tiers (caps required for rare elites) =====
     enum DensityTier {
@@ -68,6 +82,17 @@ public class BountyDropHandler {
     private static final Set<EntityType<?>> ELITE_MEDIUM = Set.of(
             EntityType.WITHER_SKELETON);
     // DENSE = all other elites (pillager, vindicator, witch, etc.)
+
+    /** Nether-only mobs: re-roll when player is in the overworld */
+    private static final Set<EntityType<?>> NETHER_ONLY = Set.of(
+            EntityType.BLAZE, EntityType.GHAST, EntityType.MAGMA_CUBE,
+            EntityType.WITHER_SKELETON, EntityType.PIGLIN_BRUTE,
+            EntityType.PIGLIN, EntityType.ZOMBIFIED_PIGLIN);
+
+    /** End-dimension mobs: soft dimension hint */
+    private static final Set<EntityType<?>> END_MOBS = Set.of(EntityType.SHULKER);
+    /** Ocean structure mobs: soft dimension hint */
+    private static final Set<EntityType<?>> OCEAN_MOBS = Set.of(EntityType.ELDER_GUARDIAN);
 
     static DensityTier getEliteDensityTier(EntityType<?> type) {
         if (ELITE_RARE.contains(type)) return DensityTier.RARE;
@@ -184,27 +209,28 @@ public class BountyDropHandler {
             }
             return;
         }
-        int required = rollRequired(entity);
+        // Pick target from tag pools (may differ from killed mob)
+        Identifier chosen = pickBountyTarget(world, player, mobId);
 
-        // Tier 判定：rare > elite > common
-        String bountyTier;
-        if (entity.getType().isIn(ModEntityTypeTags.BOUNTY_RARE_TARGETS)) {
-            bountyTier = BountyContractItem.TIER_RARE;
-        } else if (isElite) {
-            bountyTier = BountyContractItem.TIER_ELITE;
-        } else {
-            bountyTier = BountyContractItem.TIER_COMMON;
-        }
+        // Determine tier from tag membership of chosen target
+        EntityType<?> chosenType = Registries.ENTITY_TYPE.get(chosen);
+        boolean chosenIsRare = chosenType.isIn(ModEntityTypeTags.BOUNTY_RARE_TARGETS);
+        boolean chosenIsElite = chosenType.isIn(ModEntityTypeTags.BOUNTY_ELITE_TARGETS);
+        String bountyTier = chosenIsRare ? BountyContractItem.TIER_RARE
+                : chosenIsElite ? BountyContractItem.TIER_ELITE
+                : BountyContractItem.TIER_COMMON;
+        int required = rollRequiredForTier(bountyTier, chosenType);
 
         if (TradeConfig.TRADE_DEBUG) {
-            DensityTier densityTier = isElite ? getEliteDensityTier(entity.getType()) : null;
-            LOGGER.debug("[Bounty] CONTRACT_GEN target={} elite={} tier={} densityTier={} required={}",
-                    mobId, isElite, bountyTier, densityTier, required);
+            DensityTier densityTier = chosenIsElite ? getEliteDensityTier(chosenType) : null;
+            boolean sameAsKilled = chosen.equals(mobId);
+            LOGGER.debug("[Bounty] CONTRACT_PICK killedMobId={} chosenTargetId={} tier={} required={} playerDim={} sameAsKilled={} densityTier={}",
+                    mobId, chosen, bountyTier, required, world.getRegistryKey().getValue(), sameAsKilled, densityTier);
         }
 
         // 生成契约（含 Tier + Schema）
         ItemStack contract = new ItemStack(ModItems.BOUNTY_CONTRACT, 1);
-        BountyContractItem.initializeWithTier(contract, mobId.toString(), required, bountyTier);
+        BountyContractItem.initializeWithTier(contract, chosen.toString(), required, bountyTier);
         net.minecraft.entity.ItemEntity itemEntity = entity.dropStack(contract);
 
         // P0: 掉落反馈 - 发光 + actionbar + 音效（仅 dropStack 成功时）
@@ -213,14 +239,56 @@ public class BountyDropHandler {
             MerchantUnlockState.recordContractDrop(world, player.getUuid());
             itemEntity.setGlowing(true);
 
-            // actionbar: 目标名 + 初始进度
-            net.minecraft.text.Text targetName = resolveTargetName(mobId.toString());
+            // actionbar: tier-specific message with target + required
+            net.minecraft.text.Text targetName = resolveTargetName(chosen.toString());
+            String dropKey;
+            net.minecraft.util.Formatting dropColor;
+            switch (bountyTier) {
+                case BountyContractItem.TIER_RARE:
+                    dropKey = "actionbar.xqanzd_moonlit_broker.bounty.contract_drop.rare";
+                    dropColor = net.minecraft.util.Formatting.AQUA;
+                    break;
+                case BountyContractItem.TIER_ELITE:
+                    dropKey = "actionbar.xqanzd_moonlit_broker.bounty.contract_drop.elite";
+                    dropColor = net.minecraft.util.Formatting.GOLD;
+                    break;
+                default:
+                    dropKey = "actionbar.xqanzd_moonlit_broker.bounty.contract_drop";
+                    dropColor = net.minecraft.util.Formatting.LIGHT_PURPLE;
+                    break;
+            }
             player.sendMessage(
-                    net.minecraft.text.Text.translatable(
-                            "actionbar.xqanzd_moonlit_broker.bounty.contract_drop",
-                            targetName, required
-                    ).formatted(net.minecraft.util.Formatting.LIGHT_PURPLE),
+                    net.minecraft.text.Text.translatable(dropKey, targetName, required)
+                            .formatted(dropColor),
                     true);
+
+            // Dimension hint: rate-limited soft chat message when target is in another dimension
+            long hintTick = world.getTime();
+            if (END_MOBS.contains(chosenType)) {
+                if (CooldownManager.isReady(player.getUuid(), COOLDOWN_DIM_HINT_END, hintTick)) {
+                    CooldownManager.setCooldown(player.getUuid(), COOLDOWN_DIM_HINT_END, hintTick, DIM_HINT_CD_TICKS);
+                    player.sendMessage(
+                            net.minecraft.text.Text.translatable("msg.xqanzd_moonlit_broker.bounty.dim_hint.end")
+                                    .formatted(net.minecraft.util.Formatting.GRAY),
+                            false);
+                }
+            } else if (OCEAN_MOBS.contains(chosenType)) {
+                if (CooldownManager.isReady(player.getUuid(), COOLDOWN_DIM_HINT_OCEAN, hintTick)) {
+                    CooldownManager.setCooldown(player.getUuid(), COOLDOWN_DIM_HINT_OCEAN, hintTick, DIM_HINT_CD_TICKS);
+                    player.sendMessage(
+                            net.minecraft.text.Text.translatable("msg.xqanzd_moonlit_broker.bounty.dim_hint.ocean")
+                                    .formatted(net.minecraft.util.Formatting.GRAY),
+                            false);
+                }
+            } else if (NETHER_ONLY.contains(chosenType) && world.getRegistryKey() != World.NETHER) {
+                if (CooldownManager.isReady(player.getUuid(), COOLDOWN_DIM_HINT_NETHER, hintTick)) {
+                    CooldownManager.setCooldown(player.getUuid(), COOLDOWN_DIM_HINT_NETHER, hintTick, DIM_HINT_CD_TICKS);
+                    player.sendMessage(
+                            net.minecraft.text.Text.translatable("msg.xqanzd_moonlit_broker.bounty.dim_hint.nether")
+                                    .formatted(net.minecraft.util.Formatting.GRAY),
+                            false);
+                }
+            }
 
             // 音效: 经验球拾取音（明显但不刺耳）
             player.getWorld().playSound(null,
@@ -234,8 +302,8 @@ public class BountyDropHandler {
         }
 
         LOGGER.info(
-                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} required={} tier={} roll={} chance={} elite={} looting={} side=S player={} dim={}",
-                mobId, required, bountyTier, roll, chance, isElite, lootingLevel, player.getName().getString(),
+                "[MoonTrade] action=BOUNTY_CONTRACT_DROP result=DROP mob={} chosen={} required={} tier={} roll={} chance={} elite={} looting={} side=S player={} dim={}",
+                mobId, chosen, required, bountyTier, roll, chance, isElite, lootingLevel, player.getName().getString(),
                 world.getRegistryKey().getValue());
     }
 
@@ -276,6 +344,132 @@ public class BountyDropHandler {
             required = sampleTriangularInt(RANDOM, 10, 17, 25);
         }
         return required;
+    }
+
+    /**
+     * Pick a bounty target from tag pools by tier weight.
+     * Falls back to killedMobId if pools are empty.
+     * Re-rolls nether-only targets when the player is in the overworld.
+     */
+    private static Identifier pickBountyTarget(ServerWorld world, ServerPlayerEntity player, Identifier killedMobId) {
+        List<Identifier> allList = Registries.ENTITY_TYPE.stream()
+                .filter(t -> t.isIn(ModEntityTypeTags.BOUNTY_TARGETS))
+                .map(Registries.ENTITY_TYPE::getId)
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (allList.isEmpty()) return killedMobId;
+
+        Set<Identifier> eliteSet = Registries.ENTITY_TYPE.stream()
+                .filter(t -> t.isIn(ModEntityTypeTags.BOUNTY_ELITE_TARGETS))
+                .map(Registries.ENTITY_TYPE::getId)
+                .collect(Collectors.toSet());
+        Set<Identifier> rareSet = Registries.ENTITY_TYPE.stream()
+                .filter(t -> t.isIn(ModEntityTypeTags.BOUNTY_RARE_TARGETS))
+                .map(Registries.ENTITY_TYPE::getId)
+                .collect(Collectors.toSet());
+
+        List<Identifier> commonList = allList.stream()
+                .filter(id -> !eliteSet.contains(id) && !rareSet.contains(id))
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<Identifier> eliteList = new ArrayList<>(eliteSet);
+        List<Identifier> rareList = new ArrayList<>(rareSet);
+
+        // Guardrail: clamp weights if misconfigured
+        float rareW = TradeConfig.BOUNTY_PICK_RARE_WEIGHT;
+        float eliteW = TradeConfig.BOUNTY_PICK_ELITE_WEIGHT;
+        if (rareW + eliteW > 1.0f) {
+            if (!pickWeightWarned) {
+                pickWeightWarned = true;
+                LOGGER.warn("[MoonTrade] action=BOUNTY_PICK_WEIGHT_CLAMP rareWeight={} eliteWeight={} sum={} — clamped to 1.0",
+                        rareW, eliteW, rareW + eliteW);
+            }
+            float scale = 1.0f / (rareW + eliteW);
+            rareW *= scale;
+            eliteW *= scale;
+        }
+
+        // Guardrail: warn once if common pool is empty (all entities are elite or rare)
+        if (commonList.isEmpty() && !commonPoolEmptyWarned) {
+            commonPoolEmptyWarned = true;
+            LOGGER.warn("[MoonTrade] action=BOUNTY_PICK_COMMON_POOL_EMPTY — all bounty_targets are elite/rare, falling back to allList");
+        }
+
+        // Tier roll
+        float r = RANDOM.nextFloat();
+        List<Identifier> pool;
+        String rolledFrom;
+        if (r < rareW && !rareList.isEmpty()) {
+            pool = rareList;
+            rolledFrom = "rare";
+        } else if (r < rareW + eliteW && !eliteList.isEmpty()) {
+            pool = eliteList;
+            rolledFrom = "elite";
+        } else if (!commonList.isEmpty()) {
+            pool = commonList;
+            rolledFrom = "common";
+        } else {
+            pool = allList;
+            rolledFrom = "fallback_all";
+        }
+
+        Identifier chosen = pool.get(RANDOM.nextInt(pool.size()));
+
+        // Dimension re-roll: if chosen target belongs to another dimension and player is in overworld,
+        // re-roll once from the same pool (excluding cross-dimension mobs), fall back to commonList
+        if (world.getRegistryKey() == World.OVERWORLD) {
+            EntityType<?> chosenType = Registries.ENTITY_TYPE.get(chosen);
+            if (NETHER_ONLY.contains(chosenType) || END_MOBS.contains(chosenType) || OCEAN_MOBS.contains(chosenType)) {
+                // Try same pool minus cross-dimension mobs first
+                List<Identifier> filtered = pool.stream()
+                        .filter(id -> {
+                            EntityType<?> t = Registries.ENTITY_TYPE.get(id);
+                            return !NETHER_ONLY.contains(t) && !END_MOBS.contains(t) && !OCEAN_MOBS.contains(t);
+                        })
+                        .collect(Collectors.toList());
+                List<Identifier> rerollPool = !filtered.isEmpty() ? filtered
+                        : !commonList.isEmpty() ? commonList
+                        : null;
+                if (rerollPool != null) {
+                    Identifier rerolled = rerollPool.get(RANDOM.nextInt(rerollPool.size()));
+                    if (TradeConfig.TRADE_DEBUG) {
+                        LOGGER.debug("[Bounty] DIM_REROLL original={} rerolled={} reason={}",
+                                chosen, rerolled,
+                                NETHER_ONLY.contains(chosenType) ? "nether" :
+                                END_MOBS.contains(chosenType) ? "end" : "ocean");
+                    }
+                    chosen = rerolled;
+                    rolledFrom = rolledFrom + "_rerolled";
+                }
+                // if no reroll pool available, keep original — dim_hint will warn
+            }
+        }
+
+        if (TradeConfig.TRADE_DEBUG) {
+            LOGGER.debug("[Bounty] PICK_TARGET chosen={} rolledFrom={} killedMob={} poolSize={} playerDim={} allSize={} commonSize={} eliteSize={} rareSize={}",
+                    chosen, rolledFrom, killedMobId, pool.size(),
+                    world.getRegistryKey().getValue(),
+                    allList.size(), commonList.size(), eliteList.size(), rareList.size());
+        }
+
+        return chosen;
+    }
+
+    /**
+     * Roll required kill count based on tier and chosen entity type.
+     */
+    private static int rollRequiredForTier(String tier, EntityType<?> chosenType) {
+        switch (tier) {
+            case BountyContractItem.TIER_RARE:
+                // Rare: triangular [8..18] mode 12 — lower than common, feels rewarding
+                return sampleTriangularInt(RANDOM, 8, 12, 18);
+            case BountyContractItem.TIER_ELITE:
+                // Elite: triangular [5..15] mode 10, then cap by density tier
+                int required = sampleTriangularInt(RANDOM, 5, 10, 15);
+                DensityTier densityTier = getEliteDensityTier(chosenType);
+                return Math.max(5, Math.min(required, densityTier.capMax));
+            default:
+                // Common: triangular [10..25] mode 17
+                return sampleTriangularInt(RANDOM, 10, 17, 25);
+        }
     }
 
     private static int getLootingLevel(ServerWorld world, ServerPlayerEntity player) {

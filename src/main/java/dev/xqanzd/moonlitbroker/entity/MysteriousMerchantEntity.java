@@ -959,6 +959,12 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
             return ActionResult.CONSUME;
         }
 
+        // ========== 待领取 Coin 兑付 ==========
+        if (!this.getEntityWorld().isClient() && player instanceof ServerPlayerEntity sp
+                && sp.getServerWorld() instanceof ServerWorld sw) {
+            tryPayoutPendingCoins(sw, sp);
+        }
+
         // ========== 送别机制：潜行 + 手持 Trade Scroll 右键 ==========
         if (player.isSneaking() && heldItem.isOf(ModItems.TRADE_SCROLL)) {
             // 多人服保护：有其他玩家正在交易时阻止送别
@@ -1308,6 +1314,56 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
     }
 
     /**
+     * 在打开 UI 之前，尝试将玩家暂存的 pendingCoinReward 全部兑付。
+     * 背包满时不发放、不扣 pending，提示暂存。
+     * 一次 interact 只发一条提示（不刷屏）。
+     */
+    private static void tryPayoutPendingCoins(ServerWorld world, ServerPlayerEntity player) {
+        MerchantUnlockState state = MerchantUnlockState.getServerState(world);
+        MerchantUnlockState.Progress progress = state.getOrCreateProgress(player.getUuid());
+        int pending = progress.getPendingCoinReward();
+        if (pending <= 0) return;
+
+        ItemStack coinProbe = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
+        if (!dev.xqanzd.moonlitbroker.trade.loot.BountySettleHelper.hasRoomFor(player, coinProbe)) {
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.coin.payout_deferred")
+                            .formatted(Formatting.RED),
+                    true);
+            LOGGER.info("[CoinPayout] DEFERRED player={} pending={} reason=INVENTORY_FULL",
+                    player.getName().getString(), pending);
+            return;
+        }
+
+        int paid = 0;
+        while (progress.getPendingCoinReward() > 0) {
+            ItemStack coin = new ItemStack(ModItems.MYSTERIOUS_COIN, 1);
+            if (!dev.xqanzd.moonlitbroker.trade.loot.BountySettleHelper.hasRoomFor(player, coin)) {
+                break;
+            }
+            boolean ok = player.getInventory().insertStack(coin) && coin.isEmpty();
+            if (!ok) {
+                LOGGER.error("[CoinPayout] INSERT_FAIL player={} paid={} pending={}",
+                        player.getName().getString(), paid, progress.getPendingCoinReward());
+                break;
+            }
+            progress.decrementPendingCoinReward();
+            paid++;
+        }
+
+        if (paid > 0) {
+            state.markDirty();
+            player.sendMessage(
+                    Text.translatable("actionbar.xqanzd_moonlit_broker.coin.payout_received",
+                            new ItemStack(ModItems.MYSTERIOUS_COIN).getName(), paid)
+                            .formatted(Formatting.GOLD),
+                    true);
+            LOGGER.info("[CoinPayout] PAID player={} paid={} remainingPending={}",
+                    player.getName().getString(), paid, progress.getPendingCoinReward());
+        }
+    }
+
+    /**
      * 统计玩家主背包（36 格）中的空槽位数量。
      */
     private static int countFreeInventorySlots(PlayerEntity player) {
@@ -1474,16 +1530,9 @@ public class MysteriousMerchantEntity extends WanderingTraderEntity {
         int required = BountyContractItem.getRequired(contractStack);
 
         try {
-            // Resolve isElite from target entity ID for reward scaling
-            boolean isElite = false;
-            net.minecraft.util.Identifier targetId = net.minecraft.util.Identifier.tryParse(target);
-            if (targetId != null) {
-                net.minecraft.entity.EntityType<?> targetType = net.minecraft.registry.Registries.ENTITY_TYPE.get(targetId);
-                if (targetType != null) {
-                    isElite = targetType.isIn(dev.xqanzd.moonlitbroker.registry.ModEntityTypeTags.BOUNTY_ELITE_TARGETS);
-                }
-            }
-            dev.xqanzd.moonlitbroker.trade.loot.BountyHandler.grantRewards(serverPlayer, required, isElite);
+            // Resolve tier from contract NBT (normalizeTier handles legacy/unknown values)
+            String tier = BountyContractItem.normalizeTier(BountyContractItem.getTier(contractStack));
+            dev.xqanzd.moonlitbroker.trade.loot.BountyHandler.grantRewards(serverPlayer, required, tier);
             contractStack.decrement(1);
         } catch (Exception e) {
             LOGGER.error("[MoonTrade] action=BOUNTY_SUBMIT_ERROR side=S player={} target={} error={}",
